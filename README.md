@@ -11,6 +11,8 @@ every call goes browser-direct to a free public API.
 Radar comes from [HookEcho](https://hookecho.io/) — my own NEXRAD viewer,
 embedded here and centered on the station.
 
+If WeatherDesk is useful to you, please [give the project a star](../../stargazers).
+
 ![A ten second walkthrough: pasting a Tempest token into the first-run wizard and picking a station,
 the Desk filling in with live temperature, seven day cards and dial gauges, an NWS warning polygon
 with its full text, the national radar mosaic, then HookEcho zoomed on a storm cell](docs/hero-3.0.5.gif)
