@@ -1,6 +1,6 @@
-# WeatherDesk and Home Assistant
+# StormDesk and Home Assistant
 
-WeatherDesk publishes your station to Home Assistant over MQTT, evaluates your alert rules
+StormDesk publishes your station to Home Assistant over MQTT, evaluates your alert rules
 server-side, and reads Home Assistant entities back onto the dashboard. None of it needs a browser
 to be open, and none of it needs a cloud account.
 
@@ -39,21 +39,21 @@ published message, rather than just checking that the socket opened — a broker
 password accepts the TCP connection first, which is why "it connected" was never worth reporting.
 
 Mosquitto with no authentication needs nothing beyond a listener. With authentication, whatever
-user you give WeatherDesk needs write access to `weatherdesk/#` and to your discovery prefix.
+user you give StormDesk needs write access to `stormdesk/#` and to your discovery prefix.
 
-> **`ws://` is a different listener.** Older versions of WeatherDesk published from the browser
+> **`ws://` is a different listener.** Older versions of StormDesk published from the browser
 > over a WebSocket, so the setting wanted a `ws://` URL and your broker needed
 > `protocol websockets`. Publishing moved into the server, which speaks plain MQTT — if you are
-> upgrading, change the address to `mqtt://` and the port from 9001 to 1883. WeatherDesk says so
+> upgrading, change the address to `mqtt://` and the port from 9001 to 1883. StormDesk says so
 > if you leave a `ws://` address there.
 
 Topics, if you want them directly:
 
 ```
-weatherdesk/<station id>/temp          retained, °C
-weatherdesk/<station id>/wind_avg      retained, m/s
-weatherdesk/<station id>/day_rain      retained, mm
-weatherdesk/<station id>/status        online | offline   (offline is the broker's last will)
+stormdesk/<station id>/temp          retained, °C
+stormdesk/<station id>/wind_avg      retained, m/s
+stormdesk/<station id>/day_rain      retained, mm
+stormdesk/<station id>/status        online | offline   (offline is the broker's last will)
 homeassistant/sensor/wd_<station id>_temp/config           retained discovery
 ```
 
@@ -90,7 +90,7 @@ has a way in.
 
 ## Alerts
 
-The rules you write under Settings → **Alert rules** are evaluated by the WeatherDesk server, not
+The rules you write under Settings → **Alert rules** are evaluated by the StormDesk server, not
 by the page. That is the whole point: a tablet that sleeps at midnight used to be a house with no
 frost warning.
 
@@ -104,7 +104,7 @@ it notices the server is doing it, so nothing arrives twice.
 every configured channel. Real on purpose: a test that takes a different path to your phone than
 the alerts do tests nothing.
 
-Static self-hosts — the site served by a plain web server with no WeatherDesk process behind it —
+Static self-hosts — the site served by a plain web server with no StormDesk process behind it —
 have no server to do this, and the page keeps evaluating rules itself while it is open.
 
 ## Reading Home Assistant back
@@ -113,7 +113,7 @@ Settings → **Home Assistant** → *Read entities back*. Paste the Home Assista
 long-lived access token (Home Assistant → your profile → Security → Long-lived access tokens),
 then press **List entities** and tick what you want on the dashboard.
 
-The list is fetched by the WeatherDesk server, which means two things worth knowing:
+The list is fetched by the StormDesk server, which means two things worth knowing:
 
 - The token stays on the server. It is never sent to a browser.
 - **You no longer need `cors_allowed_origins` in `configuration.yaml`.** Home Assistant sends no
@@ -136,15 +136,15 @@ documents.
 
 ## Blueprints
 
-Three importable automations live in [`blueprints/automation/weatherdesk`](../blueprints/automation/weatherdesk).
+Three importable automations live in [`blueprints/automation/stormdesk`](../blueprints/automation/stormdesk).
 In Home Assistant: Settings → Automations & scenes → Blueprints → **Import blueprint**, and paste
 the URL of the raw file.
 
 | Blueprint | What it does |
 | --- | --- |
-| [`severe-alert-critical-push`](../blueprints/automation/weatherdesk/severe-alert-critical-push.yaml) | Sends a critical notification — one that overrides silent mode and Do Not Disturb — when the `alert` sensor picks up a warning. |
-| [`wind-gust-threshold`](../blueprints/automation/weatherdesk/wind-gust-threshold.yaml) | Runs anything you like when gusts stay over a number, and optionally something else when they drop back. |
-| [`daily-rain-skip-irrigation`](../blueprints/automation/weatherdesk/daily-rain-skip-irrigation.yaml) | Waters at a set time unless your own gauge says the garden already got some. |
+| [`severe-alert-critical-push`](../blueprints/automation/stormdesk/severe-alert-critical-push.yaml) | Sends a critical notification — one that overrides silent mode and Do Not Disturb — when the `alert` sensor picks up a warning. |
+| [`wind-gust-threshold`](../blueprints/automation/stormdesk/wind-gust-threshold.yaml) | Runs anything you like when gusts stay over a number, and optionally something else when they drop back. |
+| [`daily-rain-skip-irrigation`](../blueprints/automation/stormdesk/daily-rain-skip-irrigation.yaml) | Waters at a set time unless your own gauge says the garden already got some. |
 
 Thresholds are typed in the unit the sensor shows in Home Assistant. 10 m/s is about 22 mph;
 5 mm is about a fifth of an inch.
@@ -176,7 +176,7 @@ change with it; this one is not.
 `current` is the newest row of the archive. A field the station does not measure is `null`, not
 missing. The forecast is five days from open-meteo, cached for fifteen minutes.
 
-The dashboard also announces itself on the LAN over mDNS as `_weatherdesk._tcp`, with `version`
+The dashboard also announces itself on the LAN over mDNS as `_stormdesk._tcp`, with `version`
 and `path=/api/v1` in its TXT record, so something looking for it does not have to be told an
 address.
 
@@ -192,16 +192,16 @@ last did.
 
 **Everything is 32 °F / 0 °C, or the numbers look scaled.** Home Assistant is being told SI and
 converting. If a number looks converted twice, check you have not also left the old browser-side
-publisher running — an older WeatherDesk tab open somewhere will publish to the same topics. The
+publisher running — an older StormDesk tab open somewhere will publish to the same topics. The
 current version stands down when it sees the server publishing, but a tab from before 3.2.0 will
 not.
 
-**A `mqtts://` broker won't connect.** WeatherDesk uses the system trust store. A self-signed
-broker certificate needs to be trusted by the machine WeatherDesk runs on.
+**A `mqtts://` broker won't connect.** StormDesk uses the system trust store. A self-signed
+broker certificate needs to be trusted by the machine StormDesk runs on.
 
 ## A note on exposure
 
-WeatherDesk's LAN routes assume a trusted LAN: `/config` serves the settings blob, and
+StormDesk's LAN routes assume a trusted LAN: `/config` serves the settings blob, and
 `/ha/states` will list your Home Assistant entities to anything that can reach the port. That is
 the documented model. `/public` and `/config-public` are the only pair meant for the open
 internet, and a public tunnel needs an access policy in front of it before anything else. See the

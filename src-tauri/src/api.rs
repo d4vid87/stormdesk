@@ -40,7 +40,7 @@ fn forecast(cfg: &std::path::Path) -> Option<serde_json::Value> {
         Ok(r) => serde_json::from_str::<serde_json::Value>(&r.into_string().ok()?).ok()?,
         // Status codes only: an upstream URL carries the coordinates of somebody's house.
         Err(ureq::Error::Status(code, _)) => {
-            eprintln!("weatherdesk: forecast fetch failed ({code})");
+            eprintln!("stormdesk: forecast fetch failed ({code})");
             return None;
         }
         Err(_) => return None,

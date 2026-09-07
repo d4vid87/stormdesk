@@ -1,12 +1,27 @@
 # Changelog
 
-All notable changes to WeatherDesk. Versions follow [semantic versioning](https://semver.org),
+All notable changes to StormDesk. Versions follow [semantic versioning](https://semver.org),
 and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
-Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/weatherdesk` container image.
+Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
 ## [Unreleased]
+
+## [4.1.0] - 2026-09-06
+
+### Changed
+- Rebranded the complete project as StormDesk: GitHub repository, desktop and mobile apps,
+  package IDs, container, Flatpak, MQTT topics, documentation, updater, and HookEcho integration.
+- Reworked the Desk into a streamlined OLED-black layout with neon-green data, a modern compact
+  navigation bar, concise gauges, four-day forecast rail, and expandable expert detail.
+- Moved official alerts into a scrolling hero banner and added an actionable current-plus-next
+  weather summary while keeping the animated sun, moon, and weather art.
+- Simplified Settings into Basics, Appearance, and Advanced views.
+- Expanded Local Signals with live status, atmospheric trend, storm proximity, the next six hours,
+  an outdoor-window recommendation, and quick notification controls.
+- Restyled Timeline and Data to match the OLED interface, made Dark Streets the radar default,
+  and gave forecast models distinct blue, green, lime, and red lines.
 
 ## [4.0.0] - 2026-09-04
 
@@ -155,17 +170,17 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/weatherdesk` container im
 
 ### Fixed
 - **Blank window on some Linux GPU/compositor combinations** (seen on Hyprland with Intel UHD
-  600 graphics): WeatherDesk started and ran, but never drew anything. WebKitGTK's DMABUF
+  600 graphics): StormDesk started and ran, but never drew anything. WebKitGTK's DMABUF
   renderer is now disabled by default on Linux. Export
   `WEBKIT_DISABLE_DMABUF_RENDERER=0` to force the old behaviour back on.
 
 ## [3.2.2] - 2026-08-30
 
 ### Fixed
-- **Relaunching while WeatherDesk was already running crashed the old instance.** Each new
+- **Relaunching while StormDesk was already running crashed the old instance.** Each new
   launch tore down the previous instance's UI process, and its WebKit web process — busy in
   JavaScript — missed WebKit's shutdown deadline and was killed with SIGTRAP, leaving a core
-  dump behind. WeatherDesk is now single-instance: a second launch focuses the window that is
+  dump behind. StormDesk is now single-instance: a second launch focuses the window that is
   already open and exits.
 
 ## [3.2.1] - 2026-08-30
@@ -180,11 +195,11 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/weatherdesk` container im
   a designed arrangement — current conditions, gauges, day cards, radar, then the core four
   cards — instead of raw markup order. Saved arrangements still win; only the starting point
   changed.
-- **`--version` and `--check`.** `weatherdesk --check` asks the running server for its source
+- **`--version` and `--check`.** `stormdesk --check` asks the running server for its source
   and the age of the last reading, and exits non-zero if nothing has landed — a headless Pi
   install no longer needs a browser to be verified.
 - **WeeWX, documented.** WeeWX's Weather Underground uploader pointed at
-  `/updateweatherstation.php` feeds WeatherDesk today; [docs/weewx.md](docs/weewx.md) has the
+  `/updateweatherstation.php` feeds StormDesk today; [docs/weewx.md](docs/weewx.md) has the
   five-line stanza (#47).
 
 ### Fixed
@@ -197,10 +212,10 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/weatherdesk` container im
   typed, instead of a bare 401.
 
 ### Security
-- **The `rustls-webpki` advisory in our dependency tree is not reachable from WeatherDesk, and there
+- **The `rustls-webpki` advisory in our dependency tree is not reachable from StormDesk, and there
   is now a written record of why.** The affected 0.102.8 comes in twice, both times under `rumqttc`,
   the MQTT publisher; the panic it describes (RUSTSEC-2026-0104 / GHSA-82j2-j2ch-gfr8) is in CRL
-  parsing, code that runs only for a revocation list the application hands it, and WeatherDesk hands
+  parsing, code that runs only for a revocation list the application hands it, and StormDesk hands
   it none — TLS is configured in exactly two places, both a bare
   `Transport::tls_with_default_config()`. No upgrade exists yet: the fix is in 0.103.13, there is no
   0.102.x backport, and `rumqttc 0.25.1` still asks for `rustls-webpki ^0.102.8`. So
@@ -218,8 +233,8 @@ read-back all moved off the page and into the server, so they keep working with 
 the house closed — which is the one thing an alert cannot depend on a browser for.
 
 Two new repositories ship alongside this release: a
-[HACS integration](https://github.com/d4vid87/ha-weatherdesk) for a weather entity with a forecast
-card, and a [Home Assistant OS add-on](https://github.com/d4vid87/weatherdesk-addons).
+[HACS integration](https://github.com/d4vid87/ha-stormdesk) for a weather entity with a forecast
+card, and a [Home Assistant OS add-on](https://github.com/d4vid87/stormdesk-addons).
 
 ### Added
 - **Server-side MQTT publishing.** One Home Assistant device, nineteen entities, discovered with
@@ -237,7 +252,7 @@ card, and a [Home Assistant OS add-on](https://github.com/d4vid87/weatherdesk-ad
   needed, which is what used to make this fail for most people. Read-only, deliberately.
 - **`GET /api/v1`** — named fields, SI, no credentials, and a version number that means it.
   Everything else this server answers is shaped for the page and free to change with it.
-- **mDNS.** The dashboard announces itself as `_weatherdesk._tcp`, and finds a WeatherLink Live
+- **mDNS.** The dashboard announces itself as `_stormdesk._tcp`, and finds a WeatherLink Live
   console the same way — the *Find console* button in the wizard and in Settings.
 - **Wind unit override** — mph, km/h, m/s or knots, independent of the master units switch.
 - **Layout presets**: Wall landscape, Kitchen portrait, E-ink. A starting point to drag from.
@@ -398,7 +413,7 @@ Everything here came out of what people reported after 3.0.8.
   how long ago. Answers "is my console actually getting through?" without a log file, and a
   screenshot of it answers most of a bug report.
 - **Re-upload to Weather Underground and PWSWeather.** A console holds one upload address, so
-  pointing it at WeatherDesk takes it off whichever network it was on. Put the station ID and key
+  pointing it at StormDesk takes it off whichever network it was on. Put the station ID and key
   for either service under Settings → This computer and each reading is sent on once a minute.
 - **A WBGT gauge** — the heat-stress number that accounts for sun and wind, which the heat index
   doesn't. Estimated from temperature, humidity, solar and wind, and labelled as an estimate: the
@@ -454,7 +469,7 @@ Everything here came out of what people reported after 3.0.8.
 ### Documentation
 
 - New hero GIF walking through first-run setup, the Desk, warnings and radar, and the intro no
-  longer describes WeatherDesk as Tempest-only ([#27], [#28])
+  longer describes StormDesk as Tempest-only ([#27], [#28])
 - A full-Desk screenshot and a national-mosaic screenshot under the hero ([#29], [#31]); the old
   Desk screenshot is gone ([#30])
 
@@ -464,7 +479,7 @@ Everything here came out of what people reported after 3.0.8.
 
 - **Support for weather stations other than a Tempest** ([#26]). Ecowitt, Ambient Weather,
   Davis (WeatherLink Live), AcuRite via rtl_433, La Crosse and any console speaking the Weather
-  Underground upload protocol all feed the same dashboard. With no station at all, WeatherDesk
+  Underground upload protocol all feed the same dashboard. With no station at all, StormDesk
   runs on a forecast for a place you name.
 
 ### Fixed
@@ -638,47 +653,49 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/weatherdesk/compare/v3.2.0...HEAD
-[3.0.9]: https://github.com/d4vid87/weatherdesk/compare/v3.0.8...v3.0.9
-[3.0.8]: https://github.com/d4vid87/weatherdesk/compare/v3.0.7...v3.0.8
-[3.0.7]: https://github.com/d4vid87/weatherdesk/compare/v3.0.6...v3.0.7
-[3.0.6]: https://github.com/d4vid87/weatherdesk/compare/v3.0.5...v3.0.6
-[3.0.5]: https://github.com/d4vid87/weatherdesk/compare/v3.0.4...v3.0.5
-[3.0.4]: https://github.com/d4vid87/weatherdesk/compare/v3.0.3...v3.0.4
-[3.0.3]: https://github.com/d4vid87/weatherdesk/compare/v3.0.2...v3.0.3
-[3.0.2]: https://github.com/d4vid87/weatherdesk/compare/v3.0.1...v3.0.2
-[3.0.1]: https://github.com/d4vid87/weatherdesk/compare/v3.0.0...v3.0.1
-[3.0.0]: https://github.com/d4vid87/weatherdesk/compare/v2.0.1...v3.0.0
-[2.0.1]: https://github.com/d4vid87/weatherdesk/compare/v2.0.0...v2.0.1
-[2.0.0]: https://github.com/d4vid87/weatherdesk/compare/v1.3.1...v2.0.0
-[1.3.1]: https://github.com/d4vid87/weatherdesk/compare/v1.3.0...v1.3.1
-[1.3.0]: https://github.com/d4vid87/weatherdesk/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/d4vid87/weatherdesk/compare/v1.1.2...v1.2.0
-[1.1.2]: https://github.com/d4vid87/weatherdesk/compare/v1.1.1...v1.1.2
-[1.1.1]: https://github.com/d4vid87/weatherdesk/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/d4vid87/weatherdesk/compare/v1.0.6...v1.1.0
-[1.0.6]: https://github.com/d4vid87/weatherdesk/compare/v1.0.5...v1.0.6
-[1.0.5]: https://github.com/d4vid87/weatherdesk/compare/v1.0.4...v1.0.5
-[1.0.4]: https://github.com/d4vid87/weatherdesk/compare/v1.0.3...v1.0.4
-[1.0.3]: https://github.com/d4vid87/weatherdesk/compare/v1.0.2...v1.0.3
-[1.0.2]: https://github.com/d4vid87/weatherdesk/compare/v1.0.1...v1.0.2
-[1.0.1]: https://github.com/d4vid87/weatherdesk/compare/v1.0.0...v1.0.1
-[1.0.0]: https://github.com/d4vid87/weatherdesk/releases/tag/v1.0.0
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/d4vid87/stormdesk/compare/v4.0.0...v4.1.0
+[4.0.0]: https://github.com/d4vid87/stormdesk/compare/v3.4.0...v4.0.0
+[3.0.9]: https://github.com/d4vid87/stormdesk/compare/v3.0.8...v3.0.9
+[3.0.8]: https://github.com/d4vid87/stormdesk/compare/v3.0.7...v3.0.8
+[3.0.7]: https://github.com/d4vid87/stormdesk/compare/v3.0.6...v3.0.7
+[3.0.6]: https://github.com/d4vid87/stormdesk/compare/v3.0.5...v3.0.6
+[3.0.5]: https://github.com/d4vid87/stormdesk/compare/v3.0.4...v3.0.5
+[3.0.4]: https://github.com/d4vid87/stormdesk/compare/v3.0.3...v3.0.4
+[3.0.3]: https://github.com/d4vid87/stormdesk/compare/v3.0.2...v3.0.3
+[3.0.2]: https://github.com/d4vid87/stormdesk/compare/v3.0.1...v3.0.2
+[3.0.1]: https://github.com/d4vid87/stormdesk/compare/v3.0.0...v3.0.1
+[3.0.0]: https://github.com/d4vid87/stormdesk/compare/v2.0.1...v3.0.0
+[2.0.1]: https://github.com/d4vid87/stormdesk/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/d4vid87/stormdesk/compare/v1.3.1...v2.0.0
+[1.3.1]: https://github.com/d4vid87/stormdesk/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/d4vid87/stormdesk/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/d4vid87/stormdesk/compare/v1.1.2...v1.2.0
+[1.1.2]: https://github.com/d4vid87/stormdesk/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/d4vid87/stormdesk/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/d4vid87/stormdesk/compare/v1.0.6...v1.1.0
+[1.0.6]: https://github.com/d4vid87/stormdesk/compare/v1.0.5...v1.0.6
+[1.0.5]: https://github.com/d4vid87/stormdesk/compare/v1.0.4...v1.0.5
+[1.0.4]: https://github.com/d4vid87/stormdesk/compare/v1.0.3...v1.0.4
+[1.0.3]: https://github.com/d4vid87/stormdesk/compare/v1.0.2...v1.0.3
+[1.0.2]: https://github.com/d4vid87/stormdesk/compare/v1.0.1...v1.0.2
+[1.0.1]: https://github.com/d4vid87/stormdesk/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/d4vid87/stormdesk/releases/tag/v1.0.0
 
-[#3]: https://github.com/d4vid87/weatherdesk/pull/3
-[#4]: https://github.com/d4vid87/weatherdesk/pull/4
-[#5]: https://github.com/d4vid87/weatherdesk/pull/5
-[#7]: https://github.com/d4vid87/weatherdesk/pull/7
-[#17]: https://github.com/d4vid87/weatherdesk/pull/17
-[#19]: https://github.com/d4vid87/weatherdesk/pull/19
-[#20]: https://github.com/d4vid87/weatherdesk/pull/20
-[#21]: https://github.com/d4vid87/weatherdesk/pull/21
-[#23]: https://github.com/d4vid87/weatherdesk/pull/23
-[#24]: https://github.com/d4vid87/weatherdesk/pull/24
-[#25]: https://github.com/d4vid87/weatherdesk/pull/25
-[#26]: https://github.com/d4vid87/weatherdesk/pull/26
-[#27]: https://github.com/d4vid87/weatherdesk/pull/27
-[#28]: https://github.com/d4vid87/weatherdesk/pull/28
-[#29]: https://github.com/d4vid87/weatherdesk/pull/29
-[#30]: https://github.com/d4vid87/weatherdesk/pull/30
-[#31]: https://github.com/d4vid87/weatherdesk/pull/31
+[#3]: https://github.com/d4vid87/stormdesk/pull/3
+[#4]: https://github.com/d4vid87/stormdesk/pull/4
+[#5]: https://github.com/d4vid87/stormdesk/pull/5
+[#7]: https://github.com/d4vid87/stormdesk/pull/7
+[#17]: https://github.com/d4vid87/stormdesk/pull/17
+[#19]: https://github.com/d4vid87/stormdesk/pull/19
+[#20]: https://github.com/d4vid87/stormdesk/pull/20
+[#21]: https://github.com/d4vid87/stormdesk/pull/21
+[#23]: https://github.com/d4vid87/stormdesk/pull/23
+[#24]: https://github.com/d4vid87/stormdesk/pull/24
+[#25]: https://github.com/d4vid87/stormdesk/pull/25
+[#26]: https://github.com/d4vid87/stormdesk/pull/26
+[#27]: https://github.com/d4vid87/stormdesk/pull/27
+[#28]: https://github.com/d4vid87/stormdesk/pull/28
+[#29]: https://github.com/d4vid87/stormdesk/pull/29
+[#30]: https://github.com/d4vid87/stormdesk/pull/30
+[#31]: https://github.com/d4vid87/stormdesk/pull/31

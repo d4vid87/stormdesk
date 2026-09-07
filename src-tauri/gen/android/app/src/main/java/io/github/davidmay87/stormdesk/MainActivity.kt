@@ -1,4 +1,4 @@
-package io.github.davidmay87.weatherdesk
+package io.github.davidmay87.stormdesk
 
 import android.os.Bundle
 import android.view.WindowManager

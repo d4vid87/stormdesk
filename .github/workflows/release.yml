@@ -34,7 +34,7 @@ jobs:
           # a draft has no git tag yet, so it can't be looked up by tag afterwards.
           id=$(gh api repos/${{ github.repository }}/releases \
             -f tag_name='${{ github.ref_name }}' \
-            -f name='WeatherDesk ${{ github.ref_name }}' \
+            -f name='StormDesk ${{ github.ref_name }}' \
             -f body="$body" \
             -F draft=true -q .id)
           test -n "$id"
@@ -143,7 +143,7 @@ jobs:
           test -n "$apk"
           gh api --method POST \
             -H "Content-Type: application/vnd.android.package-archive" \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ needs.create-release.outputs.release_id }}/assets?name=WeatherDesk_${{ github.ref_name }}.apk" \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ needs.create-release.outputs.release_id }}/assets?name=StormDesk_${{ github.ref_name }}.apk" \
             --input "$apk"
 
   # Windows Defender false-positives new unsigned installers, and the only honest answer to "is

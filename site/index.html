@@ -9,9 +9,9 @@
      origin — see shouldRegisterSW() in js/boot.js. The weather itself is never cached there;
      desk.js keeps the last good forecast and obs and marks them stale. -->
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<title>WeatherDesk</title>
+<link rel="icon" href="stormdesk-favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="stormdesk-icon-192.png">
+<title>StormDesk</title>
 <!-- The display face the numbers are set in. Bundled, not fetched from a CDN: a wall panel on a
      LAN with no route out still has to render. -->
 <link rel="preload" as="font" type="font/woff2" href="fonts/barlow-semi-condensed-600.woff2" crossorigin>
@@ -32,8 +32,8 @@
   @font-face { font-family: 'Barlow SC'; font-style: normal; font-weight: 600; font-display: swap;
     src: url(fonts/barlow-semi-condensed-600.woff2) format('woff2'); }
   :root {
-    --bg: #0b0f14; --panel: #131a22; --panel2: #1a232d; --line: #253141;
-    --text: #e6edf5; --muted: #8ea0b5; --accent: #4fb8ff; --warn: #ffb84f; --bad: #ff5f56; --good: #4fdc8b;
+    --bg: #000; --panel: #010503; --panel2: #06100a; --line: #174c2d;
+    --text: #e6ffed; --muted: #80a98c; --accent: #39ff88; --warn: #d8ff4f; --bad: #ff4d5a; --good: #39ff88;
     --gap: 12px;
     /* Condensed and tabular: a broadcast number counts up without the line shuffling sideways. */
     --num: 'Barlow SC', system-ui, sans-serif;
@@ -51,7 +51,8 @@
   /* Palette packs. Same six variables, four opinions about them — OLED for a screen that saves
      power on true black, solarized for the people who ask for it everywhere, high contrast for
      a bright room, e-ink for a panel that is being photographed by a slow display. */
-  html[data-palette="oled"] { --bg: #000; --panel: #0a0a0a; --panel2: #141414; --line: #262626; }
+  html[data-palette="oled"] { --bg: #000; --panel: #010503; --panel2: #06100a; --line: #174c2d;
+    --text: #e6ffed; --muted: #80a98c; --accent: #39ff88; --good: #39ff88; }
   html[data-palette="solarized"] { --bg: #002b36; --panel: #073642; --panel2: #0b4653; --line: #17505c;
     --text: #eee8d5; --muted: #93a1a1; --accent: #268bd2; --warn: #b58900; --bad: #dc322f; --good: #859900; }
   html[data-palette="solarized"][data-theme="light"] { --bg: #fdf6e3; --panel: #fff; --panel2: #eee8d5;
@@ -184,7 +185,8 @@
   /* Above the notification stack (z 30) and the night dim (999): a drawer half-covered by a
      banner is a drawer with an unreachable Save button. */
   html[data-motion="full"] #drawer { transition: transform .38s cubic-bezier(.2, .9, .3, 1.12); }
-  #drawer.open { transform: none; }
+  #drawer { visibility: hidden; }
+  #drawer.open { transform: none; visibility: visible; }
   /* the detail slide-over: same dialog contract as the drawer, same look */
   #detail {
     position: fixed; inset: 0 0 0 auto; width: min(420px, 100%); background: var(--panel);
@@ -513,6 +515,87 @@
   .gwrap:has(svg.therm) .ginner { align-items: flex-end; text-align: right; padding-right: 6px; }
   .gwrap:has(svg.therm) .ginner span { max-width: 74px; }
 
+  /* Streamlined Desk: the same live data and DOM hooks, without a wall of instrument faces.
+     Five immediate signals lead; atmosphere detail sits in a quieter second rail. */
+  #desk-stack { display: flex; flex-direction: column; gap: 18px; align-items: stretch; }
+  #hero { order: 1; min-height: 310px; display: grid; align-content: space-between; }
+  #gauges { order: 2; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 8px; }
+  #daycards { order: 3; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  #c48 { order: 4; }
+  #trends { order: 5; }
+  #ticker { order: 6; overflow: hidden; }
+  #ticker:not(.alert) { display: none; }
+  #ticker-track { min-width: 0; }
+  #timeline-peek { order: 7; }
+  #desk-grid { order: 8; }
+  #ha-panel, #desk-radar { order: 9; }
+  #hero-clock { margin-bottom: 2px; }
+  #hero-summary { max-width: 780px; margin-top: 20px; font-size: 17px; line-height: 1.45;
+    color: var(--hero-text, #fff); }
+  #hero-alerts { margin: -4px -8px 14px; border-left: 4px solid #ff7068; border-radius: 8px;
+    background: #351313d9; color: #fff; box-shadow: 0 10px 28px #0003; overflow: hidden; }
+  #hero-alerts[hidden] { display: none; }
+  .hero-alert-track { display: flex; gap: 56px; width: max-content; padding: 10px 14px;
+    white-space: nowrap; font-weight: 600; animation: hero-alert-scroll 32s linear infinite; }
+  .hero-alert-track span { color: #fff; }
+  @keyframes hero-alert-scroll { to { transform: translateX(calc(-50% - 28px)); } }
+  html[data-motion="off"] .hero-alert-track { width: auto; white-space: normal; animation: none; }
+  html[data-motion="full"] #hero-alerts:not([hidden]) { animation: hero-alert-in .35s ease-out; }
+  @keyframes hero-alert-in { from { opacity: 0; transform: translateY(-8px); } }
+  #desk-stack > *, #gauges > *, #daycards > * { width: auto !important; height: auto !important; }
+  .grip, .rz { opacity: 0; }
+  #gauges > .gauge { grid-column: span 4; min-height: 124px; padding: 18px; display: flex;
+    flex-direction: column; justify-content: center; }
+  #gauges > [data-panel="g-hum"], #gauges > [data-panel="g-press"],
+  #gauges > [data-panel="g-dew"], #gauges > [data-panel="g-wet"] { grid-column: span 5;
+    min-height: 84px; background: var(--panel2); border-color: transparent; }
+  #gauges > [data-panel="g-wind"] { order: 1; }
+  #gauges > [data-panel="g-rain"] { order: 2; }
+  #gauges > [data-panel="g-uv"] { order: 3; }
+  #gauges > [data-panel="g-ltg"] { order: 4; }
+  #gauges > [data-panel="g-wbgt"] { order: 5; box-shadow: inset 0 -3px var(--bad); }
+  #gauges > [data-panel="g-hum"] { order: 6; }
+  #gauges > [data-panel="g-press"] { order: 7; }
+  #gauges > [data-panel="g-dew"] { order: 8; }
+  #gauges > [data-panel="g-wet"] { order: 9; }
+  #gauges .gwrap { height: auto; position: static; }
+  #gauges .gwrap > span[aria-hidden="true"] { display: none; }
+  #gauges .ginner, #gauges .gwrap:has(svg.therm) .ginner { position: static; align-items: flex-start;
+    text-align: left; padding: 0; }
+  #gauges .ginner b { font-size: 25px; line-height: 1.1; }
+  #gauges .ginner small { font-size: 12px; }
+  #gauges .ginner span, #gauges .gwrap:has(svg.therm) .ginner span { max-width: none; }
+  #daycards > .daycard { padding: 15px; min-height: 112px; }
+  body:not(.days-all) #daycards > .daycard:nth-child(n+5) { display: none; }
+  body:not(.days-all) #daycards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #daycards-toggle { order: 3; align-self: flex-start; margin-top: -12px; padding: 7px 11px;
+    border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); cursor: pointer; }
+  #daycards > .daycard:first-child { background: var(--panel2); }
+  #daycards .dc-body { height: auto; justify-content: flex-start; }
+  #daycards .daysvg { display: none; }
+  #daycards .dc-mid { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; text-align: left; }
+  #daycards .dc-icon { grid-row: 1 / 3; }
+  #daycards .dc-temp b { font-size: 23px; }
+  #daycards .dc-cond, #daycards .dc-pop { grid-column: 1 / -1; }
+  #desk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 0; }
+  #desk-grid > .card { height: auto !important; min-height: 0; padding: 16px 18px; }
+  #desk-grid > [data-panel="story"] { grid-column: span 2 !important; }
+  #desk-grid > details.card { padding: 0; }
+  #desk-grid > details.card > summary { cursor: pointer; list-style: none; padding: 14px 18px; }
+  #desk-grid > details.card > summary::-webkit-details-marker { display: none; }
+  #desk-grid > details.card > summary::after { content: '+'; float: right; color: var(--muted); }
+  #desk-grid > details.card[open] > summary::after { content: '−'; }
+  #desk-grid > details.card > summary h2 { display: inline; margin: 0; }
+  body:not(.layout-locked) #desk-grid > details.card > summary { padding-right: 86px; }
+  #desk-grid > details.card > :not(summary):not(.grip):not(.rz) { margin: 0 18px 14px; }
+  /* The upper board already carries the immediate story. Long-form archive/environment cards
+     stay available when moved to Data instead of competing with the Desk briefing. */
+  #desk-grid > [data-panel="tenday"], #desk-grid > [data-panel="sky"],
+  #desk-grid > [data-panel="solar"], #desk-grid > [data-panel="lastyear"],
+  #desk-grid > [data-panel="fire"], #desk-grid > [data-panel="health"],
+  #desk-grid > [data-panel="aqi"] { display: none !important; }
+  body.layout-locked .grip, body.layout-locked .rz { display: none; }
+
   .chart { width: 100%; height: 150px; display: block; }
   #places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .place { background: var(--panel2); border: 1px solid var(--line); color: var(--text);
@@ -694,25 +777,145 @@
   html[data-motion="full"] .tl-event { transition:transform .18s ease,border-color .18s ease; }
   html[data-motion="full"] .tl-event:hover, .tl-event:focus-visible { transform:translateY(-2px); border-color:var(--accent); }
   @media(max-width:720px) { .timeline-strip { grid-template-columns:1fr; } }
+
+  /* StormDesk OLED face. Semantic red/yellow remain reserved for warnings and watches. */
+  body, main, #timeline, #signals, #data { background:#000; }
+  ::selection { background:var(--accent); color:#001c09; }
+  header { height:52px; padding:7px 14px; gap:9px; background:#020504ef; border-color:#123d25;
+    box-shadow:0 10px 28px #0008; backdrop-filter:blur(18px); }
+  header #brand { width:30px; height:30px; border-radius:9px; box-shadow:0 0 15px #39ff8855; }
+  header h1 { margin-right:18px; font-size:13px; letter-spacing:.11em; color:#effff4; }
+  header nav { flex:0 1 auto; gap:2px; padding:3px; border:1px solid #13251b; border-radius:11px;
+    background:#07100b; }
+  header .tab { padding:5px 13px; border-radius:7px; font-size:13px; }
+  header .tab.active { color:#9dffc0; background:#10301e; border-color:#246c40;
+    box-shadow:inset 0 0 12px #39ff8812; }
+  header #station-name { margin-left:auto; padding:4px 9px; border-radius:999px; background:#07100b;
+    color:#8eb29a; font-size:12px; white-space:nowrap; }
+  header #btn-settings { color:#7dffa9; border-color:#1b5c35; }
+  header .iconbtn { min-width:34px; min-height:34px; padding:5px 8px; background:#07100b; }
+  .header-overflow { position:relative; flex:none; }
+  .header-overflow > summary { list-style:none; cursor:pointer; width:34px; height:34px; display:grid;
+    place-items:center; border:1px solid #173522; border-radius:8px; color:#a9c9b4; background:#07100b;
+    font-weight:700; letter-spacing:2px; }
+  .header-overflow > summary::-webkit-details-marker { display:none; }
+  .header-overflow-menu { position:absolute; z-index:1200; right:0; top:calc(100% + 8px); display:grid;
+    grid-template-columns:repeat(2,44px); gap:7px; padding:9px; background:#020604f7;
+    border:1px solid #1b5c35; border-radius:10px; box-shadow:0 16px 40px #000; }
+  .header-overflow-menu .iconbtn { width:44px; height:40px; }
+  #hero { background:radial-gradient(circle at 78% 25%,#12632f66,transparent 27%),
+    linear-gradient(145deg,#020a05,#07311a 58%,#020805); border:1px solid #2bff78;
+    box-shadow:0 0 28px #20ff6b20; }
+  #hero-alerts { background:#250606e8; border-color:#ff4d5a; box-shadow:0 0 22px #ff344433; }
+  #gauges > .gauge, #daycards > .daycard, #c48, #trends, #timeline-peek, #desk-grid > .card {
+    background:#010503; border-color:#123d24; box-shadow:inset 0 0 22px #39ff8807; }
+  #gauges > [data-panel="g-hum"], #gauges > [data-panel="g-press"],
+  #gauges > [data-panel="g-dew"], #gauges > [data-panel="g-wet"] { background:#06100a; }
+  #gauges .ginner b, #daycards .dc-temp b, #c48-summary .big { color:#e6ffed;
+    text-shadow:0 0 12px #39ff8844; }
+  #gauges .gauge:hover, #desk-grid > details[open] { border-color:#39ff88;
+    box-shadow:0 0 18px #39ff8818; }
+  #daycards > .daycard:first-child { background:#082415; }
+  #trends .warm, #t-model { color:#d8ff4f; }
+  #trends .cool, #t-press, #t-temp { color:#39ff88; }
+  .timeline-strip .tl-event, #timeline-list .tl-event { background:#010503; border-color:#174c2d;
+    border-left-color:#39ff88; box-shadow:inset 0 0 22px #39ff8808; }
+  .timeline-strip .tl-event.sev-watch, #timeline-list .tl-event.sev-watch { border-left-color:#ffd84a; }
+  .timeline-strip .tl-event.sev-warning, #timeline-list .tl-event.sev-warning { border-left-color:#ff4d5a; }
+  #timeline-axis { background:#0a1a10; box-shadow:0 0 14px #39ff8822; }
+  #timeline-axis .observed { background:#176d3b; }
+  #timeline-axis .forecast { background:#39ff88; }
+  #timeline-axis::after { color:#aaffc4; background:#000; }
+  #timeline-filters button { background:#06100a; color:#82aa90; border-color:#173d25; }
+  #timeline-filters button.active, #timeline-filters button:hover { background:#123c24; color:#baffcf;
+    border-color:#39ff88; box-shadow:0 0 12px #39ff881c; }
+  #data-grid, #signals-grid { gap:12px; max-width:1500px; margin:auto; }
+  #data-grid > .card, #signals-grid > .card, .signal-card, .local-panel { background:#010503;
+    border-color:#174c2d; box-shadow:inset 0 0 24px #39ff8807; }
+  #data-grid > .card:hover, #signals-grid > .card:hover { border-color:#39ff88;
+    box-shadow:0 0 18px #39ff881a; }
+  #data-grid h2, #signals-grid h2 { color:#79aa89; }
+  #data-grid input, #data-grid select, #data-grid button, #signals-grid input, #signals-grid button {
+    background:#06100a; color:#e5ffed; border-color:#194b2c; }
+  #signals-grid { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  #signals-grid > [data-panel="sig-live-wind-websocket"],
+  #signals-grid > [data-panel="sig-nearby-stations"],
+  #signals-grid > [data-panel="sig-notification-history"] { grid-column:span 2 !important; }
+  .signals-intro { grid-column:1/-1; display:flex; align-items:end; justify-content:space-between; }
+  .signals-intro h2 { margin:0; color:#effff4 !important; font-size:22px; }
+  .signals-intro span { color:#76a185; font-size:12px; }
+  .signal-overview { grid-column:1/-1; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+  .signal-card { min-height:92px; padding:13px 14px; border:1px solid #174c2d; border-radius:11px; }
+  .signal-card small { display:block; color:#6f9d7f; text-transform:uppercase; letter-spacing:.08em; }
+  .signal-card strong { display:block; margin:8px 0 2px; color:#caffd9; font:600 22px var(--num); }
+  .signal-card span { color:#85ad92; font-size:12px; }
+  .signal-card.live::before { content:'●'; float:right; color:#39ff88; text-shadow:0 0 10px #39ff88; }
+  .local-decisions { grid-column:1/-1; display:grid; grid-template-columns:2fr 1fr 1fr; gap:10px; }
+  .local-panel { min-height:142px; padding:14px; border:1px solid #174c2d; border-radius:11px; }
+  .local-panel h3 { margin:0 0 4px; color:#effff4; font-size:14px; }
+  .local-panel > p { margin:0 0 12px; color:#72977e; font-size:12px; }
+  .signal-hours { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:6px; }
+  .signal-hour { padding:9px 6px; border-radius:8px; background:#041008; border:1px solid #123c24;
+    text-align:center; }
+  .signal-hour time, .signal-hour small { display:block; color:#72977e; font-size:10px; }
+  .signal-hour strong { display:block; margin:5px 0 2px; color:#dfffe8; font-size:16px; }
+  .signal-hour .rain { color:#58ff98; }
+  #outdoor-window { color:#8dffb4; font:600 21px var(--num); margin:14px 0 5px; }
+  #outdoor-reason { color:#9fb7a7; font-size:12px; }
+  .signal-watch-list { display:grid; gap:7px; margin-top:10px; }
+  .signal-watch { display:flex; align-items:center; justify-content:space-between; padding:8px 9px;
+    border:1px solid #174c2d; border-radius:8px; color:#b7d8c2; background:#041008; cursor:pointer; }
+  .signal-watch::after { content:'＋'; color:#39ff88; font-size:16px; }
+  .signal-watch.on { border-color:#39ff88; background:#0c2c1a; }
+  .signal-watch.on::after { content:'✓'; }
+  .signals-raw { grid-column:1/-1; color:#62846d; font-size:10px; text-transform:uppercase;
+    letter-spacing:.12em; }
+  #drawer { background:#010503; border-color:#1b5c35; box-shadow:-22px 0 55px #000b; padding:18px; }
+  #drawer input, #drawer select, #drawer button { background:#06100a; color:#e5ffed; border-color:#194b2c; }
+  #drawer input:focus, #drawer select:focus { outline:1px solid #39ff88; border-color:#39ff88;
+    box-shadow:0 0 14px #39ff8822; }
+  #drawer label { color:#a5c8b1; }
+  #drawer h2 { color:#58ff98; }
+  #drawer #btn-save { background:#123c24; color:#baffcf; border-color:#39ff88; }
+  .settings-intro { color:#7fa28b; font-size:12px; margin:0 0 10px; }
+  .settings-tabs { position:sticky; top:-18px; z-index:3; display:grid; grid-template-columns:repeat(3,1fr);
+    gap:4px; margin:0 -2px 12px; padding:8px 2px; background:#010503f2; backdrop-filter:blur(12px); }
+  .settings-tabs button { min-height:38px; border-radius:8px; }
+  .settings-tabs button.active { background:#123c24 !important; color:#aaffc4 !important;
+    border-color:#39ff88 !important; }
+  .settings-status { display:grid; gap:4px; margin:0 0 12px; padding:13px; border:1px solid #1b5c35;
+    border-radius:10px; background:#041008; }
+  .settings-status strong { color:#68ff9e; }
+  .settings-status small { color:#739780; }
+  .settings-panel[hidden] { display:none; }
+  @media(max-width:900px) { .signal-overview{grid-template-columns:repeat(2,1fr)}
+    .local-decisions{grid-template-columns:1fr}.signal-hours{grid-template-columns:repeat(3,1fr)}
+    #signals-grid > .card{grid-column:1/-1 !important} }
+  @media(max-width:720px) { body:not(.days-all) #daycards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>
 </head>
 <body>
 <header>
-  <img id="brand" src="mark-256.png" alt="WeatherDesk">
-  <h1>WEATHERDESK</h1>
+  <img id="brand" src="stormdesk-icon-512.png" alt="StormDesk">
+  <h1>STORMDESK</h1>
   <nav>
     <button class="tab" data-section="desk">Desk</button>
     <button class="tab" data-section="timeline">Timeline</button>
-    <button class="tab" data-section="lab">Forecast Lab</button>
+    <button class="tab" data-section="lab">Radar</button>
     <button class="tab" data-section="signals">Local Signals</button>
     <button class="tab" data-section="data">Data</button>
   </nav>
   <span id="station-name" class="muted"></span>
   <select id="station-switch" class="iconbtn" hidden title="Switch station"></select>
-  <button class="iconbtn" id="btn-refresh">↻</button>
-  <button class="iconbtn" id="btn-full">⛶</button>
-  <button class="iconbtn" id="btn-lock" title="Lock panel layout">🔓</button>
-  <button class="iconbtn" id="btn-kiosk" title="Kiosk mode">🖥</button>
+  <details class="header-overflow">
+    <summary title="More controls" aria-label="More controls">•••</summary>
+    <div class="header-overflow-menu">
+      <button class="iconbtn" id="btn-refresh" title="Refresh">↻</button>
+      <button class="iconbtn" id="btn-full" title="Fullscreen">⛶</button>
+      <button class="iconbtn" id="btn-lock" title="Lock panel layout">🔓</button>
+      <button class="iconbtn" id="btn-kiosk" title="Kiosk mode">🖥</button>
+    </div>
+  </details>
   <button class="iconbtn" id="btn-settings">⚙</button>
 </header>
 
@@ -720,8 +923,8 @@
   <div id="notif-stack"></div>
 <div id="wizard" hidden>
   <div class="wizard-box">
-    <img src="icon-512.png" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
-    <h2 style="margin-top:0;text-align:center">Welcome to WeatherDesk</h2>
+    <img src="stormdesk-icon-512.png" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
+    <h2 style="margin-top:0;text-align:center">Welcome to StormDesk</h2>
     <div id="wizard-progress" class="kv-rows" aria-label="Setup progress">
       <div><span>1 · Choose a station</span><span id="wiz-step-source">current</span></div>
       <div><span>2 · Receive a reading</span><span id="wiz-step-reading">waiting</span></div>
@@ -779,6 +982,7 @@
     <div id="hero" data-panel="hero">
       <div id="hero-sky"><div class="sky-l"></div><div class="sky-l"></div></div>
       <div id="hero-orb"></div>
+      <div id="hero-alerts" role="status" aria-live="polite" hidden></div>
       <div id="hero-clock"><span id="clock-time">--:--:--</span> <span id="clock-date" class="hero-dim"></span></div>
       <div class="hero-top">
         <div>
@@ -801,6 +1005,7 @@
           <div id="hero-normal" class="hero-dim"></div>
         </div>
       </div>
+      <div id="hero-summary"></div>
     </div>
 
     <div id="ticker" data-panel="ticker"><div id="ticker-track"></div><span id="src-health"></span><button id="ticker-pause">❚❚</button></div>
@@ -838,6 +1043,7 @@
         </div>
 
     <div id="daycards" data-panel="daycards"></div>
+    <button id="daycards-toggle">Show all 6 days</button>
 
     <div id="gauges" data-panel="gauges">
       <div class="gauge" data-panel="g-wind" data-metric="windAvg"><h3>Wind</h3><div id="g-wind"></div></div>
@@ -853,21 +1059,21 @@
 
     <div class="grid" id="desk-grid" data-panel="desk-grid">
       <div class="card" data-panel="tenday"><h2>10-day</h2><div id="tenday"></div></div>
-      <div class="card" data-panel="alerts"><h2>Alert center</h2><div id="alerts" class="muted">--</div></div>
+      <details class="card" data-panel="alerts"><summary><h2>Alert center</h2></summary><div id="alerts" class="muted">--</div></details>
       <div class="card" data-panel="story" style="grid-column: span 2">
         <h2>Weather story · 24h</h2>
         <div id="story" class="muted">--</div>
         <div id="nowcast" style="margin-top:8px;color:var(--accent)"></div>
       </div>
 
-      <div class="card" data-panel="agree">
-        <h2>Model agreement<span id="trust" class="muted" style="float:right;font-size:12px"></span></h2>
+      <details class="card" data-panel="agree">
+        <summary><h2>Model agreement</h2><span id="trust" class="muted" style="float:right;font-size:12px"></span></summary>
         <div id="why" style="margin-bottom:6px"></div>
         <div id="agree-verdict" style="margin-bottom:6px"></div>
         <div id="agree-rows" class="kv-rows"></div>
         <div id="timing" class="muted" style="margin-top:8px;font-size:13px"></div>
         <div id="edge" class="muted" style="margin-top:4px;font-size:13px"></div>
-      </div>
+      </details>
 
       <!-- The three seasonal cards. Each one is display:none until its own data says otherwise
            — see outlook.js. -->
@@ -886,8 +1092,8 @@
         <div id="tropical-list" class="kv-rows"></div>
       </div>
 
-      <div class="card" data-panel="changes"><h2>Forecast changes</h2><div id="changes" class="muted">--</div></div>
-      <div class="card" data-panel="verify"><h2>Forecast accuracy</h2><div id="verify" class="muted">--</div></div>
+      <details class="card" data-panel="changes"><summary><h2>Forecast changes</h2></summary><div id="changes" class="muted">--</div></details>
+      <details class="card" data-panel="verify"><summary><h2>Forecast accuracy</h2></summary><div id="verify" class="muted">--</div></details>
 
       <div class="card" data-panel="sky"><h2>Sun &amp; moon</h2><div id="sky" class="kv-rows"></div></div>
       <div class="card" data-panel="solar"><h2>Sun strength</h2><div id="solar" class="kv-rows"></div></div>
@@ -902,16 +1108,16 @@
         <div id="aqi-detail" class="muted" style="font-size:12px"></div>
       </div>
 
-      <div class="card" data-panel="nearby">
-        <h2>Nearby sensors</h2>
+      <details class="card" data-panel="nearby">
+        <summary><h2>Nearby sensors</h2></summary>
         <div id="nearby-ltg" class="muted" style="font-size:13px"></div>
         <div id="nearby-table"></div>
-      </div>
+      </details>
     </div>
     </div>
   </section>
 
-  <!-- ponytail: Forecast Lab is the existing weathermap app in an iframe (radar loop, satellite,
+  <!-- ponytail: Radar is the existing weathermap app in an iframe (radar loop, satellite,
        lightning, SPC, alerts already work there). Inline it into map.js only if the two need shared state. -->
   <section class="page" id="timeline" aria-labelledby="timeline-title">
     <h2 id="timeline-title">Weather timeline</h2>
@@ -926,9 +1132,26 @@
     </div>
     <div id="timeline-list" aria-live="polite"></div>
   </section>
-  <section class="page" id="lab" style="padding:0"><iframe id="lab-frame" title="Forecast Lab"></iframe></section>
+  <section class="page" id="lab" style="padding:0"><iframe id="lab-frame" title="Radar"></iframe></section>
   <section class="page" id="signals">
     <div class="grid" id="signals-grid">
+      <div class="signals-intro"><h2>Local now</h2><span>Street-level changes from your station and nearby sensors</span></div>
+      <div class="signal-overview">
+        <div class="signal-card live"><small>Live feed</small><strong id="signal-feed">Waiting</strong><span id="signal-feed-sub">Connecting to observations</span></div>
+        <div class="signal-card"><small>Wind now</small><strong id="signal-wind">—</strong><span id="signal-wind-sub">Waiting for direction</span></div>
+        <div class="signal-card"><small>Atmosphere trend</small><strong id="signal-trend">Steady</strong><span id="signal-trend-sub">Temperature and pressure</span></div>
+        <div class="signal-card"><small>Storm proximity</small><strong id="signal-storm">Clear nearby</strong><span id="signal-storm-sub">No recent lightning</span></div>
+      </div>
+      <div class="local-decisions">
+        <section class="local-panel"><h3>Next 6 hours</h3><p>Your station now, blended with the short-range forecast</p><div class="signal-hours" id="signal-hours"></div></section>
+        <section class="local-panel"><h3>Best outdoor window</h3><p>Balances heat, rain, and wind</p><div id="outdoor-window">Checking…</div><div id="outdoor-reason"></div></section>
+        <section class="local-panel"><h3>Quick alerts</h3><p>Choose which local changes should notify you</p><div class="signal-watch-list">
+          <button class="signal-watch" data-signal-watch="precip">Rain begins</button>
+          <button class="signal-watch" data-signal-watch="lightning">Lightning nearby</button>
+          <button class="signal-watch" data-signal-watch="wind">Strong gusts</button>
+        </div></section>
+      </div>
+      <div class="signals-raw">Sensors, neighbors &amp; recent alerts</div>
       <div class="card" data-panel="sig-live-wind-websocket">
         <h2>Live wind · websocket</h2>
         <div class="live-wind-wrap">
@@ -1103,6 +1326,11 @@
     </select>
     <label>Density</label>
     <select id="set-density"><option value="normal">Normal</option><option value="compact">Compact</option></select>
+    <label>Hero summary</label>
+    <select id="set-hero-summary">
+      <option value="conditions">Current conditions + future forecast</option>
+      <option value="range">Temperature range + trends</option>
+    </select>
     <label><input id="set-big-numbers" type="checkbox"> Oversized readings</label>
 
     <h2 style="font-size:13px;margin-top:18px">Kiosk</h2>
@@ -1145,7 +1373,7 @@
     <label>PWSWeather station ID</label><input id="set-pws-id">
     <label>PWSWeather API key</label><input id="set-pws-key" type="password">
     <p class="muted" style="font-size:12px">Re-uploads whatever your station reports here, once a
-      minute. Consoles hold one upload address, so pointing yours at WeatherDesk takes it off
+      minute. Consoles hold one upload address, so pointing yours at StormDesk takes it off
       these networks — this puts it back.</p>
 
     <label style="margin-top:14px">Keep history for</label>
@@ -1221,7 +1449,7 @@
     <h2 style="font-size:13px;margin-top:18px">Tabs</h2>
     <div id="tab-toggles">
       <label><input type="checkbox" data-tab="timeline"> Timeline</label>
-      <label><input type="checkbox" data-tab="lab"> Forecast Lab</label>
+      <label><input type="checkbox" data-tab="lab"> Radar</label>
       <label><input type="checkbox" data-tab="signals"> Local Signals</label>
       <label><input type="checkbox" data-tab="data"> Data</label>
     </div>
@@ -1373,7 +1601,7 @@
       <div class="muted" style="font-size:12px">The version is beside <b>Check for updates</b>
         above, which downloads and installs the latest release. Older builds that predate the
         updater have to be reinstalled once from
-        <a href="https://github.com/d4vid87/weatherdesk/releases">the releases page</a>; settings
+        <a href="https://github.com/d4vid87/stormdesk/releases">the releases page</a>; settings
         and history survive.</div>
     </details>
     <details><summary>I closed a panel and can't get it back</summary>
@@ -1391,7 +1619,7 @@
         version with no settings drawer, which is the one to leave on a wall tablet.</div>
     </details>
     <details><summary>Docker / Raspberry Pi</summary>
-      <div class="muted" style="font-size:12px"><code>ghcr.io/d4vid87/weatherdesk:latest</code>,
+      <div class="muted" style="font-size:12px"><code>ghcr.io/d4vid87/stormdesk:latest</code>,
         run with <code>--network host</code> and a volume on <code>/data</code>. There is a
         compose file in the repo. Headless: no window, same LAN dashboard.</div>
     </details>
@@ -1403,7 +1631,7 @@
     </details>
     <details><summary>Something is wrong — where do I report it?</summary>
       <div class="muted" style="font-size:12px">
-        <a href="https://github.com/d4vid87/weatherdesk/issues">github.com/d4vid87/weatherdesk/issues</a>.
+        <a href="https://github.com/d4vid87/stormdesk/issues">github.com/d4vid87/stormdesk/issues</a>.
         For anything about a station not reporting, a screenshot of <b>Station reporting</b> above
         answers most of the questions first.</div>
     </details>

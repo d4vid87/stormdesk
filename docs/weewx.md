@@ -1,7 +1,7 @@
-# Feeding WeatherDesk from WeeWX
+# Feeding StormDesk from WeeWX
 
-WeeWX already speaks a protocol WeatherDesk already listens for: the Weather Underground
-uploader. Point it at WeatherDesk instead of wunderground.com and every archive interval lands
+WeeWX already speaks a protocol StormDesk already listens for: the Weather Underground
+uploader. Point it at StormDesk instead of wunderground.com and every archive interval lands
 in the same archive as any other station brand — no driver, no extension, no code.
 
 ## weewx.conf
@@ -11,23 +11,23 @@ In `[StdRESTful]`:
 ```ini
 [[Wunderground]]
     enable = true
-    station = anything          # becomes the ID= field; WeatherDesk ignores it unless an
+    station = anything          # becomes the ID= field; StormDesk ignores it unless an
                                 # ingest key is set (below)
     password = anything
-    server_url = http://<weatherdesk-host>:8088/updateweatherstation.php
+    server_url = http://<stormdesk-host>:8088/updateweatherstation.php
     rapidfire = false
 ```
 
 Restart WeeWX (`sudo systemctl restart weewx`). Within one archive interval a reading appears —
-verify with `weatherdesk --check` on the host, or open the dashboard and watch the age chip.
+verify with `stormdesk --check` on the host, or open the dashboard and watch the age chip.
 
-In WeatherDesk's Settings, set **Station brand** to *Weather Underground protocol* so the
+In StormDesk's Settings, set **Station brand** to *Weather Underground protocol* so the
 dashboard knows where its readings come from.
 
 ## With an ingest key
 
-On a network you don't fully trust, set an ingest key in WeatherDesk's Settings and use it as
-the WeeWX `password`; WeatherDesk checks the `PASSWORD=` field on the WU path. Readings without
+On a network you don't fully trust, set an ingest key in StormDesk's Settings and use it as
+the WeeWX `password`; StormDesk checks the `PASSWORD=` field on the WU path. Readings without
 it are refused.
 
 ## What maps

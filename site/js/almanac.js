@@ -59,7 +59,7 @@ export async function refreshAlmanac() {
   } catch {
     // Browser and Android installs have no log server; say which app has the archive rather
     // than leaving an empty card.
-    note('Records come from the desktop app’s observation log — open WeatherDesk on the machine with the hub.');
+    note('Records come from the desktop app’s observation log — open StormDesk on the machine with the hub.');
     return;
   }
   if (!days.length) {

@@ -42,6 +42,29 @@ const ICON = {
 };
 export const icon = (k) => wx(k, 20, true) || ICON[k] || '·';
 
+export function renderHeroAlerts(feats) {
+  const box = $('hero-alerts');
+  if (!box) return;
+  box.replaceChildren();
+  box.hidden = !feats.length;
+  if (!feats.length) return;
+  const rank = { Extreme: 3, Severe: 2, Moderate: 1, Minor: 0 };
+  const sorted = feats.slice().sort((a, b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
+  const text = sorted.map((f) => {
+    const a = f.properties || {};
+    const about = a.headline || (a.description || '').split('\n').find(Boolean) || a.areaDesc || '';
+    return `${a.event || 'Weather alert'} — ${about}`;
+  }).join('  •  ');
+  const track = document.createElement('div');
+  track.className = 'hero-alert-track';
+  const copy = document.createElement('span');
+  copy.textContent = text;
+  const repeat = copy.cloneNode(true);
+  repeat.setAttribute('aria-hidden', 'true');
+  track.append(copy, repeat);
+  box.append(track);
+}
+
 export async function refreshDesk() {
   // Not `configured()`: an Ecowitt or a Davis has no Tempest forecast, and `api.betterForecast`
   // hands those installs the open-meteo payload in the same shape — which needs a location and
@@ -89,7 +112,7 @@ window.addEventListener('wd:ws-obs', (e) => {
 
 function renderCurrent(c) {
   if (!c) return;
-  document.title = `${num(c.air_temperature)}${U.temp()} · WeatherDesk`;
+  document.title = `${num(c.air_temperature)}${U.temp()} · StormDesk`;
   if (c.wind_gust >= settings().windGustAlert) {
     notify({
       id: `gust-${Math.floor(c.time / 1800)}`, category: 'wind',
@@ -113,6 +136,7 @@ export async function refreshAlerts() {
   if (coords().lat == null) return;
   const j = await api.alerts();
   const feats = j.features || [];
+  renderHeroAlerts(feats);
   $('alerts').innerHTML = feats.length
     ? feats.map((f) => {
         const p = f.properties;
@@ -178,4 +202,10 @@ export function initDesk() {
   every('desk-obs', settings().refreshSec, refreshObs);
   every('desk-alerts', 300, refreshAlerts);
   every('desk-aqi', 1800, refreshAqi);
+}
+
+if (location.search.includes('selftest')) {
+  renderHeroAlerts([{ properties: { event: 'Test Advisory', severity: 'Moderate', headline: 'Test headline' } }]);
+  console.assert($('hero-alerts')?.textContent.includes('Test Advisory'), 'desk: official alerts render in the hero');
+  renderHeroAlerts([]);
 }

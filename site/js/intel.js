@@ -1,7 +1,7 @@
 // Phase 2 — forecast intelligence: model agreement, timing anchor, live edge,
 // nowcast, weather story, forecast changes, verification.
 import * as api from './api.js';
-import { settings, U, num, timeStr, every, notify, say } from './app.js';
+import { settings, U, num, timeStr, deg2compass, every, notify, say } from './app.js';
 import { snapshot, changes, recordForecast, scoreForecast, accuracy } from './track.js';
 import { forecast as deskForecast, severeAlerts } from './desk.js';
 
@@ -168,6 +168,17 @@ export function renderStory() {
   if (maxGust >= settings().windGustAlert) out.push('Wind advisory-level gusts in the period.');
   storyLines = out;
   $('story').innerHTML = out.map((s) => `<div>${s}</div>`).join('');
+  const summary = $('hero-summary');
+  if (summary) {
+    const c = fc.current_conditions;
+    const tomorrow = fc.forecast.daily?.[1];
+    summary.textContent = settings().heroSummary === 'range' || !tomorrow
+      ? out.slice(0, 2).join(' ')
+      : `Current: ${c.conditions || 'Conditions unavailable'}, ${num(c.air_temperature)}°, feels like ${num(c.feels_like)}°; `
+        + `wind ${num(c.wind_avg)} ${U.wind()} ${deg2compass(c.wind_direction)}. `
+        + `Tomorrow: ${tomorrow.conditions || 'forecast unavailable'}, ${num(tomorrow.air_temp_high)}° / ${num(tomorrow.air_temp_low)}°, `
+        + `${num(tomorrow.precip_probability || 0)}% rain.`;
+  }
 }
 
 // --- spoken briefing ---
@@ -267,6 +278,7 @@ if (location.search.includes('selftest')) {
 // Module level, not inside initIntel(): the settings wizard calls the init functions again
 // after a save, and a second listener means a second render per event.
 window.addEventListener('wd:forecast', () => { renderStory(); renderTrack(); renderEdge(); });
+window.addEventListener('wd:settings', renderStory);
 window.addEventListener('wd:obs', (e) => scoreForecast(e.detail));
 
 export function initIntel() {

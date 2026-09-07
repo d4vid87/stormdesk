@@ -1,7 +1,7 @@
-// Desk layout matching myWeatherDesk: sky hero, signal ticker, trend strip,
+// Desk layout matching myStormDesk: sky hero, signal ticker, trend strip,
 // 48h combined chart, day cards, dial gauges. Driven by the wd:forecast event.
 import * as api from './api.js';
-import { settings, coords, U, num, timeStr, deg2compass, every, ecoOn, msToWind, windToMs, stormMode } from './app.js';
+import { settings, coords, U, num, timeStr, deg2compass, every, msToWind, windToMs, stormMode } from './app.js';
 import { forecast as deskForecast, severeAlerts } from './desk.js';
 import * as icon from './icons.js';
 import { initLayout } from './layout.js';
@@ -227,7 +227,7 @@ function render48(fc) {
   const bandPath = spread.length > 2
     ? `<path d="${spread.map((p, k) => `${k ? 'L' : 'M'}${x(p.i).toFixed(1)},${clamp(p.b.hi).toFixed(1)}`).join('')}`
       + `${spread.slice().reverse().map((p) => `L${x(p.i).toFixed(1)},${clamp(p.b.lo).toFixed(1)}`).join('')}Z"`
-      + ' fill="#ff9d4f" opacity="0.18"/>'
+      + ' fill="#39ff88" opacity="0.14"/>'
     : '';
 
   // A missing hour breaks the line rather than dragging it to NaN and blanking the whole chart.
@@ -241,14 +241,14 @@ function render48(fc) {
   // a dot and a reading every 6th hour, so the line has anchors instead of floating
   const marks = hrs.map((h, i) => (i % 6 === 0 && h.air_temperature != null
     ? `<circle cx="${x(i).toFixed(1)}" cy="${y(h.air_temperature).toFixed(1)}" r="3.5" fill="#0d141c"
-         stroke="#ff9d4f" stroke-width="2"/>`
+         stroke="#39ff88" stroke-width="2"/>`
       + `<text x="${x(i).toFixed(1)}" y="${(y(h.air_temperature) + 16).toFixed(1)}" class="c-lbl">${num(h.air_temperature)}°</text>`
     : '')).join('');
   // `pathLength="1"` makes the dash length unit-free, so the draw-on is one CSS transition
   // whatever shape the line is.
   put48('c48-temp', `<svg viewBox="0 0 ${W} ${H}">
     ${bandPath}
-    <path class="draw" pathLength="1" d="${path}" fill="none" stroke="#ff9d4f" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
+    <path class="draw" pathLength="1" d="${path}" fill="none" stroke="#39ff88" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
     ${marks}</svg>`);
 
   // dots, not bars: diameter carries the chance and a 0% hour still leaves a visible baseline
@@ -289,7 +289,7 @@ const arcDomain = () => (settings().units === 'metric' ? [-20, 45] : [0, 110]);
 function tempArc() {
   return `<svg class="daysvg" viewBox="0 0 110 110">
     <circle cx="55" cy="55" r="${ARC_R}" fill="none" stroke="#22303f" stroke-width="5"/>
-    <circle data-arc cx="55" cy="55" r="${ARC_R}" fill="none" stroke="#4fb8ff" stroke-width="5" stroke-linecap="round"
+    <circle data-arc cx="55" cy="55" r="${ARC_R}" fill="none" stroke="#39ff88" stroke-width="5" stroke-linecap="round"
       stroke-dasharray="0 ${ARC_C.toFixed(1)}" stroke-dashoffset="0"
       transform="rotate(-90 55 55)"/></svg>`;
 }
@@ -364,7 +364,7 @@ function setWx(box, key, size) {
 // single biggest repaint on the page.
 const FACE = {
   compass: (s) => icon.compass(s.deg, s.frac, s.color),
-  ring: (s) => icon.ring(s.frac, s.color || '#4fb8ff'),
+  ring: (s) => icon.ring(s.frac, s.color || '#39ff88'),
   rain: (s) => icon.rainRing(s.frac, s.on),
   dial: (s) => icon.dial(s.frac),
   droplet: (s) => icon.droplet(s.frac),
@@ -432,14 +432,14 @@ function renderGauges(fc) {
 
   const rain = c.precip_accum_local_day || 0;
   gauge('g-rain', {
-    face: 'rain', frac: rain / (metric ? 25 : 1), on: rain > 0, color: rain > 0 ? '#4fb8ff' : '#33414f',
+    face: 'rain', frac: rain / (metric ? 25 : 1), on: rain > 0, color: rain > 0 ? '#39ff88' : '#174c2d',
     value: rain > 0 ? rain : null, text: 'Dry', fmt: (x) => num(x, 2),
     sub: `${num(rain, 2)} ${U.precip()} today`,
   });
 
   const rhT = trend(I.rh, 3);
   gauge('g-hum', {
-    face: 'ring', frac: c.relative_humidity / 100, color: '#4fb8ff',
+    face: 'ring', frac: c.relative_humidity / 100, color: '#39ff88',
     value: c.relative_humidity, fmt: (x) => `${num(x)}%`,
     sub: rhT == null ? '' : `${rhT >= 0 ? '↑' : '↓'} ${num(Math.abs(rhT))} pts / 3h`,
   });
@@ -616,13 +616,13 @@ function renderLocal(o) {
 
   const rain = r(o[I.dayRain]) || 0;
   gauge('g-rain', {
-    face: 'rain', frac: rain / (metric ? 25 : 1), on: rain > 0, color: rain > 0 ? '#4fb8ff' : '#33414f',
+    face: 'rain', frac: rain / (metric ? 25 : 1), on: rain > 0, color: rain > 0 ? '#39ff88' : '#174c2d',
     value: rain > 0 ? rain : null, text: 'Dry', fmt: (x) => num(x, 2),
     sub: `${num(rain, 2)} ${U.precip()} today`,
   });
 
   gauge('g-hum', {
-    face: 'ring', frac: rh / 100, color: '#4fb8ff',
+    face: 'ring', frac: rh / 100, color: '#39ff88',
     value: rh, fmt: (x) => `${num(x)}%`, sub: 'relative humidity',
   });
 
@@ -669,25 +669,26 @@ async function renderHealth() {
 // Re-registered on every settings change: `every` keys by name, so the eco pace and the seconds
 // format both follow the toggle without a reload.
 export function registerClock() {
-  const eco = ecoOn();
-  every('clock', eco ? 30 : 1, () => {
+  every('clock', 1, () => {
     const d = new Date();
     const h12 = settings().clock24 === 'auto' || !settings().clock24 ? {} : { hour12: settings().clock24 === '12' };
-    $('clock-time').textContent = d.toLocaleTimeString([], eco
-      ? { hour: 'numeric', minute: '2-digit', ...h12 }
-      : { hour: 'numeric', minute: '2-digit', second: '2-digit', ...h12 });
+    $('clock-time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit', ...h12 });
     $('clock-date').textContent = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   });
 }
 
 export function initPro() {
+  const dayToggle = $('daycards-toggle');
+  if (dayToggle) dayToggle.onclick = () => {
+    const all = document.body.classList.toggle('days-all');
+    dayToggle.textContent = all ? 'Show 4 days' : 'Show all 6 days';
+  };
   every('pro-health', 300, renderHealth);
   every('pro-history', 300, async () => { await loadHistory(); renderPro(); });
   every('pro-consensus', 900, async () => { await loadConsensus(); renderPro(); });
   every('pro-qpf', 1800, async () => { await loadQpf(); renderPro(); });
   every('pro-ensemble', 1800, loadEnsemble);
-  // A second hand is a repaint a second, forever — the single most expensive idle thing on the
-  // page. In eco the seconds go and so does 29 of every 30 repaints.
+  // The broadcast clock deliberately keeps seconds visible at every performance level.
   registerClock();
   // The eco toggle changes both the pace and the seconds format; re-register instead of reloading.
   window.addEventListener('wd:settings', registerClock);

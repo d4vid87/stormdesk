@@ -66,7 +66,7 @@ pub fn packet(
         .unwrap_or_else(|| "..".into());
     let press = pressure_mb.map(|p| format!("b{:05.0}", p * 10.0)).unwrap_or_default();
     format!(
-        "{id}>APRS,TCPIP*:@{:02}{:02}{:02}z{}/{}_{}/{}g{}t{}r{}p{}P{}h{}{}WeatherDesk",
+        "{id}>APRS,TCPIP*:@{:02}{:02}{:02}z{}/{}_{}/{}g{}t{}r{}p{}P{}h{}{}StormDesk",
         utc.0,
         utc.1,
         utc.2,
@@ -112,7 +112,7 @@ fn send(line: &str, id: &str) -> std::io::Result<()> {
     let mut sock = TcpStream::connect(SERVER)?;
     sock.set_write_timeout(Some(Duration::from_secs(10)))?;
     sock.set_read_timeout(Some(Duration::from_secs(10)))?;
-    writeln!(sock, "user {id} pass -1 vers WeatherDesk 3.0")?;
+    writeln!(sock, "user {id} pass -1 vers StormDesk 3.0")?;
     writeln!(sock, "{line}")?;
     sock.flush()
 }
@@ -141,8 +141,8 @@ pub fn start(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
             Some(rain_1h), Some(rain_24h), Some(rain_24h), v[4], v[5],
         );
         match send(&line, &id) {
-            Ok(()) => eprintln!("weatherdesk: reported to CWOP as {id}"),
-            Err(e) => eprintln!("weatherdesk: CWOP send failed ({})", e.kind()),
+            Ok(()) => eprintln!("stormdesk: reported to CWOP as {id}"),
+            Err(e) => eprintln!("stormdesk: CWOP send failed ({})", e.kind()),
         }
     });
 }
@@ -157,7 +157,7 @@ pub fn start(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
 /// The reading as WU protocol query parameters. Imperial, because the protocol is, and a missing
 /// reading is left out entirely rather than sent as a zero — a zero is a measurement.
 fn wu_params(dateutc: &str, v: &[Option<f64>], rain_1h: f64, rain_day: Option<f64>) -> String {
-    let mut q = format!("&dateutc={}&softwaretype=WeatherDesk&action=updateraw", dateutc.replace(' ', "%20"));
+    let mut q = format!("&dateutc={}&softwaretype=StormDesk&action=updateraw", dateutc.replace(' ', "%20"));
     let mut put = |k: &str, val: Option<f64>| {
         if let Some(x) = val {
             q.push_str(&format!("&{k}={x:.2}"));
@@ -206,8 +206,8 @@ pub fn start_relay(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
         // rides in the query string, which is how both of these protocols work.
         let post = |what: &str, url: String| match ureq::get(&url).timeout(Duration::from_secs(20)).call() {
             Ok(_) => {}
-            Err(ureq::Error::Status(code, _)) => eprintln!("weatherdesk: {what} upload refused ({code})"),
-            Err(ureq::Error::Transport(t)) => eprintln!("weatherdesk: {what} upload failed ({:?})", t.kind()),
+            Err(ureq::Error::Status(code, _)) => eprintln!("stormdesk: {what} upload refused ({code})"),
+            Err(ureq::Error::Transport(t)) => eprintln!("stormdesk: {what} upload failed ({:?})", t.kind()),
         };
         if wu {
             post("WU", format!(

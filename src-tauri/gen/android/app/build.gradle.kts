@@ -33,10 +33,10 @@ android {
             }
         }
     }
-    namespace = "io.github.davidmay87.weatherdesk"
+    namespace = "io.github.davidmay87.stormdesk"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        applicationId = "io.github.davidmay87.weatherdesk"
+        applicationId = "io.github.davidmay87.stormdesk"
         minSdk = 24
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()

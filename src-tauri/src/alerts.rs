@@ -227,7 +227,7 @@ fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) {
             .send_string(if body.is_empty() { title } else { body });
         if let Err(e) = r {
             // Never the error's Display: an ntfy URL is a credential in its own right.
-            eprintln!("weatherdesk: ntfy push failed ({})", err_kind(&e));
+            eprintln!("stormdesk: ntfy push failed ({})", err_kind(&e));
         }
     }
     let hook = get("webhookUrl");
@@ -237,7 +237,7 @@ fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) {
             .set("Content-Type", "application/json")
             .send_string(&webhook_body(&hook, title, body, category).to_string());
         if let Err(e) = r {
-            eprintln!("weatherdesk: webhook push failed ({})", err_kind(&e));
+            eprintln!("stormdesk: webhook push failed ({})", err_kind(&e));
         }
     }
     crate::mqtt::send(if category == "rule" { "rule" } else { "alert" }, title);
@@ -271,7 +271,7 @@ pub fn test_push(cfg: &std::path::Path) -> String {
     .into_iter()
     .flatten()
     .collect();
-    push(cfg, "info", "WeatherDesk test alert", "If this reached you, alerts work.");
+    push(cfg, "info", "StormDesk test alert", "If this reached you, alerts work.");
     serde_json::json!({
         "sent": !channels.is_empty(),
         "channels": channels,
@@ -296,12 +296,12 @@ fn nws(cfg: &std::path::Path) -> Option<Vec<serde_json::Value>> {
     let url = format!("https://api.weather.gov/alerts/active?point={lat:.4},{lon:.4}");
     let body = ureq::get(&url)
         .timeout(Duration::from_secs(20))
-        .set("User-Agent", concat!("WeatherDesk/", env!("CARGO_PKG_VERSION")))
+        .set("User-Agent", concat!("StormDesk/", env!("CARGO_PKG_VERSION")))
         .call();
     let body = match body {
         Ok(r) => r.into_string().ok()?,
         Err(e) => {
-            eprintln!("weatherdesk: NWS alert poll failed ({})", err_kind(&e));
+            eprintln!("stormdesk: NWS alert poll failed ({})", err_kind(&e));
             return None;
         }
     };

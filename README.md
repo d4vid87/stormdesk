@@ -1,6 +1,6 @@
-<p align="center"><img src="docs/logo.png" alt="WeatherDesk" width="420"></p>
+<p align="center"><img src="site/stormdesk-icon-512.png" alt="StormDesk icon" width="180"></p>
 
-# WeatherDesk
+# StormDesk
 
 A self-hosted weather dashboard for your own weather station, built for a wall tablet on the LAN.
 WeatherFlow Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse and any Weather
@@ -11,21 +11,15 @@ every call goes browser-direct to a free public API.
 Radar comes from [HookEcho](https://hookecho.io/) — my own NEXRAD viewer,
 embedded here and centered on the station.
 
-If WeatherDesk is useful to you, please [give the project a star](../../stargazers).
+If StormDesk is useful to you, please [give the project a star](../../stargazers).
 
-![A ten second walkthrough: pasting a Tempest token into the first-run wizard and picking a station,
-the Desk filling in with live temperature, seven day cards and dial gauges, an NWS warning polygon
-with its full text, the national radar mosaic, then HookEcho zoomed on a storm cell](docs/hero-3.0.5.gif)
+![StormDesk walkthrough showing the OLED Desk, event Timeline, Local Signals intelligence, and
+full-screen HookEcho radar](docs/stormdesk-hero.gif)
 
-![The full Desk: sky hero at 106° Clear, station-vs-model and temperature and pressure trend panels,
-a 48h forecast chart with rain dots and wind barbs, six day cards, dial gauges for wind, rain,
-humidity, pressure, dew point, UV, lightning and wet bulb, then the 10-day, alert center, 24h
-weather story and model agreement across GFS, ECMWF, ICON and GEM](docs/weatherdeskgauges.png)
+![The streamlined StormDesk: alert crawl, animated sky hero, immediate conditions, expert metrics,
+four-day forecast rail, and the beginning of the 48-hour chart](docs/stormdesk-dashboard.png)
 
-![The Desk on a wide screen: sky hero reading 106° Clear against a 93° normal, a row of Reality
-signals comparing the station with the models, and HookEcho filling the page with the national
-MRMS mosaic — every radar product listed down the left, 67 active alerts, LIVE playback along the
-bottom](docs/screenshot-national.png)
+![StormDesk Radar using HookEcho's Dark Streets map with live reflectivity, warnings, and playback](docs/stormdesk-radar.png)
 
 ## Sections
 
@@ -42,18 +36,18 @@ bottom](docs/screenshot-national.png)
   changes, sun times and official alerts into readable windows. Forecast events carry a
   plain-language confidence label; expand one for the contributing model values and source age.
   The three nearest events also appear on the Desk. Timeline events do not notify by themselves.
-- **Forecast Lab** — radar, embedded from [HookEcho](https://hookecho.io/).
+- **Radar** — full-screen NEXRAD radar, embedded from [HookEcho](https://hookecho.io/).
 
 The Desk radar loads itself, in HookEcho's embedded mode: no chrome, and one frame a minute until
 you touch it. That matters because a live radar loop repaints ten times a second, and the WebKit
 webview the desktop app uses on Linux and macOS redraws the whole Desk on every one of those
-frames — enough to saturate a CPU core. Touch the map and it animates normally; the Forecast Lab
+frames — enough to saturate a CPU core. Touch the map and it animates normally; the Radar
 tab is the full-chrome view.
 
 It is also the heaviest thing on the page — megabytes of wasm, sharing one WebKit process with the
 whole Desk on Linux — so it never loads during startup or while Settings is open, and only once the
 panel is actually on screen. On a fresh install it starts switched off; Settings → **Radar panel on
-the Desk** turns it on. On a slow machine, leave it off and use the Forecast Lab tab instead.
+the Desk** turns it on. On a slow machine, leave it off and use the Radar tab instead.
 
 Settings → **Radar site** picks which radar, out of all 201 WSR-88D and TDWR sites, nearest first;
 leave it on *Nearest to my station* and it follows the station. Wherever you leave the map — site,
@@ -126,7 +120,7 @@ Any alert can leave the machine:
 - **Webhook** — a POST of `{title, body, category, t}` to any URL. Discord and Telegram webhook
   URLs are recognised from the URL itself and sent in the shape those two accept, so pasting one
   in is the whole setup.
-- **MQTT** — every alert is also published to `weatherdesk/<station>/alert` when a broker is
+- **MQTT** — every alert is also published to `stormdesk/<station>/alert` when a broker is
   configured.
 
 None of these ever carry your Tempest token, station ID or broker password — title, body and
@@ -201,7 +195,7 @@ levels and three screen sizes, fails on any in-page self-check, and leaves a scr
 
 ## Other weather stations
 
-WeatherDesk was written around a Tempest, but the Tempest tuple is only the internal format — the
+StormDesk was written around a Tempest, but the Tempest tuple is only the internal format — the
 desktop app can take a report from most other consumer stations, convert it once on the way in and
 drive the whole dashboard from it. Everything downstream (archive, charts, CSV export, MQTT, alert
 rules, CWOP) works the same, and the forecast comes from open-meteo instead of WeatherFlow.
@@ -272,7 +266,7 @@ Notes that apply to all of them:
 
 ## Smart home
 
-WeatherDesk publishes your station to Home Assistant over MQTT, evaluates your alert rules
+StormDesk publishes your station to Home Assistant over MQTT, evaluates your alert rules
 server-side, and reads Home Assistant entities back onto the dashboard. **Full guide:
 [docs/homeassistant.md](docs/homeassistant.md).** The short version:
 
@@ -282,9 +276,9 @@ acknowledge a message, because a broker that rejects your password accepts the T
 first. Home Assistant then discovers one device with fifteen sensors under it, plus `feels_like`,
 `pressure_trend` as a word, `alert` and `rule`. Nothing to add to `configuration.yaml`.
 
-Readings are retained on `weatherdesk/<station id>/…`, **in SI units** (°C, m/s, hPa, mm) whatever
+Readings are retained on `stormdesk/<station id>/…`, **in SI units** (°C, m/s, hPa, mm) whatever
 the dashboard displays — a units switch here must never rewrite months of Home Assistant history.
-`weatherdesk/<station id>/status` is `online`/`offline`, the second written by the broker's
+`stormdesk/<station id>/status` is `online`/`offline`, the second written by the broker's
 last will.
 
 The server does this, not the page, so it keeps working with every window closed. Leave the
@@ -310,11 +304,11 @@ one per line), for sensors that never went near Home Assistant, like a greenhous
 straight to mosquitto.
 
 **Blueprints.** Three importable automations in
-[`blueprints/automation/weatherdesk`](blueprints/automation/weatherdesk): a severe alert to a
+[`blueprints/automation/stormdesk`](blueprints/automation/stormdesk): a severe alert to a
 critical push, a gust threshold to any action, and skip-irrigation-after-rain.
 
 **HomeKit, Alexa, Google.** Through Home Assistant, which already bridges all three — there is no
-WeatherDesk-specific code for them and there shouldn't be. Add the MQTT integration (the device
+StormDesk-specific code for them and there shouldn't be. Add the MQTT integration (the device
 above appears), then Settings → Devices & Services → Add Integration → **HomeKit Bridge** and pick
 it; Alexa and Google go through Home Assistant Cloud or their own manual setups.
 
@@ -333,13 +327,13 @@ tab don't share settings.
 
 ## Download & run
 
-Grab the installer for your OS from [Releases](https://github.com/d4vid87/weatherdesk/releases) and
+Grab the installer for your OS from [Releases](https://github.com/d4vid87/stormdesk/releases) and
 double-click it. What changed in each version is in [CHANGELOG.md](CHANGELOG.md). The app opens in its own window *and* serves the same dashboard to the rest of your
 network on port 8088 — the wall tablet just opens the URL shown in the window title. Nothing else to
 install; leave the app running. On Linux, the `.AppImage` runs on any distro and is the build
 the in-app updater can update in place; the `.deb` updates through `apt` instead.
 
-Already running [WeeWX](https://weewx.com)? It can feed WeatherDesk with a five-line config
+Already running [WeeWX](https://weewx.com)? It can feed StormDesk with a five-line config
 stanza — see [docs/weewx.md](docs/weewx.md).
 
 **One config for the whole house.** The desktop app also keeps your settings and dashboard layout
@@ -352,7 +346,7 @@ folder statically has no config server, so those browsers keep their own setting
 The app also listens for your hub's UDP broadcasts on port 50222 and re-serves them to the tablet,
 so live wind and lightning keep flowing with the internet unplugged. A browser can't hold a UDP
 socket, so the no-install option below uses the cloud websocket only. If another Tempest app owns
-port 50222 first, WeatherDesk skips it and falls back to the websocket by itself.
+port 50222 first, StormDesk skips it and falls back to the websocket by itself.
 
 **UDP-only mode — no token at all.** On the desktop app, with your hub on the same network, leave
 the token and station ID empty and the hub's own broadcasts still drive the hero, the wind, rain,
@@ -366,14 +360,14 @@ forecasts, the 10-day list, history charts, model agreement, alerts. The pressur
   Defender occasionally quarantines a new unsigned installer outright — a false positive, reported
   to Microsoft for each release. Windows Security → Protection history → the item → **Restore**,
   then **Allow on device**. Every release ships a `SHA256SUMS.txt` to check the download against
-  first: `certutil -hashfile WeatherDesk_*.msi SHA256`.
-- **macOS** — open the `.dmg`, drag WeatherDesk to Applications. Unsigned, so on first launch macOS
+  first: `certutil -hashfile StormDesk_*.msi SHA256`.
+- **macOS** — open the `.dmg`, drag StormDesk to Applications. Unsigned, so on first launch macOS
   refuses it: **System Settings → Privacy & Security → Open Anyway**, or in a terminal
-  `xattr -dr com.apple.quarantine /Applications/WeatherDesk.app`.
-- **Linux** — `sudo apt install ./WeatherDesk_*_amd64.deb` (Debian, Ubuntu, Mint, Pop!_OS). On other
+  `xattr -dr com.apple.quarantine /Applications/StormDesk.app`.
+- **Linux** — `sudo apt install ./StormDesk_*_amd64.deb` (Debian, Ubuntu, Mint, Pop!_OS). On other
   distributions install `webkit2gtk-4.1` and build from source, below — there is no AppImage: it has
   to carry its own WebKitGTK, and that copy crashes on hosts newer than the machine that built it.
-- **Raspberry Pi** — `sudo apt install ./WeatherDesk_*_arm64.deb` on 64-bit Raspberry Pi OS
+- **Raspberry Pi** — `sudo apt install ./StormDesk_*_arm64.deb` on 64-bit Raspberry Pi OS
   (Bookworm or newer, Pi 4 / Pi 5). `uname -m` must say `aarch64`; the 32-bit image is not built.
 
 To start it automatically: macOS System Settings → General → Login Items; Windows put a shortcut in
@@ -382,8 +376,8 @@ To start it automatically: macOS System Settings → General → Login Items; Wi
 ```ini
 [Desktop Entry]
 Type=Application
-Name=WeatherDesk
-Exec=weatherdesk
+Name=StormDesk
+Exec=stormdesk
 ```
 
 A Pi with a screen attached is the whole appliance: it shows the dashboard itself *and* serves it to
@@ -393,8 +387,8 @@ the server-only option below, which gives up the hub's UDP feed but nothing else
 ## No-install / development option
 
 ```sh
-git clone https://github.com/d4vid87/weatherdesk
-cd weatherdesk
+git clone https://github.com/d4vid87/stormdesk
+cd stormdesk
 python3 -m http.server 8088 --bind 0.0.0.0 --directory site
 ```
 
@@ -407,15 +401,15 @@ log — lives in `localStorage`; there is nothing to configure on the server.
 ### Headless / home lab
 
 No screen, no desktop session — just serve `site/` and open it from anywhere. Drop this in
-`~/.config/systemd/user/weatherdesk.service`:
+`~/.config/systemd/user/stormdesk.service`:
 
 ```ini
 [Unit]
-Description=WeatherDesk (static site)
+Description=StormDesk (static site)
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/python3 -m http.server 8088 --bind 0.0.0.0 --directory %h/weatherdesk/site
+ExecStart=/usr/bin/python3 -m http.server 8088 --bind 0.0.0.0 --directory %h/stormdesk/site
 Restart=on-failure
 
 [Install]
@@ -425,7 +419,7 @@ WantedBy=default.target
 ```sh
 loginctl enable-linger "$USER"          # keeps it running with nobody logged in
 systemctl --user daemon-reload
-systemctl --user enable --now weatherdesk
+systemctl --user enable --now stormdesk
 ```
 
 There is no hub UDP feed in this mode — a browser can't hold a UDP socket, so every client rides
@@ -435,7 +429,7 @@ build that listens on 50222.
 The desktop app serves from its own origin, so settings saved in a browser install (token included)
 don't carry over — paste the token once more in the app.
 
-**Android / Fire tablets.** `WeatherDesk.apk` is on the same Releases page. Sideload it — the
+**Android / Fire tablets.** `StormDesk.apk` is on the same Releases page. Sideload it — the
 tablet will ask you to allow installs from whatever app you downloaded it with (on Fire OS:
 Settings → Security & Privacy → Apps from Unknown Sources). One APK covers 64-bit and 32-bit
 devices, Fire OS 6 and newer. The phone build talks to WeatherFlow's websocket only: it neither
@@ -443,7 +437,7 @@ listens for the hub's LAN broadcasts nor serves the dashboard to other devices, 
 desktop jobs. Paste the token once per device.
 
 **The observation archive.** The desktop app keeps every observation the hub broadcasts in a
-SQLite database at `<app data>/weatherdesk.db`. On first run of v3 it imports the v2 JSONL log and
+SQLite database at `<app data>/stormdesk.db`. On first run of v3 it imports the v2 JSONL log and
 then leaves those files alone forever as a backup.
 
 About thirty seconds after start it also **backfills from WeatherFlow**: it walks backwards from
@@ -456,12 +450,12 @@ the app halfway and it picks up from where it stopped.
 or 1, 2, 5 or 10 years. Anything older is deleted an hour after you save, a week at a time so an
 incoming reading never has to wait for it. There is no undo and most stations have no cloud to
 restore from, so it asks once before shortening the window. The file itself does not shrink — the
-freed space is reused — and `sqlite3 weatherdesk.db VACUUM` with the app stopped will reclaim it.
+freed space is reused — and `sqlite3 stormdesk.db VACUUM` with the app stopped will reclaim it.
 
 `Settings → History CSV` hands the whole archive over as a spreadsheet. `Complete backup` downloads
 one `.wdbak` SQLite file containing the archive, settings, layouts, rules and metadata. `Restore
 backup` inspects it first, shows its station, row count and date range, then applies it only after
-confirmation. WeatherDesk keeps the previous state as `pre-restore.wdbak`; invalid or newer
+confirmation. StormDesk keeps the previous state as `pre-restore.wdbak`; invalid or newer
 formats do not touch the running data.
 
 **CWOP.** Put a callsign in `Settings → CWOP station ID` and the app reports your readings to the
@@ -480,7 +474,7 @@ Flatpak installs update through Flatpak, and Android stays a sideload. Builds ol
 updater have to be reinstalled once from the releases page; settings and history survive.
 
 **Re-uploading to Weather Underground or PWSWeather.** Most consoles hold one upload address, so
-pointing yours at WeatherDesk takes it off whichever network it was on. Put the station ID and key
+pointing yours at StormDesk takes it off whichever network it was on. Put the station ID and key
 for either service under `Settings → This computer` and the app re-sends each reading once a
 minute.
 
@@ -492,8 +486,8 @@ and puts it back. `Reset panel layout` restores everything at once.
 The same binary runs with no window and no Tauri in it:
 
 ```sh
-docker run -d --name weatherdesk --restart unless-stopped \
-  --network host -v "$PWD/data:/data" ghcr.io/d4vid87/weatherdesk:latest
+docker run -d --name stormdesk --restart unless-stopped \
+  --network host -v "$PWD/data:/data" ghcr.io/d4vid87/stormdesk:latest
 ```
 
 or the `docker-compose.yml` in this repo. Then open `http://<host>:8088`.
@@ -514,18 +508,18 @@ complain about that — it starts, serves the dashboard and stores nothing. Once
 sudo chown -R 1000:1000 ./data
 ```
 
-Everything lands in `/data`: `config.json` and `weatherdesk.db`. The image is built with
+Everything lands in `/data`: `config.json` and `stormdesk.db`. The image is built with
 `--no-default-features`, so there is no GTK, no WebKit and no Tauri anywhere in it.
 
 A local build of the same thing: `cargo build --release --no-default-features` in `src-tauri/`,
-then run `weatherdesk --headless`.
+then run `stormdesk --headless`.
 
 ### Flatpak and AUR
 
-`flatpak/io.github.davidmay87.weatherdesk.yml` builds the Flathub package (regenerate
+`flatpak/io.github.davidmay87.stormdesk.yml` builds the Flathub package (regenerate
 `cargo-sources.json` with flatpak-builder-tools whenever `Cargo.lock` changes), and `PKGBUILD`
 builds the Arch package from a release tarball. A Flatpak install keeps its data under
-`~/.var/app/io.github.davidmay87.weatherdesk/` — copy `weatherdesk.db` across if you are moving
+`~/.var/app/io.github.davidmay87.stormdesk/` — copy `stormdesk.db` across if you are moving
 from a .deb.
 
 Building the desktop app yourself: `cargo tauri build` in `src-tauri/` (Rust + the Tauri
@@ -606,14 +600,14 @@ it never contains credentials, webhook addresses or station coordinates.
 | A nearby station row shows an error | Only **public** stations can be read. Pick one from tempestwx.com/map. |
 
 On Windows, if the tablet can't load the LAN URL, it's the firewall prompt that was dismissed on
-first launch — allow WeatherDesk on private networks.
+first launch — allow StormDesk on private networks.
 
 **The window opens blank (Linux).** WebKitGTK's GPU paths do not survive every combination of
 driver and compositor — an Intel iGPU under the AppImage is the known-bad one. Start it once with
 the workarounds on:
 
 ```sh
-WD_RENDER=safe ./WeatherDesk_*.AppImage      # or: ./WeatherDesk_*.AppImage --render safe
+WD_RENDER=safe ./StormDesk_*.AppImage      # or: ./StormDesk_*.AppImage --render safe
 ```
 
 If that draws, make it permanent in `Settings → Window rendering → Safe`, which you can set from
@@ -621,8 +615,8 @@ any browser on the LAN (`http://<that machine>:8088`) — a blank window is stil
 The app prints one line at startup saying which mode it picked and what it set. The AUR build,
 which links the system WebKitGTK, generally does not need any of this.
 
-If the webview never becomes ready, WeatherDesk 4 opens its still-running LAN dashboard in the
-default browser after 20 seconds. `weatherdesk --browser` chooses that reliable mode immediately.
+If the webview never becomes ready, StormDesk 4 opens its still-running LAN dashboard in the
+default browser after 20 seconds. `stormdesk --browser` chooses that reliable mode immediately.
 
 ## Security
 
@@ -650,5 +644,6 @@ Releasing: the desktop updater needs `TAURI_SIGNING_PRIVATE_KEY` and
 `src-tauri/tauri.conf.json`. Lose that private key and no installed copy will ever accept another
 update.
 
-The layout follows the shape of myweatherdesk.com. No code was taken from it; this is written from
+The layout follows the familiar shape of a wall-station dashboard. No code was copied from any
+third-party weather service; this is written from
 scratch against the same public APIs.

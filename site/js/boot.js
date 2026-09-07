@@ -133,8 +133,58 @@ function elevMetres() {
   return settings().units === 'metric' ? v : v * 0.3048;
 }
 
+function organizeSettings() {
+  const drawer = $('drawer');
+  if (!drawer || $('settings-tabs')) return;
+  const title = drawer.querySelector(':scope > h2');
+  const actions = $('drawer-actions');
+  const existing = [...drawer.children].filter((el) => el !== title && el !== actions);
+  const intro = document.createElement('p');
+  intro.className = 'settings-intro';
+  intro.textContent = 'Everyday choices stay up front. Station credentials, integrations, backup, and repair live in Advanced.';
+  const tabs = document.createElement('div');
+  tabs.id = 'settings-tabs'; tabs.className = 'settings-tabs'; tabs.setAttribute('role', 'tablist');
+  tabs.innerHTML = '<button role="tab" data-settings-tab="basics" class="active">Basics</button>'
+    + '<button role="tab" data-settings-tab="appearance">Appearance</button>'
+    + '<button role="tab" data-settings-tab="advanced">Advanced</button>';
+  const status = document.createElement('div');
+  status.id = 'settings-status'; status.className = 'settings-status';
+  const panels = Object.fromEntries(['basics', 'appearance', 'advanced'].map((name) => {
+    const panel = document.createElement('section');
+    panel.id = `settings-${name}`; panel.className = 'settings-panel';
+    panel.setAttribute('role', 'tabpanel'); panel.hidden = name !== 'basics';
+    return [name, panel];
+  }));
+  panels.advanced.append(...existing);
+  title.after(intro, tabs, status, panels.basics, panels.appearance, panels.advanced);
+  const move = (id, panel) => {
+    const control = $(id); if (!control) return;
+    const wrapped = control.closest('label');
+    if (wrapped && panels.advanced.contains(wrapped)) { panel.append(wrapped); return; }
+    if (control.previousElementSibling?.tagName === 'LABEL') panel.append(control.previousElementSibling);
+    panel.append(control);
+  };
+  ['region-presets', 'set-units', 'set-wind-unit', 'set-clock', 'set-radar-site', 'set-desk-radar',
+    'set-storm-auto', 'set-night-dim', 'set-speak', 'set-brief-time', 'set-web-notif']
+    .forEach((id) => move(id, panels.basics));
+  ['set-theme', 'set-accent', 'set-palette', 'set-font', 'set-density', 'set-hero-summary',
+    'set-big-numbers', 'set-eco', 'set-motion'].forEach((id) => move(id, panels.appearance));
+  tabs.onclick = (event) => {
+    const name = event.target.dataset.settingsTab; if (!name) return;
+    Object.entries(panels).forEach(([key, panel]) => { panel.hidden = key !== name; });
+    tabs.querySelectorAll('button').forEach((button) => {
+      const on = button.dataset.settingsTab === name;
+      button.classList.toggle('active', on); button.setAttribute('aria-selected', String(on));
+    });
+  };
+}
+
 function fillDrawer() {
+  organizeSettings();
   const s = settings();
+  $('settings-status').innerHTML = hasSource()
+    ? '<strong>● Station connected</strong><small>Live readings and forecasts are configured</small>'
+    : '<strong class="warn">Setup needed</strong><small>Choose a station or location in Advanced</small>';
   $('set-token').value = s.token;
   $('set-station').value = s.stationId;
   $('set-device').value = s.deviceId;
@@ -164,6 +214,7 @@ function fillDrawer() {
   $('set-accent').value = s.accent || '#4fb8ff';
   $('set-font').value = String(s.fontScale || 1);
   $('set-density').value = s.density || 'normal';
+  $('set-hero-summary').value = s.heroSummary || 'conditions';
   $('set-big-numbers').checked = !!s.bigNumbers;
   $('set-kiosk').value = s.kioskCycleSec || 0;
   $('set-night-dim').checked = !!s.nightDim;
@@ -462,6 +513,7 @@ $('btn-save').onclick = async () => {
     accent: $('set-accent').value === '#4fb8ff' ? '' : $('set-accent').value,
     fontScale: +$('set-font').value || 1,
     density: $('set-density').value,
+    heroSummary: $('set-hero-summary').value,
     bigNumbers: $('set-big-numbers').checked,
     kioskCycleSec: Math.max(0, Math.min(3600, +$('set-kiosk').value || 0)),
     nightDim: $('set-night-dim').checked,
@@ -785,7 +837,7 @@ function changelog() {
   try { localStorage.setItem('wd.lastVersion', APP_VERSION); } catch { /* full; nothing to do */ }
   if (!seen) return; // a fresh install has nothing to be new since
   notify({
-    title: `WeatherDesk ${APP_VERSION}`,
+    title: `StormDesk ${APP_VERSION}`,
     body: 'New: a past-and-future Weather Timeline with confidence, guided Health Center, complete '
       + 'portable backup and restore, and an automatic browser fallback when Linux cannot draw the native window.',
   });
@@ -973,7 +1025,7 @@ $('btn-export').onclick = () => {
   // The export is the whole settings blob, and that includes the Tempest API token and any
   // broker password. Anyone the file is sent to can read the station. Say so before writing it.
   if (!confirm('This file contains your Tempest API token and any MQTT/Home Assistant passwords in plain text. Keep it private?')) return;
-  download('weatherdesk-settings.json',
+  download('stormdesk-settings.json',
     new Blob([JSON.stringify({ at: Date.now(), settings: settings(), layout: load('wd.layout', {}) }, null, 2)],
       { type: 'application/json' }));
 };
@@ -1006,7 +1058,7 @@ $('btn-backup').onclick = async () => {
   try {
     const r = await fetch(`${SRV}/backup.wdbak`, { signal: expires(120000) });
     if (!r.ok) throw new Error(`${r.status}`);
-    download('weatherdesk.wdbak', await r.blob());
+    download('stormdesk.wdbak', await r.blob());
   } catch {
     notify({
       title: 'No archive to back up',
@@ -1049,7 +1101,7 @@ $('btn-update').onclick = async () => {
   try {
     const version = await invoke('updater_check');
     if (!version) { notify({ title: 'Up to date', body: 'You are on the newest release.' }); return; }
-    if (!confirm(`WeatherDesk ${version} is available. Download and install now?`)) return;
+    if (!confirm(`StormDesk ${version} is available. Download and install now?`)) return;
     notify({ title: `Installing ${version}`, body: 'The app will restart when it is done.' });
     await invoke('updater_install');
   } catch (e) {
@@ -1061,7 +1113,7 @@ $('btn-csv').onclick = async () => {
   try {
     const r = await fetch(`${SRV}/history.csv`, { signal: expires(60000) });
     if (!r.ok) throw new Error(`${r.status}`);
-    download('weatherdesk-history.csv', await r.blob());
+    download('stormdesk-history.csv', await r.blob());
   } catch {
     notify({
       title: 'No observation log',
@@ -1194,12 +1246,12 @@ export function radarUrl(zoom, embed = true) {
   const lon = v ? v.lon : s.lon, lat = v ? v.lat : s.lat;
   if (lat == null && !site) return RADAR;
   const extras = v
-    ? [v.moment, v.tilt, `bm:${v.basemap}`, v.srv ? 'srv' : ''].filter(Boolean).join(',')
+    ? [v.moment, v.tilt, `bm:${v.basemap || 'dark'}`, v.srv ? 'srv' : ''].filter(Boolean).join(',')
     // First load, before the viewer has posted a camera back: HookEcho's localStorage is
     // partitioned in our iframe (see above), so without this it opens on whatever its compiled-in
-    // default is. Streets orients a first-time viewer fastest; any pick they make sticks via
+    // default is. Dark Streets matches StormDesk; any pick they make sticks via
     // wd.radar and wins from then on.
-    : 'bm:esri-streets';
+    : 'bm:dark';
   const q = embed ? '?embed' : '';
   return `${RADAR}${q}#goto=${site},${lon ?? ''},${lat ?? ''},${v ? v.zoom : zoom}${extras ? ',' + extras : ''}`;
 }
@@ -1287,7 +1339,7 @@ function stillUrl() {
     site: v?.site || radarSite(), size: '768', zoom: String(v?.zoom ?? 6.5),
     t: String(Math.floor(Date.now() / 300000)),
   });
-  if (v?.basemap) q.set('basemap', v.basemap);
+  q.set('basemap', v?.basemap || 'dark');
   return `https://img.hookecho.io/snapshot.png?${q}`;
 }
 
@@ -1450,6 +1502,9 @@ if (!hasSource() && !PUBLIC) {
 
 // ponytail-lite self-check: `?selftest` asserts the site maths and the link the viewer is handed.
 if (location.search.includes('selftest')) {
+  organizeSettings();
+  console.assert($('settings-basics')?.children.length > 0, 'settings: basics populated');
+  console.assert($('settings-appearance')?.children.length > 0, 'settings: appearance populated');
   const sites = [{ id: 'KTLX', name: 'Oklahoma City, OK', lat: 35.33, lon: -97.28 },
     { id: 'KFWS', name: 'Dallas, TX', lat: 32.57, lon: -97.30 }];
   console.assert(nearestSite(35.4, -97.5, sites).id === 'KTLX', 'nearest site');
@@ -1460,7 +1515,7 @@ if (location.search.includes('selftest')) {
   store('wd.radar', null);
   // (unconfigured profile returns the bare viewer URL with no #goto — nothing to assert on)
   const u2 = radarUrl(6.5);
-  console.assert(!u2.includes('#goto=') || u2.endsWith(',bm:esri-streets'), 'first-load default basemap', u2);
+  console.assert(!u2.includes('#goto=') || u2.endsWith(',bm:dark'), 'first-load default basemap', u2);
 
   // The push guard. A blank screen that has heard nothing from the host must stay quiet, or it
   // overwrites what the host knew with its own empty defaults.

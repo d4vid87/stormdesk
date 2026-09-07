@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">"WeatherDesk"</string>
-    <string name="main_activity_title">"WeatherDesk"</string>
+    <string name="app_name">"StormDesk"</string>
+    <string name="main_activity_title">"StormDesk"</string>
 </resources>
