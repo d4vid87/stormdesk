@@ -5,7 +5,7 @@
 // which is also all the Docker image is.
 fn main() {
     if std::env::args().any(|a| a == "--version") {
-        println!("WeatherDesk {}", env!("CARGO_PKG_VERSION"));
+        println!("StormDesk {}", env!("CARGO_PKG_VERSION"));
         return;
     }
     // Headless health check for a Pi with no browser: ask the running server, print what it
@@ -14,10 +14,10 @@ fn main() {
         std::process::exit(check());
     }
     if std::env::args().any(|a| a == "--headless") {
-        return weatherdesk_lib::run_headless();
+        return stormdesk_lib::run_headless();
     }
     if std::env::args().any(|a| a == "--browser") {
-        return weatherdesk_lib::run_browser();
+        return stormdesk_lib::run_browser();
     }
     // WebKitGTK renderer knobs. Which ones depend on the box: the AppImage runs under XWayland
     // and an Intel iGPU there draws a blank window unless compositing is software too. Mode comes
@@ -27,35 +27,35 @@ fn main() {
     {
         let args: Vec<String> = std::env::args().collect();
         let flag = args.iter().position(|a| a == "--render").and_then(|i| args.get(i + 1)).cloned();
-        let cfg = weatherdesk_lib::default_config_dir().join("config.json");
+        let cfg = stormdesk_lib::default_config_dir().join("config.json");
         let mode = std::env::var("WD_RENDER")
             .ok()
             .or(flag)
-            .or_else(|| weatherdesk_lib::setting(&cfg, "render").map(|s| s.trim_matches('"').to_string()))
+            .or_else(|| stormdesk_lib::setting(&cfg, "render").map(|s| s.trim_matches('"').to_string()))
             .unwrap_or_else(|| "auto".into());
         let appimage = std::env::var_os("APPIMAGE").is_some();
-        let vendor = weatherdesk_lib::gpu_vendor();
+        let vendor = stormdesk_lib::gpu_vendor();
         let mut set = vec![];
-        for (k, v) in weatherdesk_lib::render_env(&mode, appimage, vendor.as_deref()) {
+        for (k, v) in stormdesk_lib::render_env(&mode, appimage, vendor.as_deref()) {
             if std::env::var_os(k).is_none() {
                 std::env::set_var(k, v);
                 set.push(k);
             }
         }
         eprintln!(
-            "weatherdesk: render={mode} appimage={appimage} gpu={} set={set:?}",
+            "stormdesk: render={mode} appimage={appimage} gpu={} set={set:?}",
             vendor.as_deref().unwrap_or("unknown")
         );
     }
     #[cfg(feature = "gui")]
-    weatherdesk_lib::run();
+    stormdesk_lib::run();
     #[cfg(not(feature = "gui"))]
-    weatherdesk_lib::run_headless();
+    stormdesk_lib::run_headless();
 }
 
 fn check() -> i32 {
-    let cfg = weatherdesk_lib::default_config_dir().join("config.json");
-    let port = weatherdesk_lib::setting(&cfg, "httpPort")
+    let cfg = stormdesk_lib::default_config_dir().join("config.json");
+    let port = stormdesk_lib::setting(&cfg, "httpPort")
         .and_then(|p| p.trim_matches('"').parse::<u16>().ok())
         .unwrap_or(8088);
     let body = match ureq::get(&format!("http://127.0.0.1:{port}/api/v1"))

@@ -431,12 +431,12 @@ fn get(url: &str, origin: &'static str) -> Option<serde_json::Value> {
     match ureq::get(url).timeout(Duration::from_secs(20)).call() {
         Ok(r) => r.into_string().ok().and_then(|b| serde_json::from_str(&b).ok()),
         Err(ureq::Error::Status(code, _)) => {
-            eprintln!("weatherdesk: station poll refused ({code})");
+            eprintln!("stormdesk: station poll refused ({code})");
             note(origin, false, &format!("HTTP {code}"), false);
             None
         }
         Err(ureq::Error::Transport(t)) => {
-            eprintln!("weatherdesk: station poll failed ({:?})", t.kind());
+            eprintln!("stormdesk: station poll failed ({:?})", t.kind());
             note(origin, false, &format!("{:?}", t.kind()), false);
             None
         }
@@ -540,7 +540,7 @@ fn lacrosse_token(email: &str, pass: &str) -> Option<String> {
             .as_str()
             .map(String::from),
         Err(ureq::Error::Status(code, _)) => {
-            eprintln!("weatherdesk: La Crosse login refused ({code})");
+            eprintln!("stormdesk: La Crosse login refused ({code})");
             None
         }
         Err(_) => None,
@@ -551,12 +551,12 @@ fn bearer(url: &str, token: &str) -> Option<serde_json::Value> {
     match ureq::get(url).timeout(Duration::from_secs(20)).set("Authorization", &format!("Bearer {token}")).call() {
         Ok(r) => r.into_string().ok().and_then(|b| serde_json::from_str(&b).ok()),
         Err(ureq::Error::Status(code, _)) => {
-            eprintln!("weatherdesk: La Crosse read refused ({code})");
+            eprintln!("stormdesk: La Crosse read refused ({code})");
             note("lacrosse", false, &format!("HTTP {code}"), false);
             None
         }
         Err(ureq::Error::Transport(t)) => {
-            eprintln!("weatherdesk: La Crosse read failed ({:?})", t.kind());
+            eprintln!("stormdesk: La Crosse read failed ({:?})", t.kind());
             note("lacrosse", false, &format!("{:?}", t.kind()), false);
             None
         }
@@ -714,7 +714,7 @@ mod tests {
         &tempf=77.0&humidity=55&winddir=180&windspeedmph=10.0&windgustmph=20.0&baromin=29.92&dailyrainin=0.10";
 
     /// And as WeeWX's Wunderground uploader sends it — same protocol, WeeWX's field set and
-    /// softwaretype tag. Feeding WeatherDesk from WeeWX is docs/weewx.md, and this is the
+    /// softwaretype tag. Feeding StormDesk from WeeWX is docs/weewx.md, and this is the
     /// assertion behind it.
     const WEEWX: &str = "/weatherstation/updateweatherstation.php?ID=anything&PASSWORD=anything\
         &dateutc=2026-08-19+14%3A30%3A00&tempf=77.0&humidity=55&dewptf=60.5&winddir=180\

@@ -37,7 +37,7 @@ pub const SRC_BACKFILL: i64 = 1;
 pub const SRC_JSONL: i64 = 2;
 
 pub fn db_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("weatherdesk.db")
+    data_dir.join("stormdesk.db")
 }
 
 /// Open (and if need be create) the archive. Every caller gets its own connection — WAL means
@@ -131,7 +131,7 @@ pub fn migrate_jsonl(conn: &mut Connection, log_dir: &Path) {
         let _ = tx.commit();
     }
     meta_set(conn, "jsonl_imported", &n.to_string());
-    eprintln!("weatherdesk: imported {n} observations from the JSONL log (files kept as backup)");
+    eprintln!("stormdesk: imported {n} observations from the JSONL log (files kept as backup)");
 }
 
 /// Per-day aggregates, SI, keyed by the viewer's local date — the browser passes its own UTC
@@ -220,7 +220,7 @@ fn rows_json(conn: &Connection, sql: &str, tz_off_min: i64, day_start: i64) -> O
 /// returns 0.
 ///
 /// ponytail: no VACUUM — it holds the whole file and balloons the WAL. Freed pages are reused, so
-/// the file plateaus rather than shrinks; `sqlite3 weatherdesk.db VACUUM` with the app stopped is
+/// the file plateaus rather than shrinks; `sqlite3 stormdesk.db VACUUM` with the app stopped is
 /// the escape hatch if the size ever actually matters.
 pub fn prune(conn: &Connection, cutoff: i64) -> usize {
     conn.execute(
@@ -383,7 +383,7 @@ pub fn backup_to(conn: &Connection, dest: &Path) -> rusqlite::Result<()> {
 pub const BACKUP_FORMAT: i64 = 1;
 
 /// A `.wdbak` is a normal SQLite snapshot with two reserved metadata rows. It can still be
-/// opened with sqlite3 when WeatherDesk is gone, which is a better recovery format than a custom
+/// opened with sqlite3 when StormDesk is gone, which is a better recovery format than a custom
 /// archive nobody else understands.
 pub fn bundle_to(conn: &Connection, dest: &Path, config: &str) -> rusqlite::Result<()> {
     backup_to(conn, dest)?;
@@ -408,7 +408,7 @@ pub fn inspect_bundle(path: &Path) -> Result<serde_json::Value, String> {
     let manifest: serde_json::Value = serde_json::from_str(&meta_get(&conn, "backup:manifest").ok_or("missing backup manifest")?)
         .map_err(|_| "invalid backup manifest")?;
     let format = manifest["format"].as_i64().ok_or("invalid backup format")?;
-    if format > BACKUP_FORMAT { return Err("backup was made by a newer WeatherDesk".into()); }
+    if format > BACKUP_FORMAT { return Err("backup was made by a newer StormDesk".into()); }
     if format < 1 { return Err("unsupported backup format".into()); }
     let config: serde_json::Value = serde_json::from_str(&meta_get(&conn, "backup:config").ok_or("missing backup settings")?)
         .map_err(|_| "invalid backup settings")?;
@@ -422,7 +422,7 @@ pub fn inspect_bundle(path: &Path) -> Result<serde_json::Value, String> {
     let rows: i64 = conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get(0)).unwrap_or(0);
     if first < 0 || last < first { return Err("backup contains invalid timestamps".into()); }
     Ok(serde_json::json!({ "format": format, "app": manifest["app"], "created": manifest["created"],
-        "station": config.pointer("/settings/stationName").and_then(|v| v.as_str()).unwrap_or("WeatherDesk"),
+        "station": config.pointer("/settings/stationName").and_then(|v| v.as_str()).unwrap_or("StormDesk"),
         "first": first, "last": last, "rows": rows }))
 }
 
@@ -478,21 +478,21 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
             Err(ureq::Error::Status(code, _)) => {
                 if (code == 429 || code >= 500) && retries < 5 {
                     retries += 1;
-                    eprintln!("weatherdesk: backfill paused on HTTP {code}, retrying in 60s ({retries}/5)");
+                    eprintln!("stormdesk: backfill paused on HTTP {code}, retrying in 60s ({retries}/5)");
                     std::thread::sleep(std::time::Duration::from_secs(60));
                     continue;
                 }
-                eprintln!("weatherdesk: backfill stopped on HTTP {code}");
+                eprintln!("stormdesk: backfill stopped on HTTP {code}");
                 break;
             }
             Err(_) if retries < 5 => {
                 retries += 1;
-                eprintln!("weatherdesk: backfill paused (network), retrying in 60s ({retries}/5)");
+                eprintln!("stormdesk: backfill paused (network), retrying in 60s ({retries}/5)");
                 std::thread::sleep(std::time::Duration::from_secs(60));
                 continue;
             }
             Err(_) => {
-                eprintln!("weatherdesk: backfill gave up on this chunk after 5 retries; skipping it");
+                eprintln!("stormdesk: backfill gave up on this chunk after 5 retries; skipping it");
                 cursor -= chunk;
                 retries = 0;
                 continue;
@@ -512,14 +512,14 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
                 added += 1;
             }
         }
-        eprintln!("weatherdesk: backfill {start}..{cursor} — {} rows, {added} new", rows.len());
+        eprintln!("stormdesk: backfill {start}..{cursor} — {} rows, {added} new", rows.len());
         empty = if rows.is_empty() { empty + 1 } else { 0 };
         cursor = start;
         meta_set(conn, "backfill_cursor", &cursor.to_string());
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     meta_set(conn, "backfill_done", "1");
-    eprintln!("weatherdesk: backfill complete");
+    eprintln!("stormdesk: backfill complete");
 }
 
 // ponytail: one check, on the two things here that can be silently wrong — an insert that
@@ -551,7 +551,7 @@ mod tests {
         let mut obs = vec![None; 19]; obs[0] = Some(1_700_000_000.0); obs[7] = Some(21.5);
         assert!(insert(&source, &obs, 3));
         meta_set(&source, "kept", "yes");
-        let bundle = dir.join("weatherdesk.wdbak");
+        let bundle = dir.join("stormdesk.wdbak");
         let config = r#"{"settings":{"stationName":"Back yard","token":"secret"},"layout":{"hero":{}}}"#;
         bundle_to(&source, &bundle, config).unwrap();
         let summary = inspect_bundle(&bundle).unwrap();

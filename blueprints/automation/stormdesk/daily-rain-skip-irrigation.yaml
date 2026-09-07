@@ -1,5 +1,5 @@
 blueprint:
-  name: WeatherDesk — skip irrigation after rain
+  name: StormDesk — skip irrigation after rain
   description: >-
     Waters at a set time each day, unless your own rain gauge says the garden
     already got some.
@@ -9,14 +9,14 @@ blueprint:
     not an airport eleven miles away — the shower that soaked one street and
     missed the next is exactly the case a forecast gets wrong.
 
-    WeatherDesk publishes rain in millimetres whatever the dashboard shows.
+    StormDesk publishes rain in millimetres whatever the dashboard shows.
     5 mm is about a fifth of an inch.
   domain: automation
-  source_url: https://github.com/d4vid87/weatherdesk/blob/main/blueprints/automation/weatherdesk/daily-rain-skip-irrigation.yaml
+  source_url: https://github.com/d4vid87/stormdesk/blob/main/blueprints/automation/stormdesk/daily-rain-skip-irrigation.yaml
   input:
     rain_sensor:
       name: Day rain sensor
-      description: The `day rain` sensor on your WeatherDesk device.
+      description: The `day rain` sensor on your StormDesk device.
       selector:
         entity:
           domain: sensor

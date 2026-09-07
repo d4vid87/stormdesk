@@ -1,6 +1,6 @@
 // Say we are here, and listen for the one other box worth finding.
 //
-// Two jobs, one protocol. Advertising `_weatherdesk._tcp` is what lets Home Assistant's config
+// Two jobs, one protocol. Advertising `_stormdesk._tcp` is what lets Home Assistant's config
 // flow offer this server rather than asking somebody to find its IP; browsing `_weatherlinklive`
 // is what lets the setup wizard fill in a Davis console's address for them.
 
@@ -29,9 +29,9 @@ pub fn start(port: u16) {
         };
         let host = crate::server::lan_ip();
         let info = ServiceInfo::new(
-            "_weatherdesk._tcp.local.",
-            "WeatherDesk",
-            &format!("weatherdesk-{}.local.", host.replace('.', "-")),
+            "_stormdesk._tcp.local.",
+            "StormDesk",
+            &format!("stormdesk-{}.local.", host.replace('.', "-")),
             host.as_str(),
             port,
             &[("version", env!("CARGO_PKG_VERSION")), ("path", "/api/v1")][..],
@@ -40,7 +40,7 @@ pub fn start(port: u16) {
             Ok(info) => {
                 let _ = daemon.register(info);
             }
-            Err(_) => eprintln!("weatherdesk: mDNS registration failed"),
+            Err(_) => eprintln!("stormdesk: mDNS registration failed"),
         }
 
         // Browsing runs for the life of the process: a console that is switched on after us is

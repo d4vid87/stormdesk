@@ -1,6 +1,6 @@
 [package]
-name = "weatherdesk"
-version = "4.0.0"
+name = "stormdesk"
+version = "4.1.0"
 description = "Self-hosted WeatherFlow Tempest dashboard"
 authors = ["David May"]
 license = "MIT"
@@ -9,7 +9,7 @@ edition = "2021"
 # The Android build links the app as a library (`cargo tauri android init` generates a project that
 # expects exactly this name); the desktop binary is a shim over the same `run()`.
 [lib]
-name = "weatherdesk_lib"
+name = "stormdesk_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 # `--no-default-features` drops Tauri (and with it GTK/WebKit) entirely and leaves the LAN

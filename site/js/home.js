@@ -17,7 +17,7 @@ const $ = (id) => document.getElementById(id);
 let client = null;
 let lastPrecip = 0, gustLatched = false;
 
-const base = () => `weatherdesk/${settings().stationId}`;
+const base = () => `stormdesk/${settings().stationId}`;
 const availability = () => `${base()}/status`;
 
 // field -> [obs_st index, HA device_class, HA unit, state_class]
@@ -50,10 +50,10 @@ const DERIVED = {
 function announce() {
   const s = settings();
   const device = {
-    identifiers: [`weatherdesk_${s.stationId}`],
+    identifiers: [`stormdesk_${s.stationId}`],
     name: s.stationName || `Tempest ${s.stationId}`,
     manufacturer: 'WeatherFlow',
-    model: 'Tempest (via WeatherDesk)',
+    model: 'Tempest (via StormDesk)',
   };
   for (const [field, [, dc, unit, sc]] of Object.entries(FIELDS)) {
     const cfg = {
@@ -204,7 +204,7 @@ export async function initHome() {
   if (s.mqttUrl && s.stationId && !(await serverPublishing()) && mine === homeGen) {
     client = mqtt({
       url: s.mqttUrl, user: s.mqttUser, pass: s.mqttPass,
-      clientId: `weatherdesk-${s.stationId}-${Math.random().toString(16).slice(2, 8)}`,
+      clientId: `stormdesk-${s.stationId}-${Math.random().toString(16).slice(2, 8)}`,
       // Last will: the broker marks us offline when this tab goes away, so Home Assistant shows
       // the sensors as unavailable rather than serving a frozen reading forever.
       will: { topic: availability(), payload: 'offline', retain: true },

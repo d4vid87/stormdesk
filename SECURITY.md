@@ -1,6 +1,6 @@
 # Security
 
-WeatherDesk is a LAN dashboard for a house, and its trust model is unusually open on purpose. Read
+StormDesk is a LAN dashboard for a house, and its trust model is unusually open on purpose. Read
 the next section before deciding whether something is a bug.
 
 ## What this app trusts
@@ -33,12 +33,12 @@ stops being true.
 
 ### RUSTSEC-2026-0104 / GHSA-82j2-j2ch-gfr8 — rustls-webpki panic parsing a CRL
 
-**We ship the affected crate. WeatherDesk cannot reach the code that panics.** Assessed 2026-08-24
+**We ship the affected crate. StormDesk cannot reach the code that panics.** Assessed 2026-08-24
 against 3.2.0, with `rumqttc 0.25.1` the newest release on crates.io.
 
 `rustls-webpki 0.102.8` is in `src-tauri/Cargo.lock` twice, both times underneath the MQTT client:
 
-    weatherdesk 3.2.0
+    stormdesk 3.2.0
     └── rumqttc 0.24.0
         ├── rustls-webpki 0.102.8              direct — Cargo.lock:3141
         └── tokio-rustls 0.25.0                Cargo.lock:3144
@@ -46,7 +46,7 @@ against 3.2.0, with `rumqttc 0.25.1` the newest release on crates.io.
                 └── rustls-webpki 0.102.8      Cargo.lock:3198
 
 Those are the only two paths. Only `rumqttc 0.24.0` and `rustls 0.22.4` depend on `0.102.8`, only
-`tokio-rustls 0.25.0` depends on that `rustls`, and only WeatherDesk depends on `rumqttc`. Every
+`tokio-rustls 0.25.0` depends on that `rustls`, and only StormDesk depends on `rumqttc`. Every
 other TLS user in the build is already on the fixed line: the advisory is patched in `0.103.13`,
 and `rustls 0.23.43` and `rustls-platform-verifier 0.7.0` both pull `rustls-webpki 0.103.14`
 (`Cargo.lock:3213` and `:3275`) — which is what `ureq 2.12.1` (all of our own HTTPS) and
@@ -65,7 +65,7 @@ index underflow in `bit_string_flags()` in the crate's `src/der.rs`, reached fro
 an empty BIT STRING with zero padding bits. Nothing calls that entry point except revocation
 checking.
 
-**WeatherDesk configures TLS in exactly two places, identically, and neither passes any
+**StormDesk configures TLS in exactly two places, identically, and neither passes any
 configuration at all.** In `src-tauri/src/mqtt.rs:307-309`, in the publish loop:
 
 ```rust
@@ -161,7 +161,7 @@ Reachability differs per advisory:
   name-constrained certificates that a correct validator would reject. The deployment this app
   supports — a LAN broker with a self-signed or private-CA certificate — has no such chain, and
   a public-CA chain abusing this needs a misissuing CA, which is a browser-ecosystem event, not
-  a WeatherDesk one. Accepted as low risk; both entries are dropped the moment a rumqttc release
+  a StormDesk one. Accepted as low risk; both entries are dropped the moment a rumqttc release
   moves to rustls-webpki 0.103.
 
 **Unmaintained, not vulnerable.** The rest of the batch is maintenance-status advisories, all

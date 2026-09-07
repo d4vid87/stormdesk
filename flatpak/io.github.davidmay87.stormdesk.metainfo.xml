@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.davidmay87.weatherdesk</id>
-  <name>WeatherDesk</name>
+  <id>io.github.davidmay87.stormdesk</id>
+  <name>StormDesk</name>
   <summary>Self-hosted dashboard for a WeatherFlow Tempest station</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
@@ -22,11 +22,17 @@
       <li>Alert rules, phone push, MQTT and Home Assistant</li>
     </ul>
   </description>
-  <launchable type="desktop-id">io.github.davidmay87.weatherdesk.desktop</launchable>
-  <url type="homepage">https://github.com/d4vid87/weatherdesk</url>
-  <url type="bugtracker">https://github.com/d4vid87/weatherdesk/issues</url>
+  <launchable type="desktop-id">io.github.davidmay87.stormdesk.desktop</launchable>
+  <url type="homepage">https://github.com/d4vid87/stormdesk</url>
+  <url type="bugtracker">https://github.com/d4vid87/stormdesk/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="4.1.0" date="2026-09-06">
+      <description>
+        <p>The StormDesk rebrand adds the OLED interface, compact navigation, richer Local
+        Signals, simplified settings, and refreshed media.</p>
+      </description>
+    </release>
     <release version="3.0.4" date="2026-08-18">
       <description>
         <p>The Android app holds the screen awake while it is open.</p>

@@ -32,9 +32,9 @@ fn tray_label(state: &std::sync::Arc<crate::server::State>, cfg_path: &std::path
     let c = v.pointer("/obs/0/7")?.as_f64()?;
     let metric = crate::setting(cfg_path, "units").as_deref() == Some("metric");
     Some(if metric {
-        format!("WeatherDesk — {c:.1} °C")
+        format!("StormDesk — {c:.1} °C")
     } else {
-        format!("WeatherDesk — {:.1} °F", c * 9.0 / 5.0 + 32.0)
+        format!("StormDesk — {:.1} °F", c * 9.0 / 5.0 + 32.0)
     })
 }
 
@@ -52,7 +52,7 @@ async fn updater_check(app: tauri::AppHandle) -> Result<Option<String>, String> 
     // install has no $APPIMAGE, so be honest instead of offering an install that cannot work.
     #[cfg(target_os = "linux")]
     if std::env::var("APPIMAGE").is_err() {
-        return Err("updates for this install come through your package manager (apt upgrade weather-desk), not the in-app updater".into());
+        return Err("updates for this install come through your package manager (apt upgrade stormdesk), not the in-app updater".into());
     }
     let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
     Ok(update.map(|u| u.version))
@@ -64,7 +64,7 @@ async fn updater_install(app: tauri::AppHandle) -> Result<(), String> {
     use tauri_plugin_updater::UpdaterExt;
     #[cfg(target_os = "linux")]
     if std::env::var("APPIMAGE").is_err() {
-        return Err("updates for this install come through your package manager (apt upgrade weather-desk), not the in-app updater".into());
+        return Err("updates for this install come through your package manager (apt upgrade stormdesk), not the in-app updater".into());
     }
     let update = app
         .updater()
@@ -119,14 +119,14 @@ pub fn run() {
                 #[cfg(target_os = "linux")]
                 { fallback_port = port; }
 
-                let show = MenuItem::with_id(app, "show", "Show WeatherDesk", true, None::<&str>)?;
+                let show = MenuItem::with_id(app, "show", "Show StormDesk", true, None::<&str>)?;
                 let refresh = MenuItem::with_id(app, "refresh", "Refresh", true, None::<&str>)?;
                 let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show, &refresh, &quit])?;
                 let tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().cloned().unwrap())
                     .menu(&menu)
-                    .tooltip("WeatherDesk")
+                    .tooltip("StormDesk")
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quit" => app.exit(0),
                         "refresh" => {
@@ -157,7 +157,7 @@ pub fn run() {
                 // localStorage per origin, so a moving port would wipe the token and layout on
                 // every restart.
                 win = win
-                    .title(format!("WeatherDesk — tablet: http://{}:{}", crate::server::lan_ip(), port))
+                    .title(format!("StormDesk — tablet: http://{}:{}", crate::server::lan_ip(), port))
                     .inner_size(1280.0, 800.0)
                     // Start maximized on Linux: KWin maximizes a restored window after mapping
                     // it, and GTK can miss that configure entirely — the webview then paints at
@@ -179,10 +179,10 @@ pub fn run() {
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(20));
                     if !should_open_fallback(&FRONTEND_READY) { return; }
-                    eprintln!("weatherdesk: native window did not become ready; opening browser dashboard");
+                    eprintln!("stormdesk: native window did not become ready; opening browser dashboard");
                     let _ = crate::open_browser(fallback_port);
                     let _ = app.notification().builder()
-                        .title("WeatherDesk opened in your browser")
+                        .title("StormDesk opened in your browser")
                         .body("The native window could not start on this graphics driver.")
                         .show();
                 });
@@ -191,7 +191,7 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error running WeatherDesk");
+        .expect("error running StormDesk");
 }
 
 #[cfg(test)]

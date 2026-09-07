@@ -620,7 +620,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 tiny_http::StatusCode(200),
                 vec![
                     header("Content-Type", "text/csv"),
-                    header("Content-Disposition", "attachment; filename=weatherdesk-history.csv"),
+                    header("Content-Disposition", "attachment; filename=stormdesk-history.csv"),
                     header("Access-Control-Allow-Origin", "*"),
                 ],
                 store::CsvPager::new(conn),
@@ -647,7 +647,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 tiny_http::StatusCode(200),
                 vec![
                     header("Content-Type", "application/octet-stream"),
-                    header("Content-Disposition", "attachment; filename=weatherdesk.db"),
+                    header("Content-Disposition", "attachment; filename=stormdesk.db"),
                     header("Access-Control-Allow-Origin", "*"),
                 ],
                 file,
@@ -670,7 +670,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
             let len = file.metadata().map(|m| m.len() as usize).ok();
             let res = Response::new(tiny_http::StatusCode(200), vec![
                 header("Content-Type", "application/octet-stream"),
-                header("Content-Disposition", "attachment; filename=weatherdesk.wdbak"),
+                header("Content-Disposition", "attachment; filename=stormdesk.wdbak"),
             ], file, len, None);
             std::thread::spawn(move || { let _ = req.respond(res); let _ = std::fs::remove_file(dest); });
             return;
@@ -798,7 +798,7 @@ pub fn serve(state: Arc<State>, want: u16) -> u16 {
     let server = match server {
         Ok(s) => Arc::new(s),
         Err(e) => {
-            eprintln!("weatherdesk: no HTTP port available ({e}); LAN dashboard is off");
+            eprintln!("stormdesk: no HTTP port available ({e}); LAN dashboard is off");
             return 0;
         }
     };
@@ -841,7 +841,7 @@ pub fn listen_udp(state: Arc<State>) {
     let sock = match UdpSocket::bind(("0.0.0.0", HUB_PORT)) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("weatherdesk: UDP {HUB_PORT} unavailable ({e}); using websocket only");
+            eprintln!("stormdesk: UDP {HUB_PORT} unavailable ({e}); using websocket only");
             return;
         }
     };

@@ -22,7 +22,7 @@ fn outbox() -> &'static Mutex<Vec<(String, String)>> {
     O.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-/// Queue one retained message for `weatherdesk/<station>/<suffix>`.
+/// Queue one retained message for `stormdesk/<station>/<suffix>`.
 pub fn send(suffix: &str, payload: &str) {
     let mut q = outbox().lock().unwrap();
     if q.len() >= 64 {
@@ -103,7 +103,7 @@ fn conf(cfg: &std::path::Path) -> Option<Conf> {
         user: get("mqttUser"),
         pass: get("mqttPass"),
         name: match get("stationName") {
-            n if n.is_empty() => format!("WeatherDesk {station}"),
+            n if n.is_empty() => format!("StormDesk {station}"),
             n => n,
         },
         station,
@@ -133,9 +133,9 @@ fn parse_url(url: &str) -> Option<(String, u16, bool)> {
 
 fn device(c: &Conf) -> serde_json::Value {
     serde_json::json!({
-        "identifiers": [format!("weatherdesk_{}", c.station)],
+        "identifiers": [format!("stormdesk_{}", c.station)],
         "name": c.name,
-        "manufacturer": "WeatherDesk",
+        "manufacturer": "StormDesk",
         "model": "Weather station",
         "sw_version": env!("CARGO_PKG_VERSION"),
         // The link Home Assistant puts on the device page: back to the dashboard itself.
@@ -145,7 +145,7 @@ fn device(c: &Conf) -> serde_json::Value {
 
 fn announce(client: &Client, c: &Conf) {
     let dev = device(c);
-    let avail = format!("weatherdesk/{}/status", c.station);
+    let avail = format!("stormdesk/{}/status", c.station);
     let send = |kind: &str, slug: &str, mut cfg: serde_json::Value| {
         cfg["device"] = dev.clone();
         cfg["availability_topic"] = avail.clone().into();
@@ -156,7 +156,7 @@ fn announce(client: &Client, c: &Conf) {
         let mut cfg = serde_json::json!({
             "name": name,
             "unique_id": format!("wd_{}_{}", c.station, col),
-            "state_topic": format!("weatherdesk/{}/{}", c.station, col),
+            "state_topic": format!("stormdesk/{}/{}", c.station, col),
             "unit_of_measurement": unit,
             "state_class": sc,
             "expire_after": EXPIRE_AFTER,
@@ -170,7 +170,7 @@ fn announce(client: &Client, c: &Conf) {
         let mut cfg = serde_json::json!({
             "name": name.replace('_', " "),
             "unique_id": format!("wd_{}_{}", c.station, name),
-            "state_topic": format!("weatherdesk/{}/{}", c.station, name),
+            "state_topic": format!("stormdesk/{}/{}", c.station, name),
         });
         // Everything driven by a row of the archive expires, so a dead poller shows up as dead.
         // The two the alert engine writes must not: a quiet fortnight is not a fault, and an
@@ -265,7 +265,7 @@ fn publish_row(client: &Client, c: &Conf, vals: &[Option<f64>], was: Option<f64>
     for ((col, ..), v) in FIELDS.iter().zip(vals) {
         if let Some(v) = v {
             let _ = client.publish(
-                format!("weatherdesk/{}/{}", c.station, col),
+                format!("stormdesk/{}/{}", c.station, col),
                 QoS::AtLeastOnce,
                 true,
                 format!("{v}"),
@@ -275,7 +275,7 @@ fn publish_row(client: &Client, c: &Conf, vals: &[Option<f64>], was: Option<f64>
     if let Some(t) = at("temp") {
         let f = (feels_like(t, at("humidity"), at("wind_avg")) * 10.0).round() / 10.0;
         let _ = client.publish(
-            format!("weatherdesk/{}/feels_like", c.station),
+            format!("stormdesk/{}/feels_like", c.station),
             QoS::AtLeastOnce,
             true,
             format!("{f}"),
@@ -283,7 +283,7 @@ fn publish_row(client: &Client, c: &Conf, vals: &[Option<f64>], was: Option<f64>
     }
     if let (Some(p), Some(was)) = (at("pressure"), was) {
         let _ = client.publish(
-            format!("weatherdesk/{}/pressure_trend", c.station),
+            format!("stormdesk/{}/pressure_trend", c.station),
             QoS::AtLeastOnce,
             true,
             press_trend(p, was),
@@ -295,11 +295,11 @@ fn publish_row(client: &Client, c: &Conf, vals: &[Option<f64>], was: Option<f64>
 /// away. Returns so the caller can try again with whatever the config says then.
 fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
     let Some((host, port, tls)) = parse_url(&c.url) else {
-        eprintln!("weatherdesk: MQTT address must be mqtt:// or mqtts:// — the page's ws:// URL is a different listener");
+        eprintln!("stormdesk: MQTT address must be mqtt:// or mqtts:// — the page's ws:// URL is a different listener");
         std::thread::sleep(Duration::from_secs(300));
         return;
     };
-    let mut opts = MqttOptions::new(format!("weatherdesk-{}", c.station), host, port);
+    let mut opts = MqttOptions::new(format!("stormdesk-{}", c.station), host, port);
     opts.set_keep_alive(Duration::from_secs(30));
     if !c.user.is_empty() {
         opts.set_credentials(c.user.clone(), c.pass.clone());
@@ -310,7 +310,7 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
     // The broker says we are gone the moment this process does, so Home Assistant shows the
     // sensors unavailable instead of serving a frozen reading forever.
     opts.set_last_will(LastWill::new(
-        format!("weatherdesk/{}/status", c.station),
+        format!("stormdesk/{}/status", c.station),
         "offline",
         QoS::AtLeastOnce,
         true,
@@ -324,7 +324,7 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
                 crate::ingest::note("mqtt", false, err_kind(&e), false);
                 // Never the error's Display: a rumqttc error can carry the broker URL, and the
                 // URL can carry a password.
-                eprintln!("weatherdesk: MQTT disconnected ({})", err_kind(&e));
+                eprintln!("stormdesk: MQTT disconnected ({})", err_kind(&e));
                 return;
             }
         }
@@ -347,7 +347,7 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
             Some(next) if next.url == c.url && next.station == c.station && next.prefix == c.prefix => {}
             _ => {
                 let _ = client.publish(
-                    format!("weatherdesk/{}/status", c.station),
+                    format!("stormdesk/{}/status", c.station),
                     QoS::AtLeastOnce,
                     true,
                     "offline",
@@ -360,7 +360,7 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
         // people built the automation for.
         for (suffix, payload) in outbox().lock().unwrap().drain(..) {
             let _ = client.publish(
-                format!("weatherdesk/{}/{}", c.station, suffix),
+                format!("stormdesk/{}/{}", c.station, suffix),
                 QoS::AtLeastOnce,
                 true,
                 payload,
@@ -403,7 +403,7 @@ pub fn probe(cfg_path: &std::path::Path) -> (bool, String) {
     let Some((host, port, tls)) = parse_url(&c.url) else {
         return (false, "address must start mqtt:// or mqtts:// — a ws:// broker is published by the page instead".into());
     };
-    let mut opts = MqttOptions::new(format!("weatherdesk-probe-{}", c.station), host, port);
+    let mut opts = MqttOptions::new(format!("stormdesk-probe-{}", c.station), host, port);
     opts.set_keep_alive(Duration::from_secs(5));
     if !c.user.is_empty() {
         opts.set_credentials(c.user.clone(), c.pass.clone());
@@ -413,7 +413,7 @@ pub fn probe(cfg_path: &std::path::Path) -> (bool, String) {
     }
     let (client, mut connection) = Client::new(opts, 8);
     let _ = client.publish(
-        format!("weatherdesk/{}/status", c.station),
+        format!("stormdesk/{}/status", c.station),
         QoS::AtLeastOnce,
         true,
         "online",

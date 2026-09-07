@@ -43,7 +43,7 @@ pub fn default_data_dir() -> PathBuf {
         return PathBuf::from(d);
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".local/share/io.github.davidmay87.weatherdesk")
+    PathBuf::from(home).join(".local/share/io.github.davidmay87.stormdesk")
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -52,7 +52,7 @@ pub fn default_config_dir() -> PathBuf {
         return PathBuf::from(d);
     }
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home).join(".config/io.github.davidmay87.weatherdesk")
+    PathBuf::from(home).join(".config/io.github.davidmay87.stormdesk")
 }
 
 /// Read one setting out of the config blob without a full settings type — the page owns that
@@ -105,7 +105,7 @@ pub fn start_services(data_dir: PathBuf, cfg_path: PathBuf) -> (std::sync::Arc<s
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn run_headless() {
     let (_state, port) = start_services(default_data_dir(), default_config_dir().join("config.json"));
-    println!("weatherdesk: http://{}:{}", server::lan_ip(), port);
+    println!("stormdesk: http://{}:{}", server::lan_ip(), port);
     loop {
         std::thread::sleep(std::time::Duration::from_secs(3600));
     }
@@ -128,7 +128,7 @@ pub fn run_browser() {
     let data = default_data_dir();
     let cfg = default_config_dir().join("config.json");
     let (_state, port) = start_services(data, cfg);
-    if !open_browser(port) { eprintln!("weatherdesk: browser could not be opened; use http://127.0.0.1:{port}"); }
+    if !open_browser(port) { eprintln!("stormdesk: browser could not be opened; use http://127.0.0.1:{port}"); }
     loop { std::thread::park(); }
 }
 

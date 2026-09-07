@@ -1,10 +1,10 @@
 blueprint:
-  name: WeatherDesk — severe weather alert to a critical push
+  name: StormDesk — severe weather alert to a critical push
   description: >-
-    Sends a critical notification to a phone when WeatherDesk publishes a severe
+    Sends a critical notification to a phone when StormDesk publishes a severe
     weather alert.
 
-    WeatherDesk writes the headline of the worst warning in force to its `alert`
+    StormDesk writes the headline of the worst warning in force to its `alert`
     sensor and clears it when nothing is out, so this fires on the transition
     into a warning rather than repeatedly while one is running.
 
@@ -13,11 +13,11 @@ blueprint:
     is for tornado-and-hurricane weather rather than for a windy afternoon —
     use the gust blueprint for that.
   domain: automation
-  source_url: https://github.com/d4vid87/weatherdesk/blob/main/blueprints/automation/weatherdesk/severe-alert-critical-push.yaml
+  source_url: https://github.com/d4vid87/stormdesk/blob/main/blueprints/automation/stormdesk/severe-alert-critical-push.yaml
   input:
     alert_sensor:
-      name: WeatherDesk alert sensor
-      description: The `alert` sensor on your WeatherDesk device.
+      name: StormDesk alert sensor
+      description: The `alert` sensor on your StormDesk device.
       selector:
         entity:
           domain: sensor

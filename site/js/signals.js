@@ -134,6 +134,8 @@ let ws = null, backoff = 1000, wantOpen = false, lastMsg = 0;
 function setWsState(txt, ok) {
   const el = $('ws-state');
   if (el) { el.textContent = txt; el.className = ok ? 'ok' : 'muted'; }
+  if ($('signal-feed')) $('signal-feed').textContent = ok ? 'Connected' : txt;
+  if ($('signal-feed-sub')) $('signal-feed-sub').textContent = ok ? 'Receiving rapid observations' : 'Waiting for live observations';
 }
 
 export function connectWs() {
@@ -186,6 +188,8 @@ export function renderRapid(mps, dir) {
   $('live-wind').textContent = num(v, 1);
   $('live-wind-unit').textContent = U.wind();
   $('live-dir').textContent = `${deg2compass(dir)} ${num(dir)}°`;
+  if ($('signal-wind')) $('signal-wind').textContent = `${num(v, 1)} ${U.wind()}`;
+  if ($('signal-wind-sub')) $('signal-wind-sub').textContent = `${deg2compass(dir)} ${num(dir)}°`;
   // Only a Tempest hub sends true 3-second wind. A polled brand's "rapid" packet is the
   // station's own 1-minute average resent every 10s; saying so beats implying a fast needle.
   $('live-rate').textContent = settings().stationSource ? '1-min avg · polled' : '3-second';
@@ -203,6 +207,8 @@ const esc = (s) => String(s ?? '').replace(/</g, '&lt;');
 export function onStrike([t, distKm]) {
   const dist = miles(distKm);
   $('live-strike').textContent = `Strike ${num(dist, 1)} ${U.dist()} away at ${new Date(t * 1000).toLocaleTimeString()}`;
+  if ($('signal-storm')) $('signal-storm').textContent = 'Lightning detected';
+  if ($('signal-storm-sub')) $('signal-storm-sub').textContent = `${num(dist, 1)} ${U.dist()} away`;
   if (!strikes.some((x) => x.t === t)) {
     strikes.unshift({ t, km: distKm });
     strikes.splice(200);
@@ -220,6 +226,10 @@ function renderStrikes() {
   if (!el) return;
   const cut = Date.now() / 1000 - 86400;
   const recent = strikes.filter((x) => x.t >= cut);
+  if ($('signal-storm') && !recent.length) {
+    $('signal-storm').textContent = 'Clear nearby';
+    $('signal-storm-sub').textContent = 'No recent lightning';
+  }
   el.innerHTML = recent.length
     ? recent.map((x) => `<div data-metric="strikes" role="button" tabindex="0"><span>${new Date(x.t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>`
       + `<span>${num(miles(x.km), 1)} ${U.dist()}</span></div>`).join('')
@@ -236,12 +246,62 @@ function renderNotifLog() {
     : '<div class="muted">Nothing yet</div>';
 }
 
+export function bestOutdoor(hours, imperial = settings().units !== 'metric', gustLimit = settings().windGustAlert) {
+  const heat = imperial ? 95 : 35;
+  return hours.reduce((best, hour) => {
+    const score = (hour.precip_probability || 0) / 30
+      + Math.max(0, (hour.air_temperature || 0) - heat) / 5
+      + (hour.wind_gust || 0) / Math.max(1, gustLimit);
+    return !best || score < best.score ? { hour, score } : best;
+  }, null);
+}
+
+function renderLocalForecast(fc) {
+  const hours = fc?.forecast?.hourly?.slice(0, 6) || [];
+  const box = $('signal-hours');
+  if (!box) return;
+  box.innerHTML = hours.length ? hours.map((h) => `<div class="signal-hour">
+    <time>${new Date(h.time * 1000).toLocaleTimeString([], { hour: 'numeric' })}</time>
+    <strong>${num(h.air_temperature)}°</strong><small class="rain">${num(h.precip_probability || 0)}% rain</small>
+    <small>gust ${num(h.wind_gust || 0)} ${U.wind()}</small></div>`).join('')
+    : '<span class="muted">Forecast is loading…</span>';
+  const best = bestOutdoor(hours);
+  $('outdoor-window').textContent = best
+    ? new Date(best.hour.time * 1000).toLocaleTimeString([], { hour: 'numeric' }) : 'Waiting';
+  $('outdoor-reason').textContent = best ? 'Lowest combined heat, rain, and wind risk in the next six hours.'
+    : 'A forecast is needed to compare the next six hours.';
+}
+
+function renderSignalSummary() {
+  if ($('signal-trend')) $('signal-trend').textContent = $('t-temp')?.textContent || 'Steady';
+  if ($('signal-trend-sub')) $('signal-trend-sub').textContent = $('t-press')?.textContent || 'Pressure steady';
+  document.querySelectorAll('[data-signal-watch]').forEach((button) => {
+    button.classList.toggle('on', settings().notif[button.dataset.signalWatch] !== false);
+    button.setAttribute('aria-pressed', String(settings().notif[button.dataset.signalWatch] !== false));
+  });
+}
+
+window.addEventListener('wd:forecast', (e) => renderLocalForecast(e.detail));
+window.addEventListener('wd:ws-obs', () => setTimeout(renderSignalSummary));
+
 // module level: initSignals re-runs on every settings save, and a listener per save adds up
 window.addEventListener('wd:notif', renderNotifLog);
 
 export function initSignals() {
   renderStrikes();
   renderNotifLog();
+  renderSignalSummary();
+  if (hasSource() && !$('signal-feed')?.textContent.includes('Connected')) {
+    $('signal-feed').textContent = 'Connected';
+    $('signal-feed-sub').textContent = 'Receiving station observations';
+  }
+  document.querySelectorAll('[data-signal-watch]').forEach((button) => {
+    button.onclick = () => {
+      const category = button.dataset.signalWatch;
+      saveSettings({ notif: { ...settings().notif, [category]: settings().notif[category] === false } });
+      renderSignalSummary();
+    };
+  });
   $('btn-add-station').onclick = () => {
     const raw = $('add-station-id').value.trim();
     // An airport code, for the parts of the country the radius scan reaches past — the NWS
@@ -285,4 +345,12 @@ export function initSignals() {
       if (wantOpen && lastMsg && Date.now() - lastMsg > 180000) connectWs();
     });
   }
+}
+
+if (location.search.includes('selftest')) {
+  const pick = bestOutdoor([
+    { time: 1, air_temperature: 102, precip_probability: 70, wind_gust: 35 },
+    { time: 2, air_temperature: 84, precip_probability: 10, wind_gust: 8 },
+  ], true, 30);
+  console.assert(pick.hour.time === 2, 'signals: outdoor window balances heat, rain, and wind');
 }

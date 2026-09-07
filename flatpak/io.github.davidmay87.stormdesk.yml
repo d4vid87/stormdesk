@@ -1,13 +1,13 @@
 # Flatpak build. Offline like every Flathub build: `cargo-sources.json` pins every crate by hash
 # and is regenerated with flatpak-builder-tools whenever Cargo.lock changes —
 #   flatpak-cargo-generator.py src-tauri/Cargo.lock -o flatpak/cargo-sources.json
-app-id: io.github.davidmay87.weatherdesk
+app-id: io.github.davidmay87.stormdesk
 runtime: org.gnome.Platform
 runtime-version: "47"
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-command: weatherdesk
+command: stormdesk
 finish-args:
   # The LAN server on 8088 and the hub's broadcasts on UDP 50222 are the whole point of the app.
   - --share=network
@@ -18,23 +18,23 @@ finish-args:
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   env:
-    CARGO_HOME: /run/build/weatherdesk/cargo
+    CARGO_HOME: /run/build/stormdesk/cargo
 modules:
-  - name: weatherdesk
+  - name: stormdesk
     buildsystem: simple
     build-options:
       env:
         # Offline: every dependency is already vendored by the generated sources below.
         CARGO_NET_OFFLINE: "true"
     build-commands:
-      - cargo --offline build --release --manifest-path src-tauri/Cargo.toml --bin weatherdesk
-      - install -Dm755 src-tauri/target/release/weatherdesk /app/bin/weatherdesk
-      - install -Dm644 site/icon-512.png /app/share/icons/hicolor/512x512/apps/io.github.davidmay87.weatherdesk.png
-      - install -Dm644 site/icon-192.png /app/share/icons/hicolor/192x192/apps/io.github.davidmay87.weatherdesk.png
-      - install -Dm644 flatpak/io.github.davidmay87.weatherdesk.desktop /app/share/applications/io.github.davidmay87.weatherdesk.desktop
-      - install -Dm644 flatpak/io.github.davidmay87.weatherdesk.metainfo.xml /app/share/metainfo/io.github.davidmay87.weatherdesk.metainfo.xml
+      - cargo --offline build --release --manifest-path src-tauri/Cargo.toml --bin stormdesk
+      - install -Dm755 src-tauri/target/release/stormdesk /app/bin/stormdesk
+      - install -Dm644 site/stormdesk-icon-512.png /app/share/icons/hicolor/512x512/apps/io.github.davidmay87.stormdesk.png
+      - install -Dm644 site/stormdesk-icon-192.png /app/share/icons/hicolor/192x192/apps/io.github.davidmay87.stormdesk.png
+      - install -Dm644 flatpak/io.github.davidmay87.stormdesk.desktop /app/share/applications/io.github.davidmay87.stormdesk.desktop
+      - install -Dm644 flatpak/io.github.davidmay87.stormdesk.metainfo.xml /app/share/metainfo/io.github.davidmay87.stormdesk.metainfo.xml
     sources:
       - type: git
-        url: https://github.com/d4vid87/weatherdesk.git
-        tag: v3.0.4
+        url: https://github.com/d4vid87/stormdesk.git
+        tag: v4.1.0
       - cargo-sources.json

@@ -45,6 +45,8 @@ const DEFAULTS = {
   // Look and feel. 'auto' theme follows the station's own sunrise/sunset, not the OS — a wall
   // panel in a dark hallway wants the room's light, not the laptop's setting.
   theme: 'dark', accent: '', fontScale: 1, density: 'normal', bigNumbers: false,
+  // The hero can lead with actionable weather or retain the older range/trend sentence.
+  heroSummary: 'conditions',
   // Kiosk: seconds per tab when cycling (0 = off), and dimming through the night window.
   kioskCycleSec: 0, nightDim: false,
   // Kiosk: header gone, layout locked, fullscreen, screen held awake. One switch because on a
@@ -74,7 +76,7 @@ const DEFAULTS = {
   // rude unprompted, and the desktop app already raises real ones through Tauri.
   webNotif: false,
   // Palette pack on top of the theme: '', 'oled', 'solarized', 'contrast', 'eink'.
-  palette: '',
+  palette: 'oled',
   // The LAN server's port. Empty means 8088. Desktop only, and a restart applies it.
   httpPort: '',
   // CWOP callsign to report to (empty = off). Not a secret: callsigns are public and the
@@ -247,27 +249,24 @@ export function notify({ id, category = 'info', title, body, severity = '', head
   // nothing makes a sound or reaches a phone. Severe weather is the exception it exists for.
   const quiet = inQuiet() && category !== 'severe';
   if (category !== 'info' && !quiet) push(entry);
-  const wrap = document.getElementById('notif-stack');
-  const el = document.createElement('div');
-  el.className = `notif notif-${category}`;
-  el.dataset.nid = id || '';
-  el.innerHTML = `<div class="notif-title"></div><div class="notif-body"></div><button class="notif-x">×</button>`;
-  el.querySelector('.notif-title').textContent = title;
-  el.querySelector('.notif-body').textContent = body || '';
-  el.querySelector('.notif-x').onclick = () => el.remove();
-  wrap.prepend(el);
-  if (document.documentElement.dataset.motion !== 'off') {
-    try { el.animate([{ opacity: 0, transform: 'translateX(24px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' }); }
-    catch { /* no WAAPI */ }
-  }
-  // A dashboard is left running for days, and nothing here ever took a banner down: an overnight
-  // run of forecast changes buried the screen. Severe alerts stay until dismissed by hand.
-  if (category !== 'severe') setTimeout(() => el.remove(), 30000);
-  // Cap the stack too — the oldest goes first, but never a severe one over a routine one.
-  while (wrap.children.length > 4) {
-    const drop = [...wrap.children].reverse().find((n) => !n.classList.contains('notif-severe'));
-    if (!drop) break;
-    drop.remove();
+  // Official weather alerts own a persistent banner in the hero (desk.js). Routine app notices
+  // still use the temporary corner stack.
+  if (category !== 'severe') {
+    const wrap = document.getElementById('notif-stack');
+    const el = document.createElement('div');
+    el.className = `notif notif-${category}`;
+    el.dataset.nid = id || '';
+    el.innerHTML = `<div class="notif-title"></div><div class="notif-body"></div><button class="notif-x">×</button>`;
+    el.querySelector('.notif-title').textContent = title;
+    el.querySelector('.notif-body').textContent = body || '';
+    el.querySelector('.notif-x').onclick = () => el.remove();
+    wrap.prepend(el);
+    if (document.documentElement.dataset.motion !== 'off') {
+      try { el.animate([{ opacity: 0, transform: 'translateX(24px)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'ease-out' }); }
+      catch { /* no WAAPI */ }
+    }
+    setTimeout(() => el.remove(), 30000);
+    while (wrap.children.length > 4) wrap.lastElementChild.remove();
   }
   if (quiet) return;
   chime();
