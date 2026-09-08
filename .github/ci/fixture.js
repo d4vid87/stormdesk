@@ -46,6 +46,29 @@ const fc = {
 
 addEventListener('load', () => {
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
+  // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
+  const details = document.getElementById('desk-details');
+  const pressureCard = document.querySelector('[data-panel="g-press"]');
+  console.assert(getComputedStyle(pressureCard).display === 'none', 'Desk starts with everyday readings');
+  details.click();
+  console.assert(details.getAttribute('aria-expanded') === 'true' && getComputedStyle(pressureCard).display !== 'none', 'Desk expands secondary readings');
+  details.click();
+  console.assert(details.getAttribute('aria-expanded') === 'false', 'Desk returns to overview');
+  const watch = (id) => document.getElementById(`watch-${id}`);
+  console.assert(watch('temp').textContent === '72°F', 'Storm watch temperature and units');
+  console.assert(watch('hours').children.length === 6, 'Storm watch next six hours');
+  console.assert(watch('lightning').textContent === 'No strikes detected', 'Storm watch reported zero strikes');
+  dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
+  console.assert(watch('temp').textContent === '--°F', 'Storm watch missing temperature');
+  console.assert(watch('lightning').textContent === 'Lightning data unavailable', 'Storm watch missing lightning');
+  dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
+  dispatchEvent(new CustomEvent('wd:alerts', { detail: [{ properties: {
+    event: '<b>Test advisory</b>', severity: 'Severe', description: '<img src=x onerror=alert(1)>',
+  } }] }));
+  console.assert(watch('alerts').querySelector('h3').textContent === '<b>Test advisory</b>' && !watch('alerts').querySelector('img'), 'Storm watch treats alert text as text');
+  console.assert(!!watch('alerts').querySelector('.severe details'), 'Storm watch severe alert details');
+  dispatchEvent(new CustomEvent('wd:alerts', { detail: [] }));
+  console.assert(watch('alerts').textContent === 'No active weather alerts', 'Storm watch clears expired alerts');
   // api.OBS order: time, temp, rh, press, ... — index by name off the module the page already
   // loaded rather than hard-coding a shape that moves.
   import('./js/api.js').then(({ OBS }) => {

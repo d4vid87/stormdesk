@@ -16,7 +16,10 @@ No StormDesk account. No subscription. No ads.
 [Visit the website](https://hookecho.io/stormdesk/) ·
 [Get help](https://github.com/d4vid87/stormdesk/issues)
 
-![A tour of the StormDesk dashboard, timeline, local weather, and radar](docs/stormdesk-hero.gif)
+![A tour of the redesigned StormDesk dashboard, timeline, local weather, history and radar](docs/stormdesk-hero.gif)
+
+Interface preview from the current source. Station readings in these images are labeled demo data;
+radar comes from HookEcho. Downloaded releases may precede this redesign.
 
 ## Install StormDesk
 
@@ -103,7 +106,25 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 - **Alerts** — built-in warnings plus your own rules for wind, rain, heat, cold, and more.
 - **Backup** — one complete backup file for your settings and weather history.
 
+## Screenshots
+
 ![StormDesk showing current conditions and the local forecast](docs/stormdesk-dashboard.png)
+
+| Storm watch | Weather timeline |
+| --- | --- |
+| ![Radar and local weather](docs/stormdesk-radar.png) | ![Grouped weather events](docs/stormdesk-timeline.png) |
+
+| Local signals | Weather history |
+| --- | --- |
+| ![Local outlook and notification controls](docs/stormdesk-signals.png) | ![Station history charts](docs/stormdesk-data.png) |
+
+<details><summary>Settings and phone layouts</summary>
+
+![Grouped settings](docs/stormdesk-settings.png)
+
+<img src="docs/stormdesk-dashboard-mobile.png" alt="StormDesk overview on a phone" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Storm watch on a phone" width="280">
+
+</details>
 
 ## Supported weather stations
 

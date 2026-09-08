@@ -17,7 +17,7 @@ const note = (id, msg) => { $(id).innerHTML = `<div class="muted">${msg}</div>`;
 
 export async function refreshBoards() {
   if (!configured() || !settings().deviceId) {
-    note('board-temp', 'Set a numeric device ID in settings to load history.');
+    note('data-history-status', 'Connect a station with a numeric device ID in Settings to explore its history.');
     return;
   }
   const end = Math.floor(Date.now() / 1000);
@@ -25,11 +25,12 @@ export async function refreshBoards() {
     const j = await api.deviceObs(settings().deviceId, end - 7 * DAY, end);
     history = j.obs || [];
   } catch (e) {
-    note('board-temp', `History unavailable: ${e.message}`);
+    note('data-history-status', `History unavailable: ${e.message}`);
     return;
   }
-  if (!history.length) { note('board-temp', 'No history returned for this device.'); return; }
+  if (!history.length) { note('data-history-status', 'No history returned for this device.'); return; }
 
+  $('data-history-status').textContent = '';
   drawTemp();
   drawRain();
   drawWind();
@@ -47,7 +48,7 @@ const pts = (idx, from = 0) =>
 
 function drawTemp() {
   // Clicking a point opens the same slide-over the gauges open, windowed on that moment.
-  chart($('c-temp'), [{ data: pts(I.temp), color: '#39ff88' }],
+  chart($('c-temp'), [{ data: pts(I.temp), color: '#43cfc3' }],
     { digits: 0, onPick: (p) => openDetail('temp', p.x) });
   $('board-temp').textContent = `7-day air temperature (${U.temp()})`;
 }
@@ -65,7 +66,7 @@ function dailyRain() {
 function drawRain() {
   const d = dailyRain();
   // The bars are whole days; noon is the middle of the window the detail panel will read.
-  chart($('c-rain'), [{ data: d, type: 'bar', color: '#39ff88' }],
+  chart($('c-rain'), [{ data: d, type: 'bar', color: '#43cfc3' }],
     { yMin: 0, digits: 2, onPick: (p) => openDetail('rain', p.x + 12 * 3600 * 1000) });
   const total = d.reduce((a, b) => a + b.y, 0);
   $('board-rain').textContent = `7-day rain — ${num(total, 2)} ${U.precip()} total`;
@@ -74,10 +75,10 @@ function drawRain() {
 function drawWind() {
   const from = Math.floor(Date.now() / 1000) - DAY;
   chart($('c-wind'), [
-    { data: pts(I.windGust, from), color: '#d8ff4f', name: 'gust' },
-    { data: pts(I.windAvg, from), color: '#39ff88', name: 'avg' },
+    { data: pts(I.windGust, from), color: '#eea64b', name: 'gust' },
+    { data: pts(I.windAvg, from), color: '#43cfc3', name: 'avg' },
   ], { yMin: 0, digits: 0, onPick: (p, name) => openDetail(name === 'avg' ? 'windAvg' : 'windGust', p.x) });
-  $('board-wind').textContent = `24h wind (${U.wind()}) — gust lime, average green`;
+  $('board-wind').textContent = `24h wind (${U.wind()}) — gust amber, average teal`;
 }
 
 // Where the wind actually comes from over the week: 16 sectors, petal length = share of samples,
@@ -152,20 +153,20 @@ function drawExtremes() {
 async function drawModels() {
   const m = await api.multiModel().catch(() => null);
   if (!m) return note('board-models', 'Open-Meteo unavailable.');
-  const colors = { gfs_seamless: '#45a7ff', ecmwf_ifs025: '#39ff88', icon_seamless: '#d8ff4f', gem_seamless: '#ff4d5a' };
+  const colors = { gfs_seamless: '#45a7ff', ecmwf_ifs025: '#43cfc3', icon_seamless: '#eea64b', gem_seamless: '#ff4d5a' };
   const series = api.MODELS.split(',').map((k) => ({
     color: colors[k],
     data: (m.hourly[`temperature_2m_${k}`] || []).map((y, i) => ({ x: new Date(m.hourly.time[i]).getTime(), y })),
   }));
   chart($('c-models'), series, { digits: 0, xFormat: (x) => new Date(x).toLocaleString([], { weekday: 'short', hour: 'numeric' }) });
   $('board-models').innerHTML = 'Model temps · <span style="color:#45a7ff">GFS</span> '
-    + '<span style="color:#39ff88">ECMWF</span> <span style="color:#d8ff4f">ICON</span> <span style="color:#ff4d5a">GEM</span>';
+    + '<span style="color:#43cfc3">ECMWF</span> <span style="color:#eea64b">ICON</span> <span style="color:#ff4d5a">GEM</span>';
 }
 
 function drawAccuracy() {
   const a = accuracy();
   chart($('c-accuracy'), [{
-    type: 'bar', color: '#39ff88',
+    type: 'bar', color: '#43cfc3',
     data: a.recent.map((v) => ({ x: v.targetHour * 1000, y: v.fTemp - v.obsTemp })),
   }], { digits: 1 });
   $('board-accuracy').textContent = a.n
@@ -205,7 +206,7 @@ async function drawOutlook() {
     // 'YYYY-MM-DD' parses as UTC midnight, which is the previous day west of Greenwich — noon
     // local is the same trick almanac.js uses.
     const data = j.daily.time.map((t, i) => ({ x: new Date(`${t}T12:00`).getTime(), y: j.daily.precipitation_sum[i] }));
-    chart($('c-qpf'), [{ data, type: 'bar', color: '#39ff88' }], { yMin: 0, digits: 2 });
+    chart($('c-qpf'), [{ data, type: 'bar', color: '#43cfc3' }], { yMin: 0, digits: 2 });
     const total = data.reduce((a, b) => a + (b.y || 0), 0);
     $('board-qpf').textContent = `7-day precip outlook — ${num(total, 2)} ${U.precip()} total`;
   } catch (e) {

@@ -1,3 +1,4 @@
+import './storm-watch.js';
 // Wire the shell: settings drawer, diagnostics, nav, section modules.
 import { settings, saveSettings, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
 import * as api from './api.js';
@@ -20,6 +21,12 @@ import { initTimeline, timelineSettings } from './timeline.js';
 import { applyMotion } from './motion.js';
 
 const $ = (id) => document.getElementById(id);
+
+$('desk-details').addEventListener('click', () => {
+  const expanded = $('desk').classList.toggle('desk-expanded');
+  $('desk-details').setAttribute('aria-expanded', String(expanded));
+  $('desk-details').textContent = expanded ? 'Back to overview −' : 'More weather details ＋';
+});
 
 // ---------- config sync ----------
 // The desktop app's LAN server keeps one settings+layout blob, so every browser in the house
@@ -141,7 +148,12 @@ function organizeSettings() {
   const existing = [...drawer.children].filter((el) => el !== title && el !== actions);
   const intro = document.createElement('p');
   intro.className = 'settings-intro';
-  intro.textContent = 'Everyday choices stay up front. Station credentials, integrations, backup, and repair live in Advanced.';
+  intro.textContent = 'Make StormDesk feel right for you.';
+  const close = document.createElement('button');
+  close.className = 'settings-close'; close.type = 'button'; close.textContent = '×';
+  close.setAttribute('aria-label', 'Close settings');
+  close.onclick = () => $('btn-close').click();
+  title.append(close);
   const tabs = document.createElement('div');
   tabs.id = 'settings-tabs'; tabs.className = 'settings-tabs'; tabs.setAttribute('role', 'tablist');
   tabs.innerHTML = '<button role="tab" data-settings-tab="basics" class="active">Basics</button>'
@@ -160,7 +172,7 @@ function organizeSettings() {
   const move = (id, panel) => {
     const control = $(id); if (!control) return;
     const wrapped = control.closest('label');
-    if (wrapped && panels.advanced.contains(wrapped)) { panel.append(wrapped); return; }
+    if (wrapped && drawer.contains(wrapped)) { panel.append(wrapped); return; }
     if (control.previousElementSibling?.tagName === 'LABEL') panel.append(control.previousElementSibling);
     panel.append(control);
   };
@@ -169,12 +181,43 @@ function organizeSettings() {
     .forEach((id) => move(id, panels.basics));
   ['set-theme', 'set-accent', 'set-palette', 'set-font', 'set-density', 'set-hero-summary',
     'set-big-numbers', 'set-eco', 'set-motion'].forEach((id) => move(id, panels.appearance));
+  for (const [name, ids] of [
+    ['Region & units', ['region-presets', 'set-units', 'set-wind-unit', 'set-clock']],
+    ['Radar & display', ['set-radar-site', 'set-desk-radar', 'set-storm-auto', 'set-night-dim']],
+    ['Sounds & notifications', ['set-speak', 'set-brief-time', 'set-web-notif']],
+  ]) {
+    const group = document.createElement('fieldset');
+    const legend = document.createElement('legend'); legend.textContent = name;
+    group.append(legend); panels.basics.append(group);
+    ids.forEach(id => move(id, group));
+  }
+  drawer.querySelectorAll('label').forEach(label => {
+    const control = label.nextElementSibling;
+    if (!label.querySelector('input, select') && control?.matches('input[id], select[id], textarea[id]')) label.htmlFor = control.id;
+  });
+  tabs.querySelectorAll('button').forEach(button => {
+    const name = button.dataset.settingsTab;
+    button.id = `settings-tab-${name}`;
+    button.setAttribute('aria-controls', panels[name].id);
+    button.setAttribute('aria-selected', String(name === 'basics'));
+    button.tabIndex = name === 'basics' ? 0 : -1;
+    panels[name].setAttribute('aria-labelledby', button.id);
+  });
+  tabs.addEventListener('keydown', event => {
+    const buttons = [...tabs.querySelectorAll('button')];
+    const index = buttons.indexOf(document.activeElement);
+    if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+    buttons[next].click(); buttons[next].focus();
+  });
   tabs.onclick = (event) => {
     const name = event.target.dataset.settingsTab; if (!name) return;
     Object.entries(panels).forEach(([key, panel]) => { panel.hidden = key !== name; });
     tabs.querySelectorAll('button').forEach((button) => {
       const on = button.dataset.settingsTab === name;
-      button.classList.toggle('active', on); button.setAttribute('aria-selected', String(on));
+      button.classList.toggle('active', on); button.setAttribute('aria-selected', String(on)); button.tabIndex = on ? 0 : -1;
     });
   };
 }
@@ -183,8 +226,8 @@ function fillDrawer() {
   organizeSettings();
   const s = settings();
   $('settings-status').innerHTML = hasSource()
-    ? '<strong>● Station connected</strong><small>Live readings and forecasts are configured</small>'
-    : '<strong class="warn">Setup needed</strong><small>Choose a station or location in Advanced</small>';
+    ? '<strong>Station configured</strong><small>Manage your connection in Advanced.</small>'
+    : '<strong>Let’s connect your weather</strong><small>Choose your station or location in Advanced.</small>';
   $('set-token').value = s.token;
   $('set-station').value = s.stationId;
   $('set-device').value = s.deviceId;
@@ -1312,7 +1355,7 @@ window.addEventListener('wd:storm', (e) => {
 window.addEventListener('wd:section', (e) => {
   const f = $('lab-frame');
   if (e.detail !== 'lab' || f.src) return;
-  f.src = radarUrl(8);
+  f.src = radarUrl(8, false);
 });
 
 // Inline radar strip on the Desk: embedded, so it holds one frame a minute until touched. A live

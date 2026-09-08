@@ -10,11 +10,11 @@ embedded here and centered on the station.
 
 If StormDesk is useful to you, please [give the project a star](https://github.com/d4vid87/stormdesk/stargazers).
 
-![StormDesk walkthrough showing the OLED Desk, event Timeline, Local Signals intelligence, and
-full-screen HookEcho radar](stormdesk-hero.gif)
+![StormDesk walkthrough showing the Desk, grouped Timeline, Local Signals, history charts, and
+HookEcho Storm watch, using labeled sample readings](stormdesk-hero.gif)
 
-![The streamlined StormDesk: alert crawl, animated sky hero, immediate conditions, expert metrics,
-four-day forecast rail, and the beginning of the 48-hour chart](stormdesk-dashboard.png)
+![The streamlined StormDesk: calm weather overview, immediate conditions,
+four-day forecast and a consolidated outlook](stormdesk-dashboard.png)
 
 ![StormDesk Radar using HookEcho's Dark Streets map with live reflectivity, warnings, and playback](stormdesk-radar.png)
 

@@ -299,7 +299,7 @@
   /* The grip and the resize handles are excluded on purpose: three id selectors outrank
      `.grip { position: absolute }`, so without this the furniture fell into the flow and the grip
      painted as a black chip over the clock. They carry their own z-index, above the canvas. */
-  #hero > *:not(#hero-fx):not(#hero-sky):not(#hero-orb):not(.grip):not(.rz) { position: relative; z-index: 1; }
+  #hero > :where(:not(#hero-fx):not(#hero-sky):not(#hero-orb):not(.grip):not(.rz)) { position: relative; z-index: 1; }
   #hero { padding: 16px 20px 20px; color: var(--hero-text, #fff); overflow: hidden; border-radius: 12px;
     background: linear-gradient(160deg, var(--sky-a, #1f6fb8), var(--sky-b, #7fb6e6)); }
   /* The live sky: two stacked layers so a colour change crossfades instead of snapping, and one
@@ -893,6 +893,8 @@
     #signals-grid > .card{grid-column:1/-1 !important} }
   @media(max-width:720px) { body:not(.days-all) #daycards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>
+<link rel="stylesheet" href="storm-watch.css">
+<link rel="stylesheet" href="desk-overview.css">
 </head>
 <body>
 <header>
@@ -916,7 +918,7 @@
       <button class="iconbtn" id="btn-kiosk" title="Kiosk mode">🖥</button>
     </div>
   </details>
-  <button class="iconbtn" id="btn-settings">⚙</button>
+  <button class="iconbtn" id="btn-settings" aria-label="Settings">⚙<span class="settings-label">Settings</span></button>
 </header>
 
 <main>
@@ -978,6 +980,10 @@
 </div>
 
   <section class="page" id="desk">
+    <div class="desk-heading">
+      <div><p class="desk-eyebrow">YOUR DAILY OUTLOOK</p><h2>Weather at a glance</h2></div>
+      <button id="desk-details" aria-expanded="false" aria-controls="desk-stack">More weather details <span aria-hidden="true">＋</span></button>
+    </div>
     <div id="desk-stack">
     <div id="hero" data-panel="hero">
       <div id="hero-sky"><div class="sky-l"></div><div class="sky-l"></div></div>
@@ -1010,9 +1016,7 @@
 
     <div id="ticker" data-panel="ticker"><div id="ticker-track"></div><span id="src-health"></span><button id="ticker-pause">❚❚</button></div>
 
-    <div class="card" id="timeline-peek" data-panel="timeline-peek">
-      <h2>What happens next</h2><div id="timeline-strip" class="timeline-strip"></div>
-    </div>
+
 
     <div id="ha-panel" data-panel="ha" style="display:none">
       <h2 id="ha-stamp">Home Assistant<span id="mqtt-state" class="muted" style="float:right;font-size:12px"></span></h2>
@@ -1026,12 +1030,16 @@
       <div id="desk-radar-caption" class="muted" hidden>Still image · 5 min · tap for the live map</div>
     </div>
 
-        <div id="trends" data-panel="trends">
-          <div><h3>Station vs model</h3><div id="t-model" class="warm">--</div><div id="t-model-sub" class="muted"></div></div>
-          <div><h3>Temperature trend</h3><div id="t-temp">--</div><div class="muted">Tempest last 3h</div></div>
-          <div><h3>Pressure trend</h3><div id="t-press">--</div><div class="muted">Tempest last 3h</div></div>
-        </div>
 
+
+
+
+    <div id="daycards" data-panel="daycards"></div>
+    <button id="daycards-toggle">Show all 6 days</button>
+    <section id="desk-outlook" aria-labelledby="outlook-title">
+      <div class="outlook-heading"><div><h2 id="outlook-title">Your outlook</h2><p>The next 48 hours, at a glance.</p></div>
+        <label for="outlook-metric">Show <select id="outlook-metric"><option value="temp">Temperature</option><option value="rain">Rain chance</option><option value="wind">Wind</option></select></label>
+      </div>
         <div id="c48" data-panel="c48">
           <div id="c48-summary"></div>
           <div id="c48-rows">
@@ -1040,24 +1048,13 @@
             <div class="c48-row"><span class="c48-lab wind">Wind <i id="c48-wunit"></i></span><div id="c48-wind" class="c48-plot"></div></div>
             <div class="c48-row"><span class="c48-lab"></span><div id="c48-axis" class="c48-plot"></div></div>
           </div>
-        </div>
-
-    <div id="daycards" data-panel="daycards"></div>
-    <button id="daycards-toggle">Show all 6 days</button>
-
-    <div id="gauges" data-panel="gauges">
-      <div class="gauge" data-panel="g-wind" data-metric="windAvg"><h3>Wind</h3><div id="g-wind"></div></div>
-      <div class="gauge" data-panel="g-rain" data-metric="rain"><h3>Rain</h3><div id="g-rain"></div></div>
-      <div class="gauge" data-panel="g-hum" data-metric="rh"><h3>Humidity</h3><div id="g-hum"></div></div>
-      <div class="gauge" data-panel="g-press" data-metric="press"><h3>Pressure</h3><div id="g-press"></div></div>
-      <div class="gauge" data-panel="g-dew"><h3>Dew point</h3><div id="g-dew"></div></div>
-      <div class="gauge" data-panel="g-uv" data-metric="uv"><h3>UV / solar</h3><div id="g-uv"></div></div>
-      <div class="gauge" data-panel="g-ltg" data-metric="strikes"><h3>Lightning</h3><div id="g-ltg"></div></div>
-      <div class="gauge" data-panel="g-wet"><h3>Wet bulb</h3><div id="g-wet"></div></div>
-      <div class="gauge" data-panel="g-wbgt"><h3 title="Estimated from temperature, humidity and solar — not a measured WBGT">WBGT</h3><div id="g-wbgt"></div></div>
-    </div>
-
-    <div class="grid" id="desk-grid" data-panel="desk-grid">
+        </div>    <div class="card" id="timeline-peek" data-panel="timeline-peek">
+      <h2>What happens next</h2><div id="timeline-strip" class="timeline-strip"></div>
+    </div><details class="outlook-comparison"><summary>Station &amp; forecast comparison</summary>        <div id="trends" data-panel="trends">
+          <div><h3>Station vs model</h3><div id="t-model" class="warm">--</div><div id="t-model-sub" class="muted"></div></div>
+          <div><h3>Temperature trend</h3><div id="t-temp">--</div><div class="muted">Tempest last 3h</div></div>
+          <div><h3>Pressure trend</h3><div id="t-press">--</div><div class="muted">Tempest last 3h</div></div>
+        </div></details>    <div class="grid" id="desk-grid" data-panel="desk-grid">
       <div class="card" data-panel="tenday"><h2>10-day</h2><div id="tenday"></div></div>
       <details class="card" data-panel="alerts"><summary><h2>Alert center</h2></summary><div id="alerts" class="muted">--</div></details>
       <div class="card" data-panel="story" style="grid-column: span 2">
@@ -1114,13 +1111,29 @@
         <div id="nearby-table"></div>
       </details>
     </div>
+    </section>
+
+
+    <div id="gauges" data-panel="gauges">
+      <div class="gauge" data-panel="g-wind" data-metric="windAvg"><h3>Wind</h3><div id="g-wind"></div></div>
+      <div class="gauge" data-panel="g-rain" data-metric="rain"><h3>Rain</h3><div id="g-rain"></div></div>
+      <div class="gauge" data-panel="g-hum" data-metric="rh"><h3>Humidity</h3><div id="g-hum"></div></div>
+      <div class="gauge" data-panel="g-press" data-metric="press"><h3>Pressure</h3><div id="g-press"></div></div>
+      <div class="gauge" data-panel="g-dew"><h3>Dew point</h3><div id="g-dew"></div></div>
+      <div class="gauge" data-panel="g-uv" data-metric="uv"><h3>UV / solar</h3><div id="g-uv"></div></div>
+      <div class="gauge" data-panel="g-ltg" data-metric="strikes"><h3>Lightning</h3><div id="g-ltg"></div></div>
+      <div class="gauge" data-panel="g-wet"><h3>Wet bulb</h3><div id="g-wet"></div></div>
+      <div class="gauge" data-panel="g-wbgt"><h3 title="Estimated from temperature, humidity and solar — not a measured WBGT">WBGT</h3><div id="g-wbgt"></div></div>
+    </div>
+
+
     </div>
   </section>
 
   <!-- ponytail: Radar is the existing weathermap app in an iframe (radar loop, satellite,
        lightning, SPC, alerts already work there). Inline it into map.js only if the two need shared state. -->
   <section class="page" id="timeline" aria-labelledby="timeline-title">
-    <h2 id="timeline-title">Weather timeline</h2>
+    <div class="timeline-heading"><p class="desk-eyebrow">PLAN YOUR DAY</p><h2 id="timeline-title">Your weather timeline</h2><p>What’s passed, what’s happening, and what comes next.</p></div>
     <div id="timeline-range" class="muted"></div>
     <div id="timeline-axis" aria-hidden="true"><span class="observed"></span><span class="forecast"></span></div>
     <div id="timeline-filters" aria-label="Filter timeline">
@@ -1132,28 +1145,58 @@
     </div>
     <div id="timeline-list" aria-live="polite"></div>
   </section>
-  <section class="page" id="lab" style="padding:0"><iframe id="lab-frame" title="Radar"></iframe></section>
+  <section class="page" id="lab" aria-label="Storm watch">
+    <div class="watch-heading"><h2>Storm watch</h2><span id="watch-location">Home station</span><span id="watch-updated">Waiting for weather data</span></div>
+    <div class="watch-grid">
+      <div class="watch-map-column">
+        <div class="watch-map"><iframe id="lab-frame" title="Interactive HookEcho weather radar" allow="fullscreen"></iframe></div>
+        <div class="watch-card watch-strip" aria-label="Weather summary">
+          <div><small>Wind</small><strong id="watch-summary-wind">—</strong></div>
+          <div><small>Rain today</small><strong id="watch-summary-rain">—</strong></div>
+          <div><small>Pressure · sea level</small><strong id="watch-summary-pressure">—</strong></div>
+        </div>
+      </div>
+      <aside class="watch-rail" aria-label="Local weather">
+        <div class="watch-card">
+          <h3 id="watch-station">Home station</h3>
+          <div class="watch-current"><span id="watch-icon"></span><strong id="watch-temp">—</strong><div><b id="watch-condition">Waiting for data</b><span id="watch-feels">Feels like —</span></div></div>
+          <p id="watch-range">High — · Low —</p>
+          <div class="watch-observations">
+            <div class="watch-wind"><small>Wind</small><div class="watch-compass"><span id="watch-direction">—</span><strong id="watch-wind">—</strong><span id="watch-wind-unit"></span><i id="watch-needle" hidden></i></div><span id="watch-gust">Gusts —</span></div>
+            <div class="watch-stat"><small>Dew point</small><strong id="watch-dew">—</strong></div>
+            <div class="watch-stat"><small>Humidity</small><strong id="watch-humidity">—</strong></div>
+            <div class="watch-stat"><small>Pressure</small><strong id="watch-pressure">—</strong></div>
+            <div class="watch-stat"><small>Rain today</small><strong id="watch-rain">—</strong></div>
+            <div class="watch-stat watch-uv"><small>UV index</small><strong id="watch-uv">—</strong></div>
+          </div>
+        </div>
+        <div id="watch-alerts" aria-label="Weather alerts"><div class="watch-card watch-muted">Waiting for weather alerts</div></div>
+        <div class="watch-card"><h3>Next 6 hours</h3><div id="watch-hours" class="watch-hours"><p class="watch-muted">Hourly forecast unavailable</p></div></div>
+        <div class="watch-card"><h3>Lightning <small>Last 3 hours</small></h3><p id="watch-lightning">Lightning data unavailable</p><div class="watch-source">Station readings and forecast data</div></div>
+      </aside>
+    </div>
+  </section>
   <section class="page" id="signals">
     <div class="grid" id="signals-grid">
-      <div class="signals-intro"><h2>Local now</h2><span>Street-level changes from your station and nearby sensors</span></div>
+      <div class="signals-intro"><p class="desk-eyebrow">CLOSER TO HOME</p><h2>Local signals</h2><span>Your nearby conditions, outdoor outlook, and personal alerts.</span></div>
       <div class="signal-overview">
-        <div class="signal-card live"><small>Live feed</small><strong id="signal-feed">Waiting</strong><span id="signal-feed-sub">Connecting to observations</span></div>
+        <div class="signal-card"><small>Live feed</small><strong id="signal-feed">Waiting</strong><span id="signal-feed-sub">Connecting to observations</span></div>
         <div class="signal-card"><small>Wind now</small><strong id="signal-wind">—</strong><span id="signal-wind-sub">Waiting for direction</span></div>
         <div class="signal-card"><small>Atmosphere trend</small><strong id="signal-trend">Steady</strong><span id="signal-trend-sub">Temperature and pressure</span></div>
-        <div class="signal-card"><small>Storm proximity</small><strong id="signal-storm">Clear nearby</strong><span id="signal-storm-sub">No recent lightning</span></div>
+        <div class="signal-card"><small>Lightning reports</small><strong id="signal-storm">No reports yet</strong><span id="signal-storm-sub">Waiting for station reports</span></div>
       </div>
       <div class="local-decisions">
-        <section class="local-panel"><h3>Next 6 hours</h3><p>Your station now, blended with the short-range forecast</p><div class="signal-hours" id="signal-hours"></div></section>
-        <section class="local-panel"><h3>Best outdoor window</h3><p>Balances heat, rain, and wind</p><div id="outdoor-window">Checking…</div><div id="outdoor-reason"></div></section>
-        <section class="local-panel"><h3>Quick alerts</h3><p>Choose which local changes should notify you</p><div class="signal-watch-list">
+        <section class="local-panel local-hours"><h3>Next 6 hours</h3><p>An hourly look at temperature, rain, and wind</p><div class="signal-hours" id="signal-hours"></div></section>
+        <section class="local-panel local-outdoor"><h3>Best outdoor window</h3><p>Balances heat, rain, and wind</p><div id="outdoor-window">Checking…</div><div id="outdoor-reason"></div></section>
+        <section class="local-panel local-alerts"><h3>Your alerts</h3><p>Choose which local changes should notify you</p><div class="signal-watch-list">
           <button class="signal-watch" data-signal-watch="precip">Rain begins</button>
           <button class="signal-watch" data-signal-watch="lightning">Lightning nearby</button>
           <button class="signal-watch" data-signal-watch="wind">Strong gusts</button>
         </div></section>
       </div>
       <div class="signals-raw">Sensors, neighbors &amp; recent alerts</div>
-      <div class="card" data-panel="sig-live-wind-websocket">
-        <h2>Live wind · websocket</h2>
+      <details class="card" data-panel="sig-live-wind-websocket">
+        <summary><h2>Live readings & connection</h2></summary>
         <div class="live-wind-wrap">
           <div class="compass"><i id="live-needle"></i></div>
           <div>
@@ -1166,12 +1209,12 @@
         <div id="live-strike" class="muted" style="font-size:12px"></div>
         <h3 style="font-size:13px;margin:12px 0 4px">Strikes · 24h</h3>
         <div id="strike-log" class="kv-rows"></div>
-      </div>
+      </details>
 
-      <div class="card" data-panel="sig-nearby-stations" style="grid-column: span 2">
-        <h2>Nearby stations</h2>
+      <details class="card" data-panel="sig-nearby-stations" style="grid-column: span 2">
+        <summary><h2>Nearby stations</h2></summary>
         <div class="row" style="margin:0 0 8px">
-          <input id="add-station-id" placeholder="public station ID, or an airport code like KBDL">
+          <input id="add-station-id" aria-label="Public station ID or airport code" placeholder="Station ID or airport code, e.g. KBDL">
           <button id="btn-add-station" style="flex:0 0 auto">Add</button>
           <button id="btn-nearby-reset" style="flex:0 0 auto">Reset dismissed</button>
         </div>
@@ -1180,35 +1223,36 @@
           tempestwx.com/map and paste its station number. A station whose owner hasn't shared it
           publicly can't be read with your token; airport codes always work.</p>
         <div id="signals-table"></div>
-      </div>
+      </details>
 
-      <div class="card" data-panel="sig-notification-history" style="grid-column: span 3">
-        <h2>Notification history</h2>
+      <details class="card" data-panel="sig-notification-history" style="grid-column: span 3">
+        <summary><h2>Notification history</h2></summary>
         <div id="notif-log" class="kv-rows"></div>
-      </div>
+      </details>
     </div>
   </section>
   <section class="page" id="data">
+    <div class="data-heading"><p class="desk-eyebrow">THE BIGGER PICTURE</p><h2>Your weather, over time</h2><p>Explore station trends, compare forecasts, and look back through your archive.</p><div id="data-history-status" role="status"></div></div>
     <div class="grid" id="data-grid">
-      <div class="card" data-panel="data-temperature"><h2 id="board-temp">Temperature</h2><canvas id="c-temp" class="chart"></canvas></div>
-      <div class="card" data-panel="data-rain"><h2 id="board-rain">Rain</h2><canvas id="c-rain" class="chart"></canvas></div>
-      <div class="card" data-panel="data-wind"><h2 id="board-wind">Wind</h2><canvas id="c-wind" class="chart"></canvas></div>
+      <div class="card" data-panel="data-temperature"><h2 id="board-temp">Temperature</h2><canvas id="c-temp" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
+      <div class="card" data-panel="data-rain"><h2 id="board-rain">Rain</h2><canvas id="c-rain" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
+      <div class="card" data-panel="data-wind"><h2 id="board-wind">Wind</h2><canvas id="c-wind" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
       <div class="card" data-panel="data-wind-rose"><h2 id="board-rose">Wind rose</h2><canvas id="c-rose" class="chart"></canvas></div>
-      <div class="card" data-panel="data-pressure"><h2 id="board-press">Pressure</h2><canvas id="c-press" class="chart"></canvas></div>
+      <div class="card" data-panel="data-pressure"><h2 id="board-press">Pressure</h2><canvas id="c-press" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
       <div class="card" data-panel="data-records-7-days"><h2>Records · 7 days</h2><div id="extremes" class="kv-rows"></div></div>
-      <div class="card" data-panel="data-model-comparison" style="grid-column: span 2"><h2 id="board-models">Model comparison</h2><canvas id="c-models" class="chart"></canvas></div>
-      <div class="card" data-panel="data-forecast-accuracy"><h2 id="board-accuracy">Forecast accuracy</h2><canvas id="c-accuracy" class="chart"></canvas></div>
-      <div class="card" data-panel="data-nws-vs-tempest"><h2>NWS vs Tempest</h2><div id="official" class="kv-rows"></div></div>
-      <div class="card" data-panel="data-precip-outlook"><h2 id="board-qpf">Precip outlook</h2><canvas id="c-qpf" class="chart"></canvas></div>
-      <div class="card" data-panel="data-garden"><h2>Garden</h2><div id="garden" class="kv-rows"></div></div>
-      <div class="card" data-panel="data-almanac-all-time"><h2>Almanac · all time</h2><div id="almanac" class="kv-rows"></div></div>
-      <div class="card" data-panel="data-month-by-month"><h2 id="board-monthly">Month by month</h2><canvas id="c-monthly" class="chart"></canvas></div>
-      <div class="card" data-panel="data-explore-the-archive" style="grid-column: span 2">
-        <h2>Explore the archive</h2>
+      <details class="card" data-panel="data-model-comparison" style="grid-column: span 2"><summary><h2 id="board-models">Model comparison</h2></summary><canvas id="c-models" class="chart"></canvas></details>
+      <details class="card" data-panel="data-forecast-accuracy"><summary><h2 id="board-accuracy">Forecast accuracy</h2></summary><canvas id="c-accuracy" class="chart"></canvas></details>
+      <details class="card" data-panel="data-nws-vs-tempest"><summary><h2>NWS vs Tempest</h2></summary><div id="official" class="kv-rows"></div></details>
+      <details class="card" data-panel="data-precip-outlook"><summary><h2 id="board-qpf">Precip outlook</h2></summary><canvas id="c-qpf" class="chart"></canvas></details>
+      <details class="card" data-panel="data-garden"><summary><h2>Garden</h2></summary><div id="garden" class="kv-rows"></div></details>
+      <details class="card" data-panel="data-almanac-all-time"><summary><h2>Almanac · all time</h2></summary><div id="almanac" class="kv-rows"></div></details>
+      <details class="card" data-panel="data-month-by-month"><summary><h2 id="board-monthly">Month by month</h2></summary><canvas id="c-monthly" class="chart"></canvas></details>
+      <details class="card" data-panel="data-explore-the-archive" style="grid-column: span 2">
+        <summary><h2>Explore the archive</h2></summary>
         <div class="row" style="margin-top:0">
           <input id="ex-from" type="date" aria-label="From date" style="flex:1">
           <input id="ex-to" type="date" aria-label="To date" style="flex:1">
-          <select id="ex-metric" style="flex:1">
+          <select aria-label="Archive measurement" id="ex-metric" style="flex:1">
             <option value="tempMax">High temperature</option>
             <option value="tempMin">Low temperature</option>
             <option value="gustMax">Peak gust</option>
@@ -1218,7 +1262,7 @@
           <button id="btn-explore" style="flex:0 0 auto">Show</button>
         </div>
         <canvas id="c-explore" class="chart"></canvas>
-        <div id="ex-summary" class="muted" style="font-size:13px"></div>
+        <div id="ex-summary" class="muted" style="font-size:13px"></details>
       </div>
     </div>
   </section>
@@ -1412,7 +1456,7 @@
       </div>
     </section>
     <div class="row" id="drawer-actions">
-      <button class="primary" id="btn-save">Save</button>
+      <button class="primary" id="btn-save">Save changes</button>
       <button id="btn-diag">Diagnostics</button>
       <button id="btn-close">Close</button>
     </div>

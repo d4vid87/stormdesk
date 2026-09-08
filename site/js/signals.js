@@ -227,8 +227,8 @@ function renderStrikes() {
   const cut = Date.now() / 1000 - 86400;
   const recent = strikes.filter((x) => x.t >= cut);
   if ($('signal-storm') && !recent.length) {
-    $('signal-storm').textContent = 'Clear nearby';
-    $('signal-storm-sub').textContent = 'No recent lightning';
+    $('signal-storm').textContent = 'No reports logged';
+    $('signal-storm-sub').textContent = 'No recent station strike reports';
   }
   el.innerHTML = recent.length
     ? recent.map((x) => `<div data-metric="strikes" role="button" tabindex="0"><span>${new Date(x.t * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>`

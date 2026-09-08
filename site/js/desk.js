@@ -50,10 +50,11 @@ export function renderHeroAlerts(feats) {
   if (!feats.length) return;
   const rank = { Extreme: 3, Severe: 2, Moderate: 1, Minor: 0 };
   const sorted = feats.slice().sort((a, b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
+  box.dataset.severity = sorted[0]?.properties?.severity || '';
   const text = sorted.map((f) => {
     const a = f.properties || {};
     const about = a.headline || (a.description || '').split('\n').find(Boolean) || a.areaDesc || '';
-    return `${a.event || 'Weather alert'} — ${about}`;
+    return about.includes(a.event) ? about : `${a.event || 'Weather alert'} — ${about}`;
   }).join('  •  ');
   const track = document.createElement('div');
   track.className = 'hero-alert-track';
@@ -137,6 +138,7 @@ export async function refreshAlerts() {
   const j = await api.alerts();
   const feats = j.features || [];
   renderHeroAlerts(feats);
+  window.dispatchEvent(new CustomEvent('wd:alerts', { detail: feats }));
   $('alerts').innerHTML = feats.length
     ? feats.map((f) => {
         const p = f.properties;

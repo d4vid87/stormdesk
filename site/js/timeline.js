@@ -161,9 +161,9 @@ function eventMetric(e) {
 
 function card(e, compact = false) {
   const when = e.end - e.start > HOUR ? `${stamp(e.start)}–${stamp(e.end)}` : stamp(e.start);
-  return `<article class="tl-event sev-${esc(e.severity)}" tabindex="0" data-event="${esc(e.id)}" aria-label="${esc(`${e.title}, ${when}`)}">
+  return `<article class="tl-event sev-${esc(e.severity)}" ${compact || (e.observed && eventMetric(e)) ? 'tabindex="0"' : ''} data-event="${esc(e.id)}" aria-label="${esc(`${e.title}, ${when}`)}">
     <div class="tl-when">${esc(when)}</div><b>${esc(e.title)}</b><span>${esc(e.summary)}</span>
-    ${compact ? '' : `<details><summary>${esc(e.confidence)} confidence</summary><p>${esc(e.confidenceReason)}</p>${e.modelDetail ? `<p class="muted">${esc(e.modelDetail)}</p>` : ''}<p class="muted">Source: ${esc(e.source)}</p></details>`}
+    ${compact ? '' : `<details><summary>${esc(e.confidence === 'Official' ? 'Official alert · source details' : e.confidence === 'Observed' ? 'Station observation · details' : e.confidence === 'Unavailable' ? 'About this forecast' : `${e.confidence} confidence · details`)}</summary><p>${esc(e.confidenceReason)}</p>${e.modelDetail ? `<p class="muted">${esc(e.modelDetail)}</p>` : ''}<p class="muted">Source: ${esc(e.source)}</p></details>`}
   </article>`;
 }
 
@@ -174,7 +174,16 @@ function render() {
   if (strip) strip.innerHTML = future.length ? future.map((e) => card(e, true)).join('') : '<div class="muted">Quiet weather in the next 48 hours</div>';
   const list = $('timeline-list');
   const shown = filter === 'all' ? events : events.filter((e) => e.kind === filter);
-  if (list) list.innerHTML = shown.length ? shown.map((e) => card(e)).join('') : '<div class="muted">No matching timeline events</div>';
+  if (list) {
+    const groups = [
+      ['Earlier', shown.filter(e => e.end < now)],
+      ['Happening now', shown.filter(e => e.start <= now && e.end >= now)],
+      ['Coming up', shown.filter(e => e.start > now)],
+    ];
+    list.innerHTML = shown.length ? groups.filter(([, items]) => items.length).map(([title, items]) =>
+      `<section class="tl-group" aria-label="${title}"><h3>${title}<span>${items.length} ${items.length === 1 ? 'event' : 'events'}</span></h3><div>${items.map(e => card(e)).join('')}</div></section>`
+    ).join('') : '<div class="tl-empty"><h3>No matching events</h3><p>Try another category to explore your weather timeline.</p></div>';
+  }
   const range = $('timeline-range');
   if (range) range.textContent = 'Past 24 hours  ·  NOW  ·  Next 48 hours';
 }
@@ -192,27 +201,29 @@ async function refresh() {
 }
 
 function activate(e) {
+  if (e.target.closest?.('details, button, a, input, select')) return;
   const el = e.target.closest?.('[data-event]');
   if (!el) return;
   const item = events.find((x) => x.id === el.dataset.event);
   const metric = item && eventMetric(item);
   if (metric && item.observed) openDetail(metric, item.start * 1000);
-  else document.querySelector('.tab[data-section="timeline"]')?.click();
+  else if (el.closest('#timeline-strip')) document.querySelector('.tab[data-section="timeline"]')?.click();
 }
 document.addEventListener('click', activate);
 document.addEventListener('click', (e) => {
   const b = e.target.closest?.('[data-tl-filter]');
   if (!b) return;
   filter = b.dataset.tlFilter;
-  document.querySelectorAll('[data-tl-filter]').forEach((x) => x.classList.toggle('active', x === b));
+  document.querySelectorAll('[data-tl-filter]').forEach((x) => { x.classList.toggle('active', x === b); x.setAttribute('aria-pressed', String(x === b)); });
   render();
 });
-document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest?.('[data-event]')) { e.preventDefault(); activate(e); } });
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-event][tabindex]')) { e.preventDefault(); activate(e); } });
 window.addEventListener('wd:forecast', refresh);
 window.addEventListener('wd:models', (e) => { models = e.detail; refresh(); });
 window.addEventListener('wd:settings', () => { if (deskForecast()) refresh(); });
 
 export function initTimeline() {
+  document.querySelectorAll('[data-tl-filter]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tlFilter === filter)));
   every('timeline', 900, refresh);
 }
 
@@ -233,6 +244,19 @@ if (location.search.includes('selftest')) {
     { time: 13_600, precip_probability: 50, conditions: 'Rain' },
   ], daily: [] } };
   const built = buildTimeline({ forecast: fc, now: 9_000, prefs: { ...timelineSettings(), categories: ['precip'] } });
+  const saved = events;
+  events = built;
+  render();
+  console.assert($('timeline-list').querySelector('.tl-group h3')?.textContent.startsWith('Earlier'),
+    'timeline: events grouped by time');
+  const summary = $('timeline-list').querySelector('summary');
+  const beforeHash = location.hash;
+  activate({ target: summary });
+  console.assert(location.hash === beforeHash, 'timeline: source details do not navigate');
+  console.assert(!/tabindex/.test(card(built[0])) && /tabindex/.test(card(built[0], true)),
+    'timeline: only actionable cards receive keyboard focus');
+  events = saved;
+  render();
   console.assert(built.length === 1 && built[0].start === 10_000 && built[0].end === 17_200,
     'timeline: threshold hours become one stable window');
 }
