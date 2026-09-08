@@ -106,6 +106,12 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 - **Alerts** — built-in warnings plus your own rules for wind, rain, heat, cold, and more.
 - **Backup** — one complete backup file for your settings and weather history.
 
+## On Android
+
+<img src="docs/stormdesk-android.gif" alt="StormDesk conditions and rain history recorded on an Android phone" width="320">
+
+Recorded on a Samsung Galaxy S24 Ultra. [Watch both phone demos](https://hookecho.io/#android).
+
 ## Screenshots
 
 ![StormDesk showing current conditions and the local forecast](docs/stormdesk-dashboard.png)
