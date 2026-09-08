@@ -8,6 +8,9 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+### Fixed
+- Fixed the embedded radar repeatedly zooming back out during zoom-in gestures. HookEcho now distinguishes its own saved URL updates from incoming navigation, preventing an older camera position from being reapplied. The shared viewer update is delivered through `hookecho.pages.dev`; see [HookEcho #320](https://github.com/d4vid87/hookecho/pull/320).
+
 ## [4.2.0] - 2026-09-07
 
 ### Changed
