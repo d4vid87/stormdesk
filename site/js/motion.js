@@ -1,3 +1,4 @@
+import { safeMode } from './compat.js';
 // Motion: the one place that decides how much the dashboard is allowed to move, and the handful
 // of primitives every panel animates through.
 //
@@ -14,6 +15,7 @@ import { settings, ecoOn, num } from './app.js';
 const REDUCED = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 
 export function motionLevel() {
+  if (safeMode()) return 'off';
   const q = new URLSearchParams(location.search).get('motion');
   if (q === 'full' || q === 'lite' || q === 'off') return q;
   // Someone who asked the OS for less motion, or picked the e-ink palette (a screen that redraws
