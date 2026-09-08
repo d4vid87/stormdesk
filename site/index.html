@@ -9,8 +9,8 @@
      origin — see shouldRegisterSW() in js/boot.js. The weather itself is never cached there;
      desk.js keeps the last good forecast and obs and marks them stale. -->
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="stormdesk-favicon-32.png" sizes="32x32" type="image/png">
-<link rel="apple-touch-icon" href="stormdesk-icon-192.png">
+<link rel="icon" href="stormdesk-favicon-32.png?v=20260907" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="stormdesk-icon-192.png?v=20260907">
 <title>StormDesk</title>
 <!-- The display face the numbers are set in. Bundled, not fetched from a CDN: a wall panel on a
      LAN with no route out still has to render. -->
@@ -898,7 +898,7 @@
 </head>
 <body>
 <header>
-  <img id="brand" src="stormdesk-icon-512.png" alt="StormDesk">
+  <img id="brand" src="stormdesk-icon-512.png?v=20260907" alt="StormDesk">
   <h1>STORMDESK</h1>
   <nav>
     <button class="tab" data-section="desk">Desk</button>
@@ -925,7 +925,7 @@
   <div id="notif-stack"></div>
 <div id="wizard" hidden>
   <div class="wizard-box">
-    <img src="stormdesk-icon-512.png" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
+    <img src="stormdesk-icon-512.png?v=20260907" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
     <h2 style="margin-top:0;text-align:center">Welcome to StormDesk</h2>
     <div id="wizard-progress" class="kv-rows" aria-label="Setup progress">
       <div><span>1 · Choose a station</span><span id="wiz-step-source">current</span></div>
