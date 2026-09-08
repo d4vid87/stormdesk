@@ -8,6 +8,15 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-09-07
+
+### Changed
+- Redesigned Desk, Timeline, Radar, Local Signals, Data, and Settings with a consistent dark layout and streamlined navigation.
+- Simplified the forecast outlook and progressive detail panels.
+- Updated StormDesk branding across desktop, Android, web, and installer icons.
+- Refreshed documentation, screenshots, and animated product previews.
+- Matched the container build image to its Debian Bookworm runtime to avoid glibc compatibility failures.
+
 ## [4.1.0] - 2026-09-06
 
 ### Changed
@@ -653,7 +662,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/d4vid87/stormdesk/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/d4vid87/stormdesk/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/d4vid87/stormdesk/compare/v3.4.0...v4.0.0
 [3.0.9]: https://github.com/d4vid87/stormdesk/compare/v3.0.8...v3.0.9
