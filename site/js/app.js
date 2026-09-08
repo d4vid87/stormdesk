@@ -1,3 +1,4 @@
+import { safeMode } from './compat.js';
 // Shell: settings store, nav, refresh scheduler, notification banners.
 
 const DEFAULTS = {
@@ -442,6 +443,7 @@ window.addEventListener('wd:forecast', (e) => {
 });
 
 export function ecoOn() {
+  if (safeMode()) return true;
   if (_settings.eco === 'on') return true;
   if (_settings.eco === 'off') return false;
   // Two cores is a G Pad; four is an old Chromebook. Anything bigger can afford the full rate.

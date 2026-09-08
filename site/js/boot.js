@@ -1,3 +1,4 @@
+import { safeMode } from './compat.js';
 import './storm-watch.js';
 // Wire the shell: settings drawer, diagnostics, nav, section modules.
 import { settings, saveSettings, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
@@ -1354,8 +1355,25 @@ window.addEventListener('wd:storm', (e) => {
 // lazy-load the Lab iframe on first visit — full chrome there, it is the roomier view
 window.addEventListener('wd:section', (e) => {
   const f = $('lab-frame');
-  if (e.detail !== 'lab' || f.src) return;
-  f.src = radarUrl(8, false);
+  if (e.detail !== 'lab') return;
+  if (safeMode()) {
+    if ($('lab-radar-still')) return;
+    const img = document.createElement('img');
+    img.id = 'lab-radar-still';
+    img.alt = 'Radar snapshot';
+    const caption = document.createElement('p');
+    caption.className = 'radar-safe-caption';
+    caption.textContent = 'Radar snapshot · refreshes every 5 minutes';
+    f.parentElement.append(img, caption);
+    f.style.display = 'none';
+    const refresh = () => { img.src = stillUrl(); };
+    img.onerror = () => { caption.textContent = 'Radar snapshot unavailable · retrying in 5 minutes'; };
+    img.onload = () => { caption.textContent = 'Radar snapshot · refreshes every 5 minutes'; };
+    refresh();
+    every('lab-radar-still', 300, refresh);
+    return;
+  }
+  if (!f.src) f.src = radarUrl(8, false);
 });
 
 // Inline radar strip on the Desk: embedded, so it holds one frame a minute until touched. A live
@@ -1391,6 +1409,7 @@ function showStill(panel) {
   if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); }
   img.hidden = false;
   $('desk-radar-caption').hidden = false;
+  if (safeMode()) $('desk-radar-caption').textContent = 'Radar snapshot · 5 min · tap to enlarge';
   panel.classList.add('loaded');
   const refresh = () => { img.src = stillUrl(); };
   img.onerror = () => panel.classList.add('unreachable');

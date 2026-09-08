@@ -126,3 +126,6 @@ html[data-theme="light"]:not([data-palette="solarized"]):not([data-palette="cont
   --bg:#f2f5f8; --panel:#fff; --panel2:#e8edf3; --line:#ccd6e0;
   --text:#16202b; --muted:#526476; --accent:#087f78; --warn:#a35a00;
 }
+
+.watch-map #lab-radar-still { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+.radar-safe-caption { position:absolute; bottom:0; left:0; right:0; margin:0; padding:8px; background:var(--panel); color:var(--muted); text-align:center; font-size:12px; }
