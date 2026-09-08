@@ -1,0 +1,40 @@
+<!doctype html>
+<title>Mobile history regression check</title>
+<body>RUNNING</body>
+<script type="module">
+import { settings } from '../../site/js/app.js';
+import { localObs } from '../../site/js/api.js';
+
+const check = (ok, message) => { if (!ok) throw Error(message); };
+const requests = [];
+window.fetch = async (url) => {
+  requests.push(new URL(url, location.href));
+  return new Response(JSON.stringify({ obs: [] }), { headers: { 'Content-Type': 'application/json' } });
+};
+try {
+  window.__TAURI__ = {};
+  Object.assign(settings(), { token: '', deviceId: '', stationSource: '' });
+  let message = '';
+  try { await localObs(); } catch (e) { message = e.message; }
+  check(message.includes('History requires'), 'Missing archive must explain how to get history');
+  check(requests.length === 0, 'Android must not fetch its frontend as an archive');
+
+  Object.assign(settings(), { token: 'test-token', deviceId: '123' });
+  const at = 1700000000000;
+  await localObs(48, at);
+  check(requests[0].pathname.endsWith('/observations/device/123'), 'Tempest cloud history endpoint');
+  check(+requests[0].searchParams.get('time_start') === at / 1000 - 86400, 'Historical start');
+  check(+requests[0].searchParams.get('time_end') === at / 1000 + 86400, 'Historical end');
+
+  settings().stationSource = 'ambient';
+  try { await localObs(); } catch (e) { message = e.message; }
+  check(requests.length === 1, 'Other stations must not use a leftover Tempest device');
+
+  window.__WD_SRV = 'http://localhost:9999';
+  await localObs(3);
+  check(requests[1].href === 'http://localhost:9999/history/tuples?hours=3', 'Desktop keeps local archive');
+  document.body.textContent = 'PASS';
+} catch (e) {
+  document.body.textContent = `FAIL: ${e.message}`;
+}
+</script>
