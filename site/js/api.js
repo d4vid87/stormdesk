@@ -190,6 +190,14 @@ export function siToDisplay(obs) {
 // is where every ingested report lands whatever brand sent it. Shaped like `deviceObs` so
 // `pro.js` reads one or the other without knowing which.
 export async function localObs(hours = 3, at = null) {
+  if (window.__TAURI__ && window.__WD_SRV === undefined) {
+    const s = settings();
+    if (!s.stationSource && s.token && /^\d+$/.test(s.deviceId)) {
+      const end = at ? Math.round(at / 1000) + 86400 : Math.floor(Date.now() / 1000);
+      return deviceObs(s.deviceId, end - (at ? 48 : hours) * 3600, end);
+    }
+    throw new Error('History requires a configured Tempest account or a StormDesk desktop/server archive.');
+  }
   // `at` is a moment someone clicked on a chart: a day either side of it, rather than the last
   // `hours` up to now, which for a point three weeks back is the wrong archive entirely.
   const params = at ? { from: Math.round(at / 1000) - 86400, to: Math.round(at / 1000) + 86400 } : { hours };
