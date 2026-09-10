@@ -42,28 +42,50 @@ const ICON = {
 };
 export const icon = (k) => wx(k, 20, true) || ICON[k] || '·';
 
-export function renderHeroAlerts(feats) {
+// The banner remains visible for loading, clear, active and unavailable states.
+// Build feed text with textContent, including alert titles supplied by the provider.
+export function renderHeroAlerts(feats, status = '') {
   const box = $('hero-alerts');
   if (!box) return;
+  box.hidden = false;
   box.replaceChildren();
-  box.hidden = !feats.length;
-  if (!feats.length) return;
   const rank = { Extreme: 3, Severe: 2, Moderate: 1, Minor: 0 };
-  const sorted = feats.slice().sort((a, b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
+  const sorted = (feats || []).slice().sort((a, b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
   box.dataset.severity = sorted[0]?.properties?.severity || '';
-  const text = sorted.map((f) => {
-    const a = f.properties || {};
-    const about = a.headline || (a.description || '').split('\n').find(Boolean) || a.areaDesc || '';
-    return about.includes(a.event) ? about : `${a.event || 'Weather alert'} — ${about}`;
-  }).join('  •  ');
-  const track = document.createElement('div');
-  track.className = 'hero-alert-track';
-  const copy = document.createElement('span');
-  copy.textContent = text;
-  const repeat = copy.cloneNode(true);
-  repeat.setAttribute('aria-hidden', 'true');
-  track.append(copy, repeat);
-  box.append(track);
+  box.dataset.state = status ? 'unavailable' : feats == null ? 'loading' : sorted.length ? 'active' : 'clear';
+  const heading = document.createElement('div');
+  heading.className = 'alert-heading';
+  const title = document.createElement('strong');
+  title.textContent = 'WEATHER ALERTS';
+  const text = document.createElement('span');
+  text.className = 'alert-summary';
+  text.textContent = status || (feats == null ? 'Waiting for weather alerts' : sorted.length
+    ? sorted.map((f) => f.properties?.event || 'Weather alert').join(' · ') : 'No active watches, warnings or advisories');
+  heading.append(title, text);
+  const counts = document.createElement('div');
+  counts.className = 'alert-counts';
+  for (const [label, word] of [['Warnings', 'warning'], ['Watches', 'watch'], ['Advisories', 'advisory']]) {
+    const count = sorted.filter((f) => new RegExp(`\\b${word}\\b`, 'i').test(f.properties?.event || '')).length;
+    const pill = document.createElement('span');
+    pill.className = `alert-count ${word}`;
+    const number = document.createElement('b');
+    number.textContent = status || feats == null ? '—' : String(count);
+    pill.append(`${label} `, number);
+    counts.append(pill);
+  }
+  const link = document.createElement('button');
+  link.type = 'button';
+  link.textContent = 'View alerts →';
+  link.onclick = () => {
+    const alerts = $('alerts');
+    for (let node = alerts?.parentElement; node; node = node.parentElement) {
+      if (node.tagName === 'DETAILS') node.open = true;
+    }
+    alerts?.scrollIntoView({ behavior: 'auto', block: 'center' });
+    alerts?.setAttribute('tabindex', '-1');
+    alerts?.focus({ preventScroll: true });
+  };
+  box.append(heading, counts, link);
 }
 
 export async function refreshDesk() {
@@ -135,7 +157,13 @@ function renderTenDay(daily = []) {
 
 export async function refreshAlerts() {
   if (coords().lat == null) return;
-  const j = await api.alerts();
+  let j;
+  try { j = await api.alerts(); }
+  catch (error) {
+    renderHeroAlerts(null, 'Alert feed unavailable · check official sources');
+    $('alerts').textContent = 'Alert feed unavailable. Check official sources for current watches, warnings and advisories.';
+    throw error;
+  }
   const feats = j.features || [];
   renderHeroAlerts(feats);
   window.dispatchEvent(new CustomEvent('wd:alerts', { detail: feats }));
@@ -200,6 +228,7 @@ export async function refreshObs() {
 }
 
 export function initDesk() {
+  renderHeroAlerts(null);
   every('desk-forecast', 300, refreshDesk);
   every('desk-obs', settings().refreshSec, refreshObs);
   every('desk-alerts', 300, refreshAlerts);
@@ -207,7 +236,15 @@ export function initDesk() {
 }
 
 if (location.search.includes('selftest')) {
-  renderHeroAlerts([{ properties: { event: 'Test Advisory', severity: 'Moderate', headline: 'Test headline' } }]);
-  console.assert($('hero-alerts')?.textContent.includes('Test Advisory'), 'desk: official alerts render in the hero');
+  renderHeroAlerts([{ properties: { event: 'Heat Advisory', severity: 'Moderate' } },
+    { properties: { event: 'Tornado Warning', severity: 'Extreme' } },
+    { properties: { event: 'Flood Watch', severity: 'Moderate' } }]);
+  console.assert([...$('hero-alerts').querySelectorAll('.alert-count b')].every(el => el.textContent === '1'), 'desk: counts official alert categories');
+  console.assert($('hero-alerts').dataset.severity === 'Extreme', 'desk: strongest alert sets banner severity');
+  renderHeroAlerts([{ properties: { event: '<img src=x onerror=alert(1)> Advisory' } }]);
+  console.assert(!$('hero-alerts').querySelector('img'), 'desk: banner treats feed text as text');
+  renderHeroAlerts(null, 'Alert feed unavailable');
+  console.assert($('hero-alerts').textContent.includes('unavailable') && $('hero-alerts').querySelector('b').textContent === '—', 'desk: failed feed never reports zero alerts');
   renderHeroAlerts([]);
+  console.assert(!$('hero-alerts').hidden && $('hero-alerts').dataset.state === 'clear', 'desk: clear banner remains visible');
 }

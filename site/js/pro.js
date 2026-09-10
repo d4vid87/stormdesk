@@ -247,7 +247,9 @@ function render48(fc) {
   // `pathLength="1"` makes the dash length unit-free, so the draw-on is one CSS transition
   // whatever shape the line is.
   put48('c48-temp', `<svg viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="outlook-fill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#65d8ff" stop-opacity=".24"/><stop offset="1" stop-color="#65d8ff" stop-opacity="0"/></linearGradient></defs>
     ${bandPath}
+    ${temps.length === hrs.length ? `<path d="${path}L${x(hrs.length - 1)},${H}L${x(0)},${H}Z" fill="url(#outlook-fill)"/>` : ''}
     <path class="draw" pathLength="1" d="${path}" fill="none" stroke="#39ff88" stroke-width="2.5" vector-effect="non-scaling-stroke"/>
     ${marks}</svg>`);
 
@@ -366,7 +368,7 @@ const FACE = {
   compass: (s) => icon.compass(s.deg, s.frac, s.color),
   ring: (s) => icon.ring(s.frac, s.color || '#39ff88'),
   rain: (s) => icon.rainRing(s.frac, s.on),
-  dial: (s) => icon.dial(s.frac),
+  dial: (s) => icon.dial(s.frac, s.color, s.min, s.max),
   droplet: (s) => icon.droplet(s.frac),
   uv: (s) => icon.uvRing((s.frac || 0) * 12),
   bolt: (s) => icon.boltRing(s.frac, s.on),
@@ -378,8 +380,10 @@ const setText = (el, txt) => { if (el && el.textContent !== txt) el.textContent 
 function gauge(id, spec) {
   const box = $(id);
   if (!box) return;
-  if (box.dataset.face !== spec.face) {
-    box.dataset.face = spec.face;
+  const faceKey = `${spec.face}|${spec.min}|${spec.max}`;
+  box.dataset.unavailable = String(!Number.isFinite(spec.value));
+  if (box.dataset.face !== faceKey) {
+    box.dataset.face = faceKey;
     box.innerHTML = '<div class="gwrap"><span aria-hidden="true">' + FACE[spec.face](spec) + '</span>'
       + '<div class="ginner"><b></b><small></small><span></span></div></div>';
   }
@@ -405,7 +409,7 @@ function renderPress(v, label = 'sea level') {
   const pLo = metric ? 970 : 28.5, pHi = metric ? 1040 : 31;
   const pT = trend(I.press, 3);
   gauge('g-press', {
-    face: 'dial', frac: (v - pLo) / (pHi - pLo),
+    face: 'dial', min: pLo, max: pHi, frac: (v - pLo) / (pHi - pLo),
     value: v, fmt: (x) => num(x, 2), unit: U.press(),
     sub: pT == null ? label : `${pT >= 0 ? '↑' : '↓'} ${num(Math.abs(pT), 2)} / 3h · ${pressWord(pT)}`,
   });
@@ -420,7 +424,6 @@ window.addEventListener('wd:obs', (e) => {
 
 function renderGauges(fc) {
   const c = fc.current_conditions;
-  const last = history[history.length - 1] || [];
   const metric = settings().units === 'metric';
 
   const windMax = metric ? 60 : 40;
@@ -430,11 +433,11 @@ function renderGauges(fc) {
     sub: `1h gust ${num(c.wind_gust)} · ${deg2compass(c.wind_direction)}`,
   });
 
-  const rain = c.precip_accum_local_day || 0;
+  const rain = c.precip_accum_local_day;
   gauge('g-rain', {
-    face: 'rain', frac: rain / (metric ? 25 : 1), on: rain > 0, color: rain > 0 ? '#39ff88' : '#174c2d',
-    value: rain > 0 ? rain : null, text: 'Dry', fmt: (x) => num(x, 2),
-    sub: `${num(rain, 2)} ${U.precip()} today`,
+    face: 'dial', min: 0, max: metric ? 25 : 1, frac: rain / (metric ? 25 : 1),
+    value: rain, fmt: (x) => num(x, 2), unit: U.precip(),
+    sub: rain == null ? 'Reading unavailable' : 'Today',
   });
 
   const rhT = trend(I.rh, 3);
@@ -454,24 +457,13 @@ function renderGauges(fc) {
   });
 
   gauge('g-uv', {
-    face: 'uv', frac: (c.uv || 0) / 12,
+    face: 'dial', min: 0, max: 12, frac: c.uv / 12,
     value: c.uv, fmt: (x) => `UV ${num(x)}`,
     sub: `${uvWord(c.uv)}${c.solar_radiation ? ` · ${num(c.solar_radiation)} W/m²` : ''}`,
   });
 
-  const strikes = history.reduce((a, o) => a + (o[I.strikes] || 0), 0);
-  const dist = last[I.strikeDist];
-  gauge('g-ltg', {
-    face: 'bolt', frac: Math.min(strikes / 20, 1), on: strikes > 0,
-    value: strikes || null, text: 'None',
-    sub: strikes ? `nearest ${num(dist)} ${U.dist()} · 3h` : 'No strikes',
-  });
-
-  const wb = c.wet_bulb_temperature;
-  gauge('g-wet', {
-    face: 'therm', frac: (wb - (metric ? 0 : 32)) / (metric ? 35 : 60),
-    value: wb, fmt: (x) => `${num(x)}°`, sub: `Air ${num(c.air_temperature)}°`,
-  });
+  renderLightning(c);
+  renderWetBulb(c.wet_bulb_temperature);
 
   const taC = metric ? c.air_temperature : (c.air_temperature - 32) / 1.8;
   const windMps = windToMs(c.wind_avg);
@@ -484,7 +476,29 @@ function renderGauges(fc) {
   });
 }
 
-const uvWord = (v) => (v >= 11 ? 'Extreme' : v >= 8 ? 'Very high' : v >= 6 ? 'High' : v >= 3 ? 'Moderate' : 'Low');
+function renderWetBulb(value) {
+  const metric = settings().units === 'metric';
+  const min = metric ? 0 : 32, max = metric ? 40 : 104;
+  gauge('g-wet', { face: 'dial', min, max, frac: (value - min) / (max - min),
+    value, fmt: (x) => `${num(x)}${U.temp()}`, sub: value == null ? 'Reading unavailable' : 'Wet-bulb temperature' });
+}
+
+// Keep the feed's real reporting window and last-strike semantics; a last strike is not a nearest strike.
+function renderLightning(c = {}) {
+  const now = Date.now() / 1000;
+  const recent = history.filter((o) => o[I.time] >= now - 10800 && Number.isFinite(o[I.strikes]));
+  const count = c.lightning_strike_count_last_3hr ?? (recent.length ? recent.reduce((n, o) => n + o[I.strikes], 0) : null);
+  const hit = recent.filter((o) => o[I.strikes] > 0 && Number.isFinite(o[I.strikeDist])).at(-1);
+  const distance = c.lightning_strike_last_distance ?? hit?.[I.strikeDist];
+  const max = settings().units === 'metric' ? 50 : 30;
+  gauge('g-ltg', { face: 'dial', min: 0, max, frac: distance / max,
+    value: count === 0 ? null : distance,
+    text: count === 0 ? 'None' : '--', fmt: (x) => `${num(x)} ${U.dist()}`,
+    unit: count === 0 ? 'No strikes reported' : 'Last strike distance',
+    sub: count == null ? 'Lightning data unavailable' : `${num(count)} strikes · last 3h` });
+}
+
+const uvWord = (v) => (v == null ? 'Reading unavailable' : v >= 11 ? 'Extreme' : v >= 8 ? 'Very high' : v >= 6 ? 'High' : v >= 3 ? 'Moderate' : 'Low');
 
 // ---------- data plumbing ----------
 
@@ -614,11 +628,11 @@ function renderLocal(o) {
     value: avg, unit: U.wind(), sub: `gust ${num(gust)} · ${deg2compass(dir)}`,
   });
 
-  const rain = r(o[I.dayRain]) || 0;
+  const rain = r(o[I.dayRain]);
   gauge('g-rain', {
-    face: 'rain', frac: rain / (metric ? 25 : 1), on: rain > 0, color: rain > 0 ? '#39ff88' : '#174c2d',
-    value: rain > 0 ? rain : null, text: 'Dry', fmt: (x) => num(x, 2),
-    sub: `${num(rain, 2)} ${U.precip()} today`,
+    face: 'dial', min: 0, max: metric ? 25 : 1, frac: rain / (metric ? 25 : 1),
+    value: rain, fmt: (x) => num(x, 2), unit: U.precip(),
+    sub: rain == null ? 'Reading unavailable' : 'Today',
   });
 
   gauge('g-hum', {
@@ -630,6 +644,10 @@ function renderLocal(o) {
   // read as a barometer reading that disagrees with everyone else's.
   renderPress(p(o[I.press]), 'station pressure');
 
+  const wet = wetBulbC(o[I.temp], o[I.rh]);
+  renderWetBulb(t(wet));
+  renderLightning();
+
   const dpC = dewPointC(o[I.temp], o[I.rh]);
   if (dpC != null) {
     const dp = t(dpC);
@@ -640,7 +658,7 @@ function renderLocal(o) {
   }
 
   gauge('g-uv', {
-    face: 'uv', frac: (o[I.uv] || 0) / 12,
+    face: 'dial', min: 0, max: 12, frac: o[I.uv] / 12,
     value: o[I.uv], fmt: (x) => `UV ${num(x)}`,
     sub: `${uvWord(o[I.uv])}${o[I.solar] ? ` · ${num(o[I.solar])} W/m²` : ''}`,
   });
@@ -673,11 +691,12 @@ export function registerClock() {
     const d = new Date();
     const h12 = settings().clock24 === 'auto' || !settings().clock24 ? {} : { hour12: settings().clock24 === '12' };
     $('clock-time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit', ...h12 });
-    $('clock-date').textContent = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    $('clock-date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   });
 }
 
 export function initPro() {
+  if (!deskForecast()) renderGauges({ current_conditions: {} });
   const dayToggle = $('daycards-toggle');
   if (dayToggle) dayToggle.onclick = () => {
     const all = document.body.classList.toggle('days-all');

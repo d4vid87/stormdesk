@@ -39,7 +39,7 @@ const fc = {
     sea_level_pressure: 1014.2, station_pressure: 993.1, pressure_trend: 'steady',
     wind_avg: 7.2, wind_gust: 14.6, wind_direction: 190, uv: 4, brightness: 42000,
     solar_radiation: 520, precip_accum_local_day: 0.12, visibility: 16093,
-    air_density: 1.18, lightning_strike_count_last_3hr: 0,
+    air_density: 1.18, wet_bulb_temperature: 65.8, lightning_strike_count_last_3hr: 0,
   },
   forecast: { daily, hourly },
 };
@@ -49,7 +49,12 @@ addEventListener('load', () => {
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
   const details = document.getElementById('desk-details');
   const pressureCard = document.querySelector('[data-panel="g-press"]');
-  console.assert(getComputedStyle(pressureCard).display === 'none', 'Desk starts with everyday readings');
+  console.assert(getComputedStyle(pressureCard).display !== 'none', 'Midnight shows pressure in the six-gauge overview');
+  const gauges = [...document.querySelectorAll('#gauges > .gauge')].filter(el => getComputedStyle(el).display !== 'none');
+  console.assert(gauges.length === 6, 'Midnight overview has exactly six gauges');
+  console.assert(document.querySelector('#g-wet svg') && document.querySelector('#g-ltg svg'), 'Wet bulb and lightning have instrument faces');
+  console.assert(document.getElementById('hero-alerts').parentElement.id === 'desk', 'Alert banner precedes the whole dashboard');
+  console.assert(/\d+:\d{2}:\d{2}/.test(document.getElementById('clock-time').textContent), 'Bold clock includes seconds');
   details.click();
   console.assert(details.getAttribute('aria-expanded') === 'true' && getComputedStyle(pressureCard).display !== 'none', 'Desk expands secondary readings');
   details.click();
@@ -61,6 +66,9 @@ addEventListener('load', () => {
   dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
   console.assert(watch('temp').textContent === '--°F', 'Storm watch missing temperature');
   console.assert(watch('lightning').textContent === 'Lightning data unavailable', 'Storm watch missing lightning');
+  console.assert(document.querySelector('#g-ltg').textContent.includes('unavailable'), 'Missing lightning is unavailable, not no strikes');
+  console.assert(document.querySelector('#g-wet').dataset.unavailable === 'true', 'Missing wet bulb hides its needle');
+  console.assert(document.querySelector('#g-rain').dataset.unavailable === 'true', 'Missing rain is not dry');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [{ properties: {
     event: '<b>Test advisory</b>', severity: 'Severe', description: '<img src=x onerror=alert(1)>',

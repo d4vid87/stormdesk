@@ -145,7 +145,7 @@ export function ring(frac, color, { track = '#253141', width = 5 } = {}) {
 }
 
 /** Compass rose with a wind-direction needle. `deg` is the direction the wind comes FROM. */
-export function compass(deg, frac, color = '#4fdc8b') {
+export function compass(deg, frac, color = '#65d8ff') {
   const ticks = Array.from({ length: 36 }, (_, i) => {
     const major = i % 9 === 0;
     const a = (i * 10 * Math.PI) / 180;
@@ -173,11 +173,19 @@ export function compass(deg, frac, color = '#4fdc8b') {
 }
 
 /** Barometer dial: an arc plus a needle at the current pressure. */
-export function dial(frac, color = '#c9a6ff') {
+export function dial(frac, color = '#65d8ff', min = 0, max = 100) {
   const f = clamp01(frac);
   const a = (-120 + f * 240) * (Math.PI / 180);
   const arc = 240 / 360;
-  return `<svg viewBox="0 0 100 100">
+  const ticks = Array.from({ length: 25 }, (_, i) => {
+    const angle = (-120 + i * 10) * Math.PI / 180;
+    const xy = (r) => `${(50 + Math.sin(angle) * r).toFixed(2)},${(50 - Math.cos(angle) * r).toFixed(2)}`;
+    const major = i % 6 === 0;
+    const [x, y] = xy(54).split(',');
+    return `<path d="M${xy(37)} L${xy(major ? 45 : 41)}" stroke="currentColor" stroke-width="${major ? 1 : .5}" opacity=".65"/>`
+      + (major ? `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="8">${+(min + (max - min) * i / 24).toFixed(2)}</text>` : '');
+  }).join('');
+  return `<svg viewBox="-10 -10 120 120">${ticks}
     <circle cx="50" cy="50" r="${RING_R}" fill="none" stroke="#253141" stroke-width="5"
       stroke-linecap="round" stroke-dasharray="${(arc * CIRC).toFixed(1)} ${CIRC.toFixed(1)}"
       transform="rotate(120 50 50)"/>

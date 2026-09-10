@@ -895,6 +895,7 @@
 </style>
 <link rel="stylesheet" href="storm-watch.css">
 <link rel="stylesheet" href="desk-overview.css">
+<link rel="stylesheet" href="midnight.css">
 </head>
 <body>
 <header>
@@ -980,15 +981,11 @@
 </div>
 
   <section class="page" id="desk">
-    <div class="desk-heading">
-      <div><p class="desk-eyebrow">YOUR DAILY OUTLOOK</p><h2>Weather at a glance</h2></div>
-      <button id="desk-details" aria-expanded="false" aria-controls="desk-stack">More weather details <span aria-hidden="true">＋</span></button>
-    </div>
+    <div id="hero-alerts" role="status" aria-live="polite" aria-label="Weather alerts"></div>
     <div id="desk-stack">
     <div id="hero" data-panel="hero">
       <div id="hero-sky"><div class="sky-l"></div><div class="sky-l"></div></div>
       <div id="hero-orb"></div>
-      <div id="hero-alerts" role="status" aria-live="polite" hidden></div>
       <div id="hero-clock"><span id="clock-time">--:--:--</span> <span id="clock-date" class="hero-dim"></span></div>
       <div class="hero-top">
         <div>
@@ -1012,6 +1009,7 @@
         </div>
       </div>
       <div id="hero-summary"></div>
+      <button id="desk-details" aria-expanded="false" aria-controls="desk-stack">More weather details <span aria-hidden="true">＋</span></button>
     </div>
 
     <div id="ticker" data-panel="ticker"><div id="ticker-track"></div><span id="src-health"></span><button id="ticker-pause">❚❚</button></div>
@@ -1116,13 +1114,13 @@
 
     <div id="gauges" data-panel="gauges">
       <div class="gauge" data-panel="g-wind" data-metric="windAvg"><h3>Wind</h3><div id="g-wind"></div></div>
-      <div class="gauge" data-panel="g-rain" data-metric="rain"><h3>Rain</h3><div id="g-rain"></div></div>
+      <div class="gauge" data-panel="g-rain" data-metric="rain"><h3>Rain (Today)</h3><div id="g-rain"></div></div>
       <div class="gauge" data-panel="g-hum" data-metric="rh"><h3>Humidity</h3><div id="g-hum"></div></div>
       <div class="gauge" data-panel="g-press" data-metric="press"><h3>Pressure</h3><div id="g-press"></div></div>
       <div class="gauge" data-panel="g-dew"><h3>Dew point</h3><div id="g-dew"></div></div>
-      <div class="gauge" data-panel="g-uv" data-metric="uv"><h3>UV / solar</h3><div id="g-uv"></div></div>
+      <div class="gauge" data-panel="g-uv" data-metric="uv"><h3>UV Index</h3><div id="g-uv"></div></div>
       <div class="gauge" data-panel="g-ltg" data-metric="strikes"><h3>Lightning</h3><div id="g-ltg"></div></div>
-      <div class="gauge" data-panel="g-wet"><h3>Wet bulb</h3><div id="g-wet"></div></div>
+      <div class="gauge" data-panel="g-wet"><h3>Wet Bulb</h3><div id="g-wet"></div></div>
       <div class="gauge" data-panel="g-wbgt"><h3 title="Estimated from temperature, humidity and solar — not a measured WBGT">WBGT</h3><div id="g-wbgt"></div></div>
     </div>
 
