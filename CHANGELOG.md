@@ -8,7 +8,15 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-09-11
+
+### Changed
+- Introduced the Midnight Glass Desk with a bold live clock, watches/warnings/advisories banner, and six instrument gauges including wet-bulb temperature and lightning distance.
+- Refreshed the StormDesk screenshots and product previews on GitHub and HookEcho.
+
 ### Fixed
+- Kept controls visible and browser history correct in the Android app.
+- Reduced renderer load on Samsung Family Hub browsers by using lightweight radar.
 - Fixed the embedded radar repeatedly zooming back out during zoom-in gestures. HookEcho now distinguishes its own saved URL updates from incoming navigation, preventing an older camera position from being reapplied. The shared viewer update is delivered through `hookecho.pages.dev`; see [HookEcho #320](https://github.com/d4vid87/hookecho/pull/320).
 
 ## [4.2.0] - 2026-09-07
@@ -665,7 +673,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/d4vid87/stormdesk/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/d4vid87/stormdesk/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/d4vid87/stormdesk/compare/v3.4.0...v4.0.0
