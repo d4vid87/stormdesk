@@ -8,6 +8,17 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-09-11
+
+### Fixed
+- Read all official watches and warnings aloud, including Moderate-severity events, while keeping routine advisories silent.
+- Keep simultaneous and failed announcements pending independently of banner deduplication. Expired alerts and previous locations are discarded; emergencies and severity increases can announce again.
+- Add Enable / Test voice, visible playback status, delayed-voice handling, and explicit retry after browser playback errors or a ten-second startup timeout.
+- Add a local Linux espeak-ng fallback when browser speech cannot start. Debian and Arch packages require espeak-ng; AppImage users install it through their package manager.
+
+### Notes
+- Speech requires an open dashboard. Browser playback may require a tap and an installed system voice. The voice test does not send push notifications.
+
 ## [4.3.0] - 2026-09-11
 
 ### Changed
@@ -673,7 +684,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...HEAD
+[4.3.1]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/d4vid87/stormdesk/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/d4vid87/stormdesk/compare/v4.0.0...v4.1.0

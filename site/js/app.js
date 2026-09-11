@@ -1,4 +1,6 @@
 import { safeMode } from './compat.js';
+import { createSpeech, shouldSpeak } from './speech.js';
+export { shouldSpeak } from './speech.js';
 // Shell: settings store, nav, refresh scheduler, notification banners.
 
 const DEFAULTS = {
@@ -70,8 +72,7 @@ const DEFAULTS = {
   // Quiet hours, 'HH:MM' each, both empty = off. Suppresses the chime and every push channel;
   // a Severe or Extreme alert still comes through, because that is what the setting is for.
   quietStart: '', quietEnd: '',
-  // Read Severe and Extreme alerts aloud. On by default: a tornado warning on a wall panel
-  // across the room is the one thing worth saying out loud. Nothing else ever speaks.
+  // Read official warnings, watches and emergencies aloud while the dashboard is open.
   speakAlerts: true,
   // Browser notifications, secure origins only. Off until asked for: the permission prompt is
   // rude unprompted, and the desktop app already raises real ones through Tauri.
@@ -271,7 +272,6 @@ export function notify({ id, category = 'info', title, body, severity = '', head
   }
   if (quiet) return;
   chime();
-  speak(entry);
   native(entry);
   webNative(entry);
 }
@@ -289,47 +289,23 @@ export function dismissStale(category, liveIds) {
   }
 }
 
-// A wall panel across the room can't be read, and the person it matters to isn't holding it.
-//
-// Severe and Extreme only. NWS tags plenty of routine advisories as `category: 'severe'` here
-// (that is the notification channel, not the warning's severity), and a dashboard that reads out
-// every Dense Fog Advisory is one nobody leaves on. A Tornado or Flash Flood Emergency rides
-// inside an ordinary Warning, so the word itself is a trigger too.
-export function shouldSpeak({ category, severity, title, headline }, s = _settings) {
-  if (!s.speakAlerts || category !== 'severe') return false;
-  if (['Severe', 'Extreme'].includes(severity)) return true;
-  return /emergency/i.test(`${title || ''} ${headline || ''}`);
-}
-
-// Chrome and the Android WebView refuse to speak before the page has been touched (the utterance
-// errors with `not-allowed`). Hold it and say it on the first tap rather than losing it.
-let held = null;
-const replay = () => {
-  if (!held || Date.now() - held.at > 600000) { held = null; return; }
-  const u = held.utter;
-  held = null;
-  try { window.speechSynthesis.speak(u); } catch { /* still no */ }
-};
-window.addEventListener('pointerdown', replay);
-window.addEventListener('keydown', replay);
-
-// Say something out loud, with the hold-and-replay above. Also the tap-the-hero briefing and the
-// morning one, which is why the alert wrapper is a caller rather than the whole of it.
-export function say(words, delayMs = 0) {
-  if (!words || !('speechSynthesis' in window)) return;
-  try {
-    const utter = new SpeechSynthesisUtterance(words);
-    utter.lang = navigator.language || 'en-US';
-    utter.onerror = (e) => { if (e.error === 'not-allowed') held = { utter: new SpeechSynthesisUtterance(words), at: Date.now() }; };
-    setTimeout(() => window.speechSynthesis.speak(utter), delayMs);
-  } catch { /* no voices installed; the banner is still there */ }
-}
-
-function speak(entry) {
-  if (!shouldSpeak(entry)) return;
-  // After the chime, not over it.
-  say(`${entry.severity === 'Extreme' ? 'Emergency. ' : ''}${entry.title}. ${entry.headline || entry.body || ''}`, 300);
-}
+// Speech is independent of notification dedupe: a visible banner does not prove audio played.
+const speechPlace = () => JSON.stringify(coords());
+const speech = createSpeech({
+  synth: window.speechSynthesis, Utterance: window.SpeechSynthesisUtterance,
+  native: window.__TAURI__ && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
+    ? (text) => window.__TAURI__.core.invoke('speak_text', { text }) : null,
+  settings, language: navigator.language || 'en-US',
+  status: (message) => {
+    const el = document.getElementById('voice-status');
+    if (el) el.textContent = message;
+  },
+});
+export const syncSpokenAlerts = (entries) => speech.sync(entries, speechPlace());
+export const say = (words, delayMs = 0) => speech.say(words, delayMs);
+export const testVoice = () => speech.test();
+window.speechSynthesis?.addEventListener('voiceschanged', () => speech.voicesChanged());
+window.addEventListener('wd:settings', () => speech.changed(speechPlace()));
 
 // An in-page banner is no use behind another window. Desktop only, and only when this window
 // isn't the one being looked at — a visible dashboard already showed the banner.

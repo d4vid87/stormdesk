@@ -27,6 +27,7 @@
   <url type="bugtracker">https://github.com/d4vid87/stormdesk/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="4.3.1" date="2026-09-11"><description><p>Fixes spoken watches and warnings with a voice test, retryable announcements, and Linux speech fallback.</p></description></release>
     <release version="4.3.0" date="2026-09-11"><description><p>Introduces the Midnight Glass dashboard with a prominent clock, alert banner, and expanded weather gauges.</p></description></release>
     <release version="4.2.0" date="2026-09-07"><description><p>Redesigned layouts, streamlined settings and forecast outlook, and new app artwork.</p></description></release>
     <release version="4.1.0" date="2026-09-06">

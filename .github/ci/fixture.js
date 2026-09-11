@@ -45,6 +45,7 @@ const fc = {
 };
 
 addEventListener('load', () => {
+  console.assert(document.querySelector('#settings-basics #btn-voice-test') && document.querySelector('#settings-basics #voice-status'), 'Voice test and status stay beside the speech setting');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
   const details = document.getElementById('desk-details');

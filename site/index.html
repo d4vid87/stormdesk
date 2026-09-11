@@ -1378,7 +1378,9 @@
     <h2 style="font-size:13px;margin-top:18px">Kiosk</h2>
     <label>Cycle tabs every (seconds, 0 = off)</label><input id="set-kiosk" type="number" min="0" step="5">
     <label><input id="set-night-dim" type="checkbox"> Dim the screen overnight</label>
-    <label><input id="set-speak" type="checkbox"> Read severe and emergency alerts aloud</label>
+    <label><input id="set-speak" type="checkbox"> Read warnings and watches aloud</label>
+    <button id="btn-voice-test" type="button">Enable / Test voice</button>
+    <div id="voice-status" class="muted" role="status" aria-live="polite">Tap to enable</div>
     <label>Spoken briefing at (blank = off)</label><input id="set-brief-time" type="time">
     <label><input id="set-web-notif" type="checkbox"> Browser notifications (https only)</label>
 

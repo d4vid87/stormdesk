@@ -11,6 +11,77 @@ fn should_open_fallback(ready: &AtomicBool) -> bool { !ready.swap(true, Ordering
 #[tauri::command]
 fn frontend_ready() { FRONTEND_READY.store(true, Ordering::Relaxed); }
 
+#[cfg(target_os = "linux")]
+fn validate_speech(text: &str) -> Result<(), String> {
+    if text.trim().is_empty() || text.len() > 4096 || text.contains('\0') {
+        return Err("Speech must contain 1–4096 bytes of plain text".into());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn speech_result(success: bool, diagnostics: &str) -> Result<(), String> {
+    // eSpeak can return zero even when its audio device could not open.
+    if success && diagnostics.trim().is_empty() { Ok(()) }
+    else { Err(format!("Speech engine failed. Check your audio output. {}", diagnostics.trim())) }
+}
+
+#[tauri::command]
+async fn speak_text(text: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        validate_speech(&text)?;
+        tauri::async_runtime::spawn_blocking(move || {
+            use std::io::{Read, Write};
+            use std::process::{Command, Stdio};
+            // One system voice at a time, including concurrent invocations from the UI.
+            static SPEECH: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            let _guard = SPEECH.lock().map_err(|_| "Speech engine busy")?;
+            let mut child = Command::new("espeak-ng")
+                .args(["--stdin", "-v", "en-us"])
+                .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped())
+                .spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
+                    "Install espeak-ng using your package manager, then test voice again".to_string()
+                } else { format!("Could not start speech engine: {e}") })?;
+            let stderr = child.stderr.take().ok_or("Speech diagnostics unavailable")?;
+            let diagnostics = std::thread::spawn(move || {
+                let mut bytes = Vec::new();
+                let mut input = stderr;
+                let mut chunk = [0; 1024];
+                // Drain the pipe to avoid blocking the child, retaining only a bounded message.
+                while let Ok(n) = input.read(&mut chunk) {
+                    if n == 0 { break; }
+                    let keep = n.min(4096usize.saturating_sub(bytes.len()));
+                    bytes.extend_from_slice(&chunk[..keep]);
+                }
+                String::from_utf8_lossy(&bytes).into_owned()
+            });
+            if let Err(e) = child.stdin.take().ok_or("Speech input unavailable")?.write_all(text.as_bytes()) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("Speech input failed: {e}"));
+            }
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        let message = diagnostics.join().unwrap_or_default();
+                        return speech_result(status.success(), &message);
+                    }
+                    Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(50)),
+                    result => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(format!("Speech engine stopped: {}", result.err().map(|e| e.to_string()).unwrap_or_else(|| "timed out".into())));
+                    }
+                }
+            }
+        }).await.map_err(|e| e.to_string())?
+    }
+    #[cfg(not(target_os = "linux"))]
+    { let _ = text; Err("Native speech fallback is available on Linux only".into()) }
+}
+
 // The tray, the server and the paths behind them are desktop-only, and so is everything imported
 // for them — Android builds warn about each one otherwise.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -95,7 +166,7 @@ pub fn run() {
                 }
             }))
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .invoke_handler(tauri::generate_handler![updater_check, updater_install, frontend_ready]);
+            .invoke_handler(tauri::generate_handler![updater_check, updater_install, frontend_ready, speak_text]);
     }
 
     builder = builder.plugin(tauri_plugin_notification::init());
@@ -197,6 +268,26 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn speech_input_is_bounded_plain_text() {
+        assert!(validate_speech("Tornado Warning. This is a test.").is_ok());
+        assert!(validate_speech("--help; $(id)").is_ok()); // stdin text, never shell arguments
+        assert!(validate_speech("").is_err());
+        assert!(validate_speech("\0").is_err());
+        assert!(validate_speech(&"x".repeat(4097)).is_err());
+        assert!(speech_result(true, "").is_ok());
+        assert!(speech_result(true, "error: Host is down").is_err());
+        assert!(speech_result(false, "").is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "plays labeled test speech through the system audio output"]
+    fn linux_voice_smoke() {
+        tauri::async_runtime::block_on(speak_text("StormDesk Linux voice test. This is only a test of spoken watches and warnings.".into())).unwrap();
+    }
 
     #[test]
     fn frontend_readiness_opens_the_fallback_once() {

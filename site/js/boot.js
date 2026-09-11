@@ -1,4 +1,5 @@
 import { safeMode } from './compat.js';
+import { testVoice } from './app.js';
 import './storm-watch.js';
 // Wire the shell: settings drawer, diagnostics, nav, section modules.
 import { settings, saveSettings, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
@@ -22,6 +23,14 @@ import { initTimeline, timelineSettings } from './timeline.js';
 import { applyMotion } from './motion.js';
 
 const $ = (id) => document.getElementById(id);
+// Apply this switch immediately, so disabled alerts cannot remain queued until drawer Save.
+$('set-speak').onchange = () => saveSettings({ speakAlerts: $('set-speak').checked });
+$('btn-voice-test').onclick = () => {
+  // Test unlocks playback before settings changes can enqueue current alerts.
+  testVoice();
+  $('set-speak').checked = true;
+  saveSettings({ speakAlerts: true });
+};
 
 $('desk-details').addEventListener('click', () => {
   const expanded = $('desk').classList.toggle('desk-expanded');
@@ -185,7 +194,7 @@ function organizeSettings() {
   for (const [name, ids] of [
     ['Region & units', ['region-presets', 'set-units', 'set-wind-unit', 'set-clock']],
     ['Radar & display', ['set-radar-site', 'set-desk-radar', 'set-storm-auto', 'set-night-dim']],
-    ['Sounds & notifications', ['set-speak', 'set-brief-time', 'set-web-notif']],
+    ['Sounds & notifications', ['set-speak', 'btn-voice-test', 'voice-status', 'set-brief-time', 'set-web-notif']],
   ]) {
     const group = document.createElement('fieldset');
     const legend = document.createElement('legend'); legend.textContent = name;

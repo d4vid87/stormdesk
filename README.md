@@ -40,6 +40,20 @@ If a Mac says it cannot verify StormDesk, open **System Settings → Privacy & S
 
 ### Linux commands
 
+Spoken watches and warnings: open **Settings → Basics → Sounds & notifications**, enable **Read warnings and watches aloud**,
+then press **Enable / Test voice**. Keep the dashboard open. The status below the button explains
+blocked playback or missing voices; the test does not send push notifications.
+
+The Linux app falls back to the local `espeak-ng` engine when browser speech cannot start.
+Debian and Arch packages install it as a dependency. AppImage users should install `espeak-ng`
+with their package manager (for example, `sudo apt install espeak-ng` or `sudo pacman -S espeak-ng`).
+Browser mode uses the browser's speech engine and may require a system voice and an initial tap.
+On Linux, browser speech may also require `speech-dispatcher` and `espeak-ng`; restart the browser
+after installing them. An embedded browser without speech support reports an error instead of
+claiming an announcement played; use the Linux app's native fallback in that case.
+Warnings and watches bypass quiet hours just as official alert notifications already do; routine
+advisories stay silent. Closed-app and locked-phone announcements are not supported.
+
 For Ubuntu, Debian, or Linux Mint:
 
 ```sh

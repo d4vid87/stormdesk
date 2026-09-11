@@ -2,6 +2,7 @@
 import * as api from './api.js';
 import { wx } from './icons.js';
 import { settings, coords, configured, hasSource, hasLocation, U, num, timeStr, dayStr, notify, dismissStale, every, stamp, store, load, setStorm } from './app.js';
+import { syncSpokenAlerts } from './app.js';
 
 // Last-good copies of the two payloads the Desk can't render without. An outage that spans a
 // reload would otherwise leave the whole page at `--`; in-session failures already keep the DOM.
@@ -157,6 +158,7 @@ function renderTenDay(daily = []) {
 
 export async function refreshAlerts() {
   if (coords().lat == null) return;
+  const requestedPlace = JSON.stringify(coords());
   let j;
   try { j = await api.alerts(); }
   catch (error) {
@@ -164,7 +166,12 @@ export async function refreshAlerts() {
     $('alerts').textContent = 'Alert feed unavailable. Check official sources for current watches, warnings and advisories.';
     throw error;
   }
-  const feats = j.features || [];
+  if (requestedPlace !== JSON.stringify(coords())) return;
+  const feats = (j.features || []).filter((f) => {
+    const p = f.properties;
+    return (!p.status || p.status === 'Actual') && p.messageType !== 'Cancel'
+      && (!p.ends && !p.expires || Date.parse(p.ends || p.expires) > Date.now());
+  });
   renderHeroAlerts(feats);
   window.dispatchEvent(new CustomEvent('wd:alerts', { detail: feats }));
   $('alerts').innerHTML = feats.length
@@ -190,6 +197,10 @@ export async function refreshAlerts() {
   // re-chimed the same tornado warning every 5 minutes. Key on what the warning IS instead — a
   // severity change still gets through, which is the one update worth a second chime.
   const key = (p) => `${p.event}|${p.areaDesc}|${p.severity}`;
+  syncSpokenAlerts(feats.map(({ properties: p }) => ({
+    id: `${p.event}|${p.areaDesc}`, category: 'severe', title: p.event,
+    severity: p.severity, headline: p.headline || '', expires: Date.parse(p.ends || p.expires) || 0,
+  })));
   feats.forEach((f) => notify({
     id: key(f.properties), category: 'severe',
     title: f.properties.event, body: f.properties.headline || '',

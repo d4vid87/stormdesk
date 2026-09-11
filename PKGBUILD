@@ -1,12 +1,12 @@
 # Maintainer: David May <davidmay87@gmail.com>
 pkgname=stormdesk
-pkgver=4.3.0
+pkgver=4.3.1
 pkgrel=1
 pkgdesc="Self-hosted dashboard for a WeatherFlow Tempest station"
 arch=('x86_64' 'aarch64')
 url="https://github.com/d4vid87/stormdesk"
 license=('MIT')
-depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'espeak-ng')
 makedepends=('cargo' 'pkgconf')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
