@@ -27,6 +27,7 @@
   <url type="bugtracker">https://github.com/d4vid87/stormdesk/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="4.3.3" date="2026-09-11"><description><p>Defaults to the full nine-gauge dashboard and fixes saved tile dragging.</p></description></release>
     <release version="4.3.2" date="2026-09-11"><description><p>Adds an optional natural male voice for local Linux speech.</p></description></release>
     <release version="4.3.1" date="2026-09-11"><description><p>Fixes spoken watches and warnings with a voice test, retryable announcements, and Linux speech fallback.</p></description></release>
     <release version="4.3.0" date="2026-09-11"><description><p>Introduces the Midnight Glass dashboard with a prominent clock, alert banner, and expanded weather gauges.</p></description></release>

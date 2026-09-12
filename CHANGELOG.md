@@ -8,6 +8,16 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.3.3] - 2026-09-11
+
+### Changed
+- Open the full nine-gauge dashboard on every launch in the website and desktop app.
+- Default gauge rows: Rain, Lightning, Wind; WBGT, UV Index, Wet Bulb; Pressure, Humidity, Dew Point. Saved custom arrangements remain available.
+
+### Fixed
+- Let mouse and touch tile dragging control visual placement, preserving the new order across reloads.
+- Prevent a touch drag from opening the tile's detail view when released.
+
 ## [4.3.2] - 2026-09-11
 
 ### Changed
@@ -692,7 +702,7 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.2...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.3...HEAD
 [4.3.2]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...v4.3.0
@@ -742,3 +752,5 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 [#29]: https://github.com/d4vid87/stormdesk/pull/29
 [#30]: https://github.com/d4vid87/stormdesk/pull/30
 [#31]: https://github.com/d4vid87/stormdesk/pull/31
+
+[4.3.3]: https://github.com/d4vid87/stormdesk/compare/v4.3.2...v4.3.3
