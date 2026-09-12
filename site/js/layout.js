@@ -46,6 +46,15 @@ const zoom = () => +getComputedStyle(document.documentElement).zoom || 1;
 export const NEVER_HIDE = ['severe', 'winter', 'tropical', 'alerts'];
 
 export const DEFAULT = {
+  'g-rain': { order: 0 },
+  'g-ltg': { order: 1 },
+  'g-uv': { order: 2 },
+  'g-wbgt': { order: 3 },
+  'g-press': { order: 4 },
+  'g-wet': { order: 5 },
+  'g-wind': { order: 6 },
+  'g-hum': { order: 7 },
+  'g-dew': { order: 8 },
   hero: { order: 0 },
   gauges: { order: 1 },
   daycards: { order: 2 },
@@ -334,6 +343,8 @@ function wire(container) {
       ? 'Drag to move this whole group · edges to resize'
       : 'Drag to move · edges to resize · double-click to reset this panel';
     grip.innerHTML = '<span>⠿</span>';
+    // Touch browsers can synthesize a click after a drag; the panel's detail action must not run.
+    grip.addEventListener('click', (e) => e.stopPropagation());
 
     // Pointer events rather than HTML5 drag-and-drop: DnD never fires for touch, and this
     // dashboard's home is a tablet. Only the grip starts a move — dragging from the panel body
@@ -488,6 +499,17 @@ export function initLayout() {
 // a test runner for a file this size.
 if (location.search.includes('selftest')) {
   const before = JSON.stringify(state);
+  // Fixed CSS order used to defeat both a drop and restoration of saved tile positions.
+  const gaugeGrid = $('gauges');
+  if (gaugeGrid) {
+    const original = [...gaugeGrid.children].filter(c => c.dataset.panel);
+    state = Object.fromEntries(original.map((c, i) => [c.dataset.panel, { order: original.length - i }]));
+    applyOrder(gaugeGrid);
+    console.assert([...gaugeGrid.children].filter(c => c.dataset.panel).every((c, i) =>
+      c === original[original.length - 1 - i] && getComputedStyle(c).order === '0'),
+    'layout: saved gauge order controls visual placement');
+    original.forEach(c => gaugeGrid.appendChild(c));
+  }
   state = { a: { order: 2 }, b: { order: 0 }, c: { order: 1 } };
   const box = document.createElement('div');
   ['a', 'b', 'c'].forEach((n) => {

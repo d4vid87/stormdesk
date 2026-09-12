@@ -42,15 +42,8 @@ html[data-theme="dark"]:not([data-palette="solarized"]):not([data-palette="contr
 #desk #desk-details { order:5; align-self:flex-start; margin-top:auto; color:var(--muted); padding:8px 0; min-height:36px; background:none; border:0; border-radius:0; }
 #desk #gauges { padding:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 #desk #gauges > .gauge { grid-column:auto; min-height:198px; padding:10px 8px; display:flex; flex-direction:column; align-items:center; background:linear-gradient(135deg,#102a4033,transparent),var(--panel); border:1px solid var(--line); border-radius:13px; box-shadow:0 8px 24px #0001; }
-#desk #gauges > [data-panel="g-rain"] { order:1; }
-#desk #gauges > [data-panel="g-ltg"] { order:2; }
-#desk #gauges > [data-panel="g-uv"] { order:3; }
-#desk #gauges > [data-panel="g-wbgt"] { order:4; }
-#desk #gauges > [data-panel="g-press"] { order:5; }
-#desk #gauges > [data-panel="g-wet"] { order:6; }
-#desk #gauges > [data-panel="g-wind"] { order:7; }
-#desk #gauges > [data-panel="g-hum"] { order:8; }
-#desk #gauges > [data-panel="g-dew"] { order:9; }
+/* Tile placement follows DOM order so dragging and saved layouts remain authoritative. */
+#desk #gauges > .gauge { order:0; }
 #desk:not(.desk-expanded) #gauges > :is([data-panel="g-wet"],[data-panel="g-wbgt"],[data-panel="g-press"],[data-panel="g-ltg"]) { display:flex; }
 #desk:not(.desk-expanded) #gauges > :is([data-panel="g-hum"],[data-panel="g-dew"],[data-panel="g-wind"]) { display:none; }
 #desk #gauges .gwrap svg text { fill:var(--muted); }
