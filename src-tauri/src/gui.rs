@@ -26,6 +26,21 @@ fn speech_result(success: bool, diagnostics: &str) -> Result<(), String> {
     else { Err(format!("Speech engine failed. Check your audio output. {}", diagnostics.trim())) }
 }
 
+#[cfg(target_os = "linux")]
+fn natural_voice_dir() -> std::path::PathBuf {
+    std::env::var_os("XDG_DATA_HOME").map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share"))
+        .join("stormdesk/voice")
+}
+
+#[tauri::command]
+fn natural_voice_ready() -> bool {
+    #[cfg(target_os = "linux")]
+    { let root = natural_voice_dir(); [".venv/bin/python", "model.onnx", "voices.npz", "tokenizer.json"].iter().all(|p| root.join(p).is_file()) }
+    #[cfg(not(target_os = "linux"))]
+    { false }
+}
+
 #[tauri::command]
 async fn speak_text(text: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
@@ -37,8 +52,21 @@ async fn speak_text(text: String) -> Result<(), String> {
             // One system voice at a time, including concurrent invocations from the UI.
             static SPEECH: std::sync::Mutex<()> = std::sync::Mutex::new(());
             let _guard = SPEECH.lock().map_err(|_| "Speech engine busy")?;
-            let mut child = Command::new("espeak-ng")
-                .args(["--stdin", "-v", "en-us"])
+            let root = natural_voice_dir();
+            let python = root.join(".venv/bin/python");
+            let natural = python.is_file();
+            let mut command = if natural {
+                let mut command = Command::new(python);
+                command.args(["-c", include_str!("../../scripts/natural-voice.py")]).arg(&root);
+                // The interpreter and ONNX runtime belong to the host, not the AppImage.
+                command.env_remove("LD_LIBRARY_PATH").env_remove("LD_PRELOAD").env_remove("PYTHONHOME").env_remove("PYTHONPATH");
+                command
+            } else {
+                let mut command = Command::new("espeak-ng");
+                command.args(["--stdin", "-v", "en-us"]);
+                command
+            };
+            let mut child = command
                 .stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped())
                 .spawn().map_err(|e| if e.kind() == std::io::ErrorKind::NotFound {
                     "Install espeak-ng using your package manager, then test voice again".to_string()
@@ -66,7 +94,7 @@ async fn speak_text(text: String) -> Result<(), String> {
                 match child.try_wait() {
                     Ok(Some(status)) => {
                         let message = diagnostics.join().unwrap_or_default();
-                        return speech_result(status.success(), &message);
+                        return if natural && status.success() { Ok(()) } else { speech_result(status.success(), &message) };
                     }
                     Ok(None) if std::time::Instant::now() < deadline => std::thread::sleep(std::time::Duration::from_millis(50)),
                     result => {
@@ -166,7 +194,7 @@ pub fn run() {
                 }
             }))
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .invoke_handler(tauri::generate_handler![updater_check, updater_install, frontend_ready, speak_text]);
+            .invoke_handler(tauri::generate_handler![updater_check, updater_install, frontend_ready, speak_text, natural_voice_ready]);
     }
 
     builder = builder.plugin(tauri_plugin_notification::init());

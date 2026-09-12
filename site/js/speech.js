@@ -19,7 +19,7 @@ const errors = {
 };
 
 export function createSpeech({ synth, Utterance, native, settings, status, now = Date.now,
-  later = setTimeout, cancelTimer = clearTimeout, language = 'en-US' }) {
+  later = setTimeout, cancelTimer = clearTimeout, language = 'en-US', preferNative = () => false }) {
   let live = new Map(), delivered = new Map(), queue = [], active = null, blocked = false, location = '';
   const valid = (e) => !e.expires || e.expires > now();
   const allowed = (e) => shouldSpeak(e, settings()) && valid(e);
@@ -57,19 +57,23 @@ export function createSpeech({ synth, Utterance, native, settings, status, now =
     }
     cancelTimer(job.timer);
     if (!job.started && native) {
-      job.fallingBack = true;
-      // Detach handlers before cancel: an interrupted browser utterance must never complete
-      // a native replacement or cause a second fallback.
-      if (job.utter) { job.utter.onstart = job.utter.onend = job.utter.onerror = null; }
-      synth?.cancel();
-      status('Speaking');
-      Promise.resolve().then(() => native(job.words)).then(() => finish(job), (e) => finish(job, String(e)));
+      startNative(job);
     } else finish(job, error);
+  }
+  function startNative(job) {
+    cancelTimer(job.timer);
+    job.fallingBack = true;
+    // Detach handlers before cancel so a browser callback cannot complete the native job.
+    if (job.utter) job.utter.onstart = job.utter.onend = job.utter.onerror = null;
+    synth?.cancel();
+    status('Speaking');
+    Promise.resolve().then(() => native(job.words)).then(() => finish(job), (e) => finish(job, String(e)));
   }
   function start(job) {
     job.place = location;
     active = job;
     job.timer = later(() => fail(job, 'timeout'), 10000);
+    if (native && preferNative()) { startNative(job); return; }
     if (!synth || !Utterance) { fail(job, 'synthesis-unavailable'); return; }
     try {
       const utter = job.utter = new Utterance(job.words);

@@ -13,12 +13,12 @@ assert(!shouldSpeak(warning, { ...on, speakAlerts: false }));
 assert(!shouldSpeak(warning, { ...on, notif: { severe: false } }));
 assert(!shouldSpeak({ ...warning, category: 'info' }, on));
 
-function harness(native, missing = false) {
+function harness(native, missing = false, preferNative = false) {
   let clock = 0, seq = 0;
   const timers = new Map(), utterances = [], states = [], s = structuredClone(on);
   const synth = { getVoices: () => [], speak: (u) => utterances.push(u), cancel() {}, paused: false };
   const controller = createSpeech({ synth: missing ? null : synth, Utterance: class { constructor(text) { this.text = text; } },
-    native, settings: () => s, status: (v) => states.push(v), now: () => clock,
+    native, preferNative: () => preferNative, settings: () => s, status: (v) => states.push(v), now: () => clock,
     later: (f, ms) => { timers.set(++seq, { f, at: clock + ms }); return seq; }, cancelTimer: (id) => timers.delete(id) });
   return { controller, utterances, states, s, synth,
     tick(ms) { clock += ms; for (const [id, t] of [...timers]) if (t.at <= clock && timers.delete(id)) t.f(); },
@@ -78,3 +78,15 @@ for (const mode of ['expires', 'disappears', 'location', 'disabled', 'channel'])
   h.controller.test(); await new Promise(setImmediate); assert.match(h.states.at(-1), /Install espeak-ng/);
 }
 console.log('Speech checks passed: eligibility, queue, retry, expiry, settings, escalation, voices, timeout, Linux fallback and briefings.');
+{
+  const calls = [], h = harness(async (text) => calls.push(text), false, true);
+  h.controller.sync([watch, warning], 'home'); h.tick(300);
+  await new Promise(setImmediate);
+  assert.equal(h.utterances.length, 0, 'installed natural voice bypasses robotic browser speech');
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /^Flood Warning/);
+  assert.match(calls[1], /^Tornado Watch/);
+  h.controller.sync([watch, warning], 'home'); h.tick(300);
+  await new Promise(setImmediate); assert.equal(calls.length, 2);
+  console.log('Natural voice checks passed: preferred engine, warning priority, no repeated alerts.');
+}

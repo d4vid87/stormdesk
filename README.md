@@ -40,6 +40,14 @@ If a Mac says it cannot verify StormDesk, open **System Settings → Privacy & S
 
 ### Linux commands
 
+For the optional **natural male voice** (Kokoro Michael), install [uv](https://docs.astral.sh/uv/),
+then run `python3 scripts/install-natural-voice.py` from this repository. Setup downloads about
+350 MB once; speech then runs locally on the CPU without an account or cloud service. An installed
+`pw-play`, `paplay`, or `aplay` provides audio playback. Restart StormDesk and use **Enable / Test voice**;
+the setting shows **Natural male voice · local** when ready. The ordinary system voice remains available
+on installations without the voice pack. If an installed voice pack fails, the app reports the error
+instead of silently changing back to the robotic voice.
+
 Spoken watches and warnings: open **Settings → Basics → Sounds & notifications**, enable **Read warnings and watches aloud**,
 then press **Enable / Test voice**. Keep the dashboard open. The status below the button explains
 blocked playback or missing voices; the test does not send push notifications.
@@ -72,6 +80,13 @@ For the AppImage:
 chmod +x StormDesk_*_amd64.AppImage
 ./StormDesk_*_amd64.AppImage
 ```
+
+To build a local AppImage from source, run `bash scripts/build-appimage.sh` with Docker
+running. It builds in Ubuntu 22.04, matching the release workflow and avoiding Arch's
+newer GTK loader layout and incompatible bundled strip tool. The unsigned preview is
+written to `src-tauri/target/appimage-ubuntu/release/bundle/appimage/`. Build caches stay
+under `~/.cache/stormdesk-appimage`; no host packages are changed. Published, signed
+updater artifacts still come from the GitHub release workflow.
 
 If the AppImage opens a blank window, use browser mode:
 

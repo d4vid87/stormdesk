@@ -8,6 +8,14 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.3.2] - 2026-09-11
+
+### Changed
+- Added an optional offline Kokoro Michael male voice for Linux, preferred over browser speech when installed, with a verified model installer and visible engine label.
+
+### Fixed
+- Build local AppImages in an Ubuntu 22.04 container to avoid Arch GTK loader and bundled strip incompatibilities.
+
 ## [4.3.1] - 2026-09-11
 
 ### Fixed
@@ -684,7 +692,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.2...HEAD
+[4.3.2]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/d4vid87/stormdesk/compare/v4.1.0...v4.2.0

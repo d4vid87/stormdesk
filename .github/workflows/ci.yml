@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: node scripts/check-browser-compat.mjs
       - run: node scripts/check-speech.mjs
+      - run: python3 scripts/check-natural-voice.py
       - run: bash .github/ci/selftest.sh
       - uses: actions/upload-artifact@v4
         if: always()

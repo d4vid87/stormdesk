@@ -291,11 +291,18 @@ export function dismissStale(category, liveIds) {
 
 // Speech is independent of notification dedupe: a visible banner does not prove audio played.
 const speechPlace = () => JSON.stringify(coords());
+let naturalVoice = false;
+window.__TAURI__?.core.invoke('natural_voice_ready').then((ready) => {
+  naturalVoice = ready;
+  const label = document.getElementById('voice-engine');
+  if (label && ready) label.textContent = 'Natural male voice · local';
+}).catch(() => {});
 const speech = createSpeech({
   synth: window.speechSynthesis, Utterance: window.SpeechSynthesisUtterance,
   native: window.__TAURI__ && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent)
     ? (text) => window.__TAURI__.core.invoke('speak_text', { text }) : null,
   settings, language: navigator.language || 'en-US',
+  preferNative: () => naturalVoice,
   status: (message) => {
     const el = document.getElementById('voice-status');
     if (el) el.textContent = message;

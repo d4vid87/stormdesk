@@ -194,7 +194,7 @@ function organizeSettings() {
   for (const [name, ids] of [
     ['Region & units', ['region-presets', 'set-units', 'set-wind-unit', 'set-clock']],
     ['Radar & display', ['set-radar-site', 'set-desk-radar', 'set-storm-auto', 'set-night-dim']],
-    ['Sounds & notifications', ['set-speak', 'btn-voice-test', 'voice-status', 'set-brief-time', 'set-web-notif']],
+    ['Sounds & notifications', ['set-speak', 'btn-voice-test', 'voice-engine', 'voice-status', 'set-brief-time', 'set-web-notif']],
   ]) {
     const group = document.createElement('fieldset');
     const legend = document.createElement('legend'); legend.textContent = name;
