@@ -8,6 +8,12 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.3.4] - 2026-09-15
+
+### Fixed
+- Let the Docker container initialize root-owned bind mounts before dropping privileges, so the archive opens and station observations can be stored.
+- Keep the Docker build and runtime on Debian Bookworm to avoid GLIBC version mismatches.
+
 ## [4.3.3] - 2026-09-11
 
 ### Changed
@@ -702,7 +708,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.3...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.4...HEAD
+[4.3.4]: https://github.com/d4vid87/stormdesk/compare/v4.3.3...v4.3.4
 [4.3.2]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/d4vid87/stormdesk/compare/v4.2.0...v4.3.0

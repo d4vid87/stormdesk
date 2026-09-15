@@ -36,5 +36,5 @@ modules:
     sources:
       - type: git
         url: https://github.com/d4vid87/stormdesk.git
-        tag: v4.3.3
+        tag: v4.3.4
       - cargo-sources.json
