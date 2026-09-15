@@ -15,11 +15,7 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/src-tauri/target/release/stormdesk /usr/local/bin/stormdesk
-# Nothing here needs root: both ports are above 1024 and /data is the only thing written.
-# The uid is fixed at 1000:1000 so a bind mount can be matched from the host. IMPORTANT: a
-# ./data left by an earlier image is owned by root, and the server says nothing about it — it
-# starts, serves the page and quietly stores no observations. Upgrading an install that binds
-# a host directory takes a one-time `sudo chown -R 1000:1000 ./data`.
+# The uid is fixed at 1000:1000 so a bind mount can be matched from the host.
 RUN groupadd --gid 1000 stormdesk \
     && useradd --uid 1000 --gid 1000 --home-dir /data --no-create-home stormdesk \
     && install -d -o stormdesk -g stormdesk /data
@@ -28,7 +24,8 @@ ENV WD_DATA_DIR=/data
 VOLUME /data
 EXPOSE 8088
 EXPOSE 50222/udp
-USER stormdesk
 # IMPORTANT: run with `network_mode: host` on Linux. The Tempest hub broadcasts to the subnet,
 # and a broadcast does not cross a bridged Docker network no matter how many ports are published.
-ENTRYPOINT ["/usr/local/bin/stormdesk", "--headless"]
+# Docker creates a missing bind-mount directory as root. Repair it before dropping privileges so
+# SQLite can create the archive on a first run as well as after an upgrade.
+ENTRYPOINT ["sh", "-c", "chown -R stormdesk:stormdesk /data && exec setpriv --reuid=stormdesk --regid=stormdesk --init-groups /usr/local/bin/stormdesk --headless"]
