@@ -15,7 +15,7 @@ assert.match(source, /data-page="forecast"/);
 assert.match(source, /data-page="radar"/);
 assert.match(source, /data-page="more"/);
 assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|WebSocket/);
-assert.match(production, /src="lite\.js"/);
+assert.match(production, /src="lite\.js(?:\?[^"]*)?"/);
 assert.match(productionJs, /api\.betterForecast\(\)/);
 assert.match(productionJs, /hostJSON\('\/api\/v1'\)/);
 assert.match(productionJs, /\/pair\/claim/);
