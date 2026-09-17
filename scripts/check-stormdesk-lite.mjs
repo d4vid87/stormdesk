@@ -20,6 +20,8 @@ assert.match(productionJs, /api\.betterForecast\(\)/);
 assert.match(productionJs, /hostJSON\('\/api\/v1'\)/);
 assert.match(productionJs, /\/pair\/claim/);
 assert.match(productionJs, /hookecho\.pages\.dev/);
+assert.match(productionJs, /!site\.id\.startsWith\('T'\)/);
+assert.match(productionJs, /Radar snapshot unavailable/);
 assert.doesNotMatch(productionJs, /Sample forecast|DEMO-TOKEN/);
 
 for (const query of ['', '?page=forecast', '?page=radar', '?page=more&theme=dark', '?scenario=stale']) {

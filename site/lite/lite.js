@@ -187,7 +187,7 @@ function showPage(name) {
 const nearestSite = () => {
   const point = coords();
   if (point.lat == null || !sites.length) return '';
-  return sites.reduce((best, site) => {
+  return sites.filter((site) => !site.id.startsWith('T')).reduce((best, site) => {
     const distance = (site.lat - point.lat) ** 2 + (site.lon - point.lon) ** 2;
     return distance < best.distance ? { site, distance } : best;
   }, { site: null, distance: Infinity }).site?.id || '';
@@ -198,6 +198,11 @@ function loadRadarStill() {
   radarLoaded = true;
   const site = nearestSite();
   if (!site) return;
+  $('#radarStill').onerror = () => {
+    $('#radarStill').hidden = true;
+    $('.radar-label').textContent = 'Radar snapshot unavailable · press Play for live radar';
+  };
+  $('#radarStill').onload = () => { $('#radarStill').hidden = false; };
   $('#radarStill').src = `https://img.hookecho.io/snapshot.png?${new URLSearchParams({ site, size: '768', zoom: '6.5', basemap: 'dark', t: Math.floor(Date.now() / 300000) })}`;
   $('.radar-label').textContent = `Latest radar · ${site}`;
 }
@@ -218,7 +223,7 @@ function stopRadar() {
   const frame = $('#radarViewer');
   frame.src = '';
   frame.hidden = true;
-  $('#radarStill').hidden = false;
+  $('#radarStill').hidden = !$('#radarStill').naturalWidth;
   $('#radarPlay').textContent = '▶';
   $('#radarPlay').setAttribute('aria-label', 'Play live radar');
 }
