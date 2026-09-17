@@ -21,7 +21,8 @@
 .feature-showcase .copy{padding:30px}
 .feature-showcase h3{font-size:1.7rem;line-height:1.2;margin:12px 0}
 .feature-showcase p{color:var(--muted)}
-.feature-showcase img{display:block;width:100%;border-top:1px solid var(--line)}
+.feature-showcase img,.feature-showcase video{display:block;width:100%;border-top:1px solid var(--line)}
+.powered{font-size:.9rem}
 .community-banner{border:1px solid #55c9ff66;border-radius:24px;padding:38px;background:linear-gradient(120deg,#102f45,#101c30);text-align:center}
 .community-banner h2{font-size:clamp(2rem,4vw,3rem);line-height:1.1;margin:10px 0}
 @media(max-width:680px){.feature-showcase,.feature-showcase article:first-child{display:block}.feature-showcase article{margin-bottom:20px}.tour-bar{font-size:.72rem}.community-banner{padding:24px}.hero-shot video{border-radius:6px}}
