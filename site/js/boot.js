@@ -2,7 +2,7 @@ import { safeMode } from './compat.js';
 import { testVoice } from './app.js';
 import './storm-watch.js';
 // Wire the shell: settings drawer, diagnostics, nav, section modules.
-import { settings, saveSettings, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
+import { settings, saveSettings, sharedSettings, LOCAL_SETTING_KEYS, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
 import * as api from './api.js';
 import { motionLevel } from './motion.js';
 import { initDesk, refreshDesk, refreshObs, refreshAlerts, refreshAqi } from './desk.js';
@@ -42,29 +42,65 @@ $('desk-details').addEventListener('click', () => {
 // The desktop app's LAN server keeps one settings+layout blob, so every browser in the house
 // loads the host's configuration instead of being set up by hand. Static self-hosts have no
 // /config route: the fetches fail and each browser keeps its own localStorage, as before.
-const SRV = window.__WD_SRV || '';
+export function hostUrl(value) {
+  const raw = value.trim().replace(/\/$/, '');
+  if (!raw) return '';
+  const url = new URL(/^https?:\/\//i.test(raw) ? raw : `http://${raw}`);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/') throw new Error('Enter a host name or IP address, optionally with its port.');
+  return url.origin;
+}
+
+const SAVED_HOST = localStorage.getItem('wd.hostUrl') || '';
+const SRV = window.__WD_SRV || (window.__TAURI__ ? SAVED_HOST : '');
 let syncing = false;
+
+const EDITOR_TOKEN = localStorage.getItem('wd.editorToken') || '';
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (input, init = {}) => {
+  const raw = typeof input === 'string' ? input : input.url;
+  const url = new URL(raw, location.href);
+  if (EDITOR_TOKEN && url.origin === new URL(SRV || location.origin, location.href).origin) {
+    init = { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${EDITOR_TOKEN}` } };
+  }
+  return nativeFetch(input, init);
+};
 
 // The /public dashboard: same page, injected flag, credential-free config. Everything that
 // could change the host's settings — or read its token — is off from here on.
-const PUBLIC = !!window.__WD_PUBLIC;
+let PUBLIC = !!window.__WD_PUBLIC;
 
 let rev = null;
 
 async function pullConfig() {
   syncing = true;
   try {
-    const r = await fetch(`${SRV}/${PUBLIC ? 'config-public' : 'config'}`, { signal: expires(2000) });
+    let r = await fetch(`${SRV}/config`, { signal: expires(2000) });
+    if (r.status === 401) {
+      PUBLIC = true;
+      r = await fetch(`${SRV}/config-public`, { signal: expires(2000) });
+      markViewer();
+    }
     if (!r.ok) return;
     const j = await r.json();
     if (typeof j._rev === 'number') rev = j._rev;
-    if (j.settings) saveSettings(j.settings);
-    if (j.layout) restore(j.layout);
+    if (j.settings) saveSettings(sharedSettings(j.settings));
+    // One-time migration for an existing household layout; after this, every device owns its
+    // presentation and a host pull never rearranges another screen.
+    if (j.layout && localStorage.getItem('wd.layout') == null) restore(j.layout);
   } catch {
     // no config server (static host, or app not running) — nothing to sync
   } finally {
     syncing = false;
   }
+}
+
+function markViewer() {
+  document.body.classList.add('public');
+  $('btn-settings').hidden = true;
+  $('drawer').hidden = true;
+  $('btn-save').disabled = true;
+  $('pair-viewer').hidden = false;
+  $('pair-host').value = SRV;
 }
 
 // Server wins on load; on save this screen sends what it holds tagged with the revision it last
@@ -81,24 +117,40 @@ export function mayPush(pulled = rev !== null) {
 
 // Returns the write, so a caller that needs the server to have the new settings before it asks
 // the server anything (the Home Assistant test button) can wait for it.
-function pushConfig() {
+let pendingSettings = {};
+async function pushConfig(retried = false) {
   if (syncing || PUBLIC || !mayPush()) return Promise.resolve();
-  return fetch(`${SRV}/config`, {
+  const changed = pendingSettings;
+  pendingSettings = {};
+  const r = await fetch(`${SRV}/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ _rev: rev ?? 0, at: Date.now(), settings: settings(), layout: load('wd.layout', {}) }),
-  }).then((r) => (r.ok && r.status === 200 ? r.json() : null))
-    .then((j) => { if (typeof j?._rev === 'number') rev = j._rev; })
-    .catch(() => {});
+    body: JSON.stringify({ _rev: rev ?? 0, settings: Object.keys(changed).length ? changed : sharedSettings() }),
+  }).catch(() => null);
+  if (!r) { pendingSettings = { ...changed, ...pendingSettings }; return; }
+  const j = await r.json().catch(() => null);
+  if (r.status === 409 && j && !retried) {
+    rev = j._rev;
+    if (j.settings) saveSettings({ ...sharedSettings(j.settings), ...changed });
+    pendingSettings = { ...changed, ...pendingSettings };
+    return pushConfig(true);
+  }
+  if (r.ok && typeof j?._rev === 'number') rev = j._rev;
 }
 
 let pushTimer;
 // A layout event raised while a pull is applying is the server's own layout coming back, not an
 // edit — scheduling a push for it is how this screen used to answer every broadcast with a write.
 window.addEventListener('wd:layout', () => {
+  // Layout is intentionally device-local.
+});
+
+window.addEventListener('wd:settings', (e) => {
   if (syncing) return;
+  for (const [k, v] of Object.entries(e.detail || {})) if (!LOCAL_SETTING_KEYS.has(k)) pendingSettings[k] = v;
+  if (!Object.keys(pendingSettings).length) return;
   clearTimeout(pushTimer);
-  pushTimer = setTimeout(pushConfig, 2000);
+  pushTimer = setTimeout(pushConfig, 500);
 });
 
 // Someone changed a setting on another screen. Before this, a tablet kept showing yesterday's
@@ -255,6 +307,7 @@ function fillDrawer() {
   $('set-motion').value = s.motion || 'auto';
   $('set-render').value = s.render || 'auto';
   $('set-retention').value = String(s.retentionYears || 0);
+  $('set-legacy-lan').checked = !!s.legacyLanAccess;
   const tl = timelineSettings(s);
   $('set-tl-precip').value = tl.precip;
   $('set-tl-freeze').value = s.units === 'metric' ? tl.freezeC : Math.round(tl.freezeC * 9 / 5 + 32);
@@ -486,6 +539,13 @@ const openDrawer = (open) => {
   const el = $('drawer');
   el.classList.toggle('open', open);
   el.setAttribute('aria-hidden', open ? 'false' : 'true');
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'settings-title');
+  const title = el.querySelector(':scope > h2');
+  if (title) title.id = 'settings-title';
+  document.querySelectorAll('main > :not(#drawer)').forEach((node) => node.toggleAttribute('inert', open));
+  document.querySelector('body > header')?.toggleAttribute('inert', open);
   if (open) {
     drawerReturn = document.activeElement;
     el.querySelector('input, select, button')?.focus();
@@ -496,7 +556,15 @@ const openDrawer = (open) => {
 };
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && $('drawer').classList.contains('open')) openDrawer(false);
+  const drawer = $('drawer');
+  if (e.key === 'Escape' && drawer.classList.contains('open')) openDrawer(false);
+  if (e.key === 'Tab' && drawer.classList.contains('open')) {
+    const focusable = [...drawer.querySelectorAll('button,input,select,textarea,a[href]')]
+      .filter((x) => !x.disabled && !x.hidden && x.offsetParent !== null);
+    const first = focusable[0], last = focusable.at(-1);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+  }
 });
 
 $('btn-settings').onclick = () => { fillDrawer(); openDrawer(true); };
@@ -552,6 +620,7 @@ $('btn-save').onclick = async () => {
     motion: $('set-motion').value,
     render: $('set-render').value,
     retentionYears: +$('set-retention').value || 0,
+    legacyLanAccess: $('set-legacy-lan').checked,
     timeline: {
       precip: Math.max(0, Math.min(100, +$('set-tl-precip').value || 30)),
       freezeC: settings().units === 'metric' ? +$('set-tl-freeze').value : (+$('set-tl-freeze').value - 32) / 1.8,
@@ -691,6 +760,7 @@ async function firstReading(fetcher) {
         try {
           await api.betterForecast();
           $('wiz-step-forecast').textContent = 'done ✓'; $('wiz-step-forecast').className = 'ok';
+          localStorage.setItem('wd.setupComplete', '1');
           setTimeout(() => { $('wizard').hidden = true; }, 1500);
         } catch {
           $('wiz-step-forecast').textContent = 'needs attention'; $('wiz-step-forecast').className = 'fail';
@@ -746,6 +816,7 @@ async function wizardFind() {
 // install needs — no token, no account, and the forecast comes from open-meteo.
 {
   const sel = $('wiz-source');
+  let placeOnly = false;
   sel.innerHTML = $('set-source').innerHTML;
   const target = () => {
     const v = sel.value;
@@ -771,10 +842,20 @@ async function wizardFind() {
           const h = hits[+b.dataset.hit];
           const [lon, lat] = h.geometry.coordinates;
           saveSettings({
-            stationSource: sel.value || 'ecowitt', lat, lon,
+            stationSource: placeOnly ? '' : (sel.value || 'ecowitt'), lat, lon,
             stationName: h.properties.city || h.properties.name || q,
             ...($('wiz-wll-host').value.trim() ? { wllHost: $('wiz-wll-host').value.trim() } : {}),
           });
+          if (placeOnly) {
+            localStorage.setItem('wd.setupComplete', '1');
+            $('wiz-step-source').textContent = 'done ✓';
+            $('wiz-step-reading').textContent = 'not required';
+            $('wiz-step-forecast').textContent = 'checking…';
+            api.betterForecast().then(() => {
+              $('wiz-step-forecast').textContent = 'done ✓';
+              setTimeout(() => { $('wizard').hidden = true; }, 800);
+            }).catch(() => { $('wiz-step-forecast').textContent = 'needs attention'; });
+          }
           fillDrawer();
           firstReading(async () => (await api.localObs(1)).obs?.at(-1)?.[api.OBS.temp]);
           refreshAll();
@@ -791,6 +872,11 @@ async function wizardFind() {
   $('btn-wiz-wll').onclick = () => findWll($('wiz-wll-host'), $('wiz-target'));
   $('btn-wiz-place').onclick = find;
   $('wiz-place').onkeydown = (e) => { if (e.key === 'Enter') find(); };
+  const choosePlace = () => { placeOnly = true; $('wiz-place').focus(); $('wiz-target').textContent = 'Search for the place you want to follow.'; };
+  $('btn-wiz-place-mode').onclick = choosePlace;
+  $('btn-wiz-demo').onclick = choosePlace;
+  $('btn-wiz-station').onclick = () => { placeOnly = false; sel.focus(); };
+  $('btn-wiz-host').onclick = () => { $('wizard').hidden = true; markViewer(); $('pair-code').focus(); };
   target();
 }
 
@@ -842,16 +928,6 @@ $('btn-ha-test').onclick = async () => {
 $('btn-wiz-find').onclick = () => wizardFind();
 $('wiz-token').onkeydown = (e) => { if (e.key === 'Enter') wizardFind(); };
 $('btn-wiz-close').onclick = () => { $('wizard').hidden = true; };
-$('btn-wiz-demo').onclick = () => {
-  // Demo mode is not a fixture: it is the real dashboard on the keyless sources, pointed at
-  // whatever place the user searches for. Everything Tempest stays empty and says so.
-  $('wizard').hidden = true;
-  document.querySelector('.tab[data-section="signals"]')?.click();
-  fillDrawer();
-  openDrawer(true);
-  $('place-q').focus();
-  notify({ title: 'Demo mode', body: 'Search a city in Settings — forecasts, models and alerts work without a station.' });
-};
 
 // --- what's new ---
 //
@@ -878,6 +954,11 @@ if (location.search.includes('selftest')) {
   console.assert(canIngest(env({})), 'ingest: a browser is already on a reachable address');
   console.assert(canIngest(env({ __TAURI__: {}, __WD_SRV: 'http://x' })), 'ingest: the desktop app carries a LAN address');
   console.assert(!canIngest(env({ __TAURI__: {} })), 'ingest: the phone app has nowhere for a console to report');
+  console.assert(hostUrl('192.168.1.50:8088') === 'http://192.168.1.50:8088', 'pairing: bare LAN address');
+  console.assert(hostUrl('https://weather.home/') === 'https://weather.home', 'pairing: normalized URL');
+  openDrawer(true);
+  console.assert(!$('drawer').inert && [...document.querySelectorAll('main > :not(#drawer)')].every((node) => node.inert), 'settings: dialog stays interactive while its background is inert');
+  openDrawer(false);
 }
 if (shouldRegisterSW()) {
   navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
@@ -1027,6 +1108,8 @@ function applyPreset(name) {
   }
   restore(st);
   renderHiddenPanels();
+  openDrawer(false);
+  loadDeskRadar();
   notify({ title: `${name} layout applied`, body: 'Everything else is under Hidden panels in Settings.' });
 }
 
@@ -1093,8 +1176,8 @@ $('import-file').onchange = async (e) => {
     const j = JSON.parse(await file.text());
     // Merged, not replaced: a backup from an older version is missing every key added since,
     // and saveSettings over DEFAULTS is what fills those in.
-    if (j.settings) saveSettings(j.settings);
-    if (j.layout) restore(j.layout);
+    if (j.settings) saveSettings(sharedSettings(j.settings));
+    if (j.layout && localStorage.getItem('wd.layout') == null) restore(j.layout);
     fillDrawer();
     notify({ title: 'Settings imported', body: 'Reloading to apply.' });
     pushConfig();
@@ -1189,10 +1272,10 @@ $('btn-diag').onclick = async () => {
   ).join('');
   let server = null;
   try { server = await api.getJSON(`${SRV}/health`); } catch { /* browser-only build */ }
-  const archive = server?.archive;
+  const archive = server?.archive?.health ?? server?.archive;
   const cards = [
     ['Server', !!server, server ? `v${server.version} · up ${Math.floor(server.uptime / 60)} min` : 'not available in this build'],
-    ['Archive', !!archive?.ok, archive ? `${archive.rows || 0} rows · ${archive.check}` : 'not available'],
+    ['Archive', !!archive?.ok && server?.archive?.identityMatches !== false, archive ? `${archive.rows || 0} rows · ${archive.check}${server?.archive?.identityMatches === false ? ' · station identity changed; export backup and replace archive' : ''}` : 'not available'],
     ['Forecast', rows.some((r) => r.ok && /forecast/i.test(r.name)), 'cloud forecast source'],
     ['Alerts', rows.some((r) => r.ok && /alerts/i.test(r.name)), 'official warning feed'],
     ['Radar', rows.some((r) => r.ok && /RainViewer/i.test(r.name)), 'map source'],
@@ -1209,7 +1292,7 @@ $('btn-diag').onclick = async () => {
   $('health-summary').innerHTML = cards.map(([name, ok, detail]) =>
     `<div><span>${name}</span><span class="${ok ? 'ok' : 'fail'}">${ok ? '✓' : '✗'} ${detail}</span></div>`).join('');
   $('health-summary')._report = { version: APP_VERSION, viewport: view, platform: navigator.platform,
-    motion: document.documentElement.dataset.motion, render: settings().render, server,
+    motion: document.documentElement.dataset.motion, render: settings().render, server, performance: window.__WD_TIMINGS || {},
     sources: rows.map((r) => ({ name: r.name, ok: r.ok })) };
 };
 
@@ -1228,6 +1311,14 @@ $('health-center').onclick = async (e) => {
     if (action === 'checkpoint') {
       const r = await fetch(`${SRV}/health/action`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"action":"checkpoint"}' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    }
+    if (action === 'replace-station') {
+      if (!confirm('StormDesk will create a backup, clear the current observations, and bind the empty archive to the station now configured. Continue?')) return;
+      const r = await fetch(`${SRV}/archive/replace`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"confirm":"REPLACE"}' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      const a = document.createElement('a');
+      a.href = `${SRV}${j.backup}`; a.download = 'pre-station-replacement.wdbak'; a.click();
     }
     notify({ title: 'Health Center', body: action === 'safe' ? 'Safe renderer saved for the next launch.' : 'Action complete.' });
     $('btn-diag').click();
@@ -1482,14 +1573,45 @@ const pulled = pullConfig();
 // A viewer cannot open the drawer, so a viewer cannot see or change anything the owner set. The
 // token is not in this page to begin with — the server never sent it.
 if (PUBLIC) {
-  document.body.classList.add('public');
-  $('btn-settings').hidden = true;
-  // Hidden, not removed: loadDeskRadar and the drawer helpers all reach for these nodes, and a
-  // public page is not the place to find out which ones. The fields are empty anyway — the
-  // server redacted every credential before it sent the config.
-  $('drawer').hidden = true;
-  $('btn-save').disabled = true;
+  markViewer();
 }
+
+$('btn-pair-viewer').onclick = async () => {
+  let host;
+  try { host = hostUrl($('pair-host').value); } catch (e) { return notify({ title: 'Pairing failed', body: e.message }); }
+  if (!host) return notify({ title: 'Pairing failed', body: 'Enter the StormDesk host address' });
+  const code = $('pair-code').value.trim();
+  const name = $('pair-name').value.trim() || navigator.userAgent.split(' ')[0] || 'Household device';
+  const r = await nativeFetch(`${host}/pair/claim`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, name }) }).catch(() => null);
+  if (!r) return notify({ title: 'Pairing failed', body: 'Could not reach that StormDesk host' });
+  if (!r.ok) return notify({ title: 'Pairing failed', body: r.status === 429 ? 'Too many attempts — wait ten minutes' : 'Pairing code was invalid or expired' });
+  const j = await r.json();
+  localStorage.setItem('wd.hostUrl', host);
+  localStorage.setItem('wd.editorToken', j.token);
+  location.reload();
+};
+
+$('btn-pair-start').onclick = async () => {
+  const r = await fetch(`${SRV}/pair/start`, { method: 'POST' });
+  const j = r.ok ? await r.json() : null;
+  $('pair-owner-out').textContent = j ? `Enter ${j.code} on the other device. Expires in 10 minutes.` : 'Could not start pairing.';
+};
+
+$('btn-paired-list').onclick = async () => {
+  const r = await fetch(`${SRV}/pair/devices`);
+  const j = r.ok ? await r.json() : { devices: [] };
+  $('paired-list').replaceChildren(...j.devices.map((d) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const label = document.createElement('span');
+    label.textContent = `${d.name} · last seen ${d.lastSeen ? new Date(d.lastSeen * 1000).toLocaleString() : 'never'}`;
+    const revoke = document.createElement('button');
+    revoke.textContent = 'Revoke';
+    revoke.onclick = async () => { await fetch(`${SRV}/pair/devices/revoke`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.id }) }); $('btn-paired-list').click(); };
+    row.append(label, revoke);
+    return row;
+  }));
+};
 
 applyEco();
 applyMotion();
@@ -1537,6 +1659,10 @@ changelog();
 // Anything the pulled config decides: the wizard (showing it before the pull flashed it on an
 // install that is configured on the server), and the settings-driven chrome.
 pulled.then(() => {
+  if (settings().legacyLanAccess && !sessionStorage.getItem('wd.legacyPrompted')) {
+    sessionStorage.setItem('wd.legacyPrompted', '1');
+    notify({ title: 'Household access upgrade', body: 'Pair editor devices, then turn off legacy LAN editing in Settings → Household access.' });
+  }
   applyEco();
   applyMotion();
   initKiosk();
@@ -1546,11 +1672,12 @@ pulled.then(() => {
     loadDeskRadar();
     initDesk(); initIntel(); initSignals(); initBoards(); initAlmanac(); initEnv(); initPro(); initDetail(); initTimeline(); initUdp(); initHome();
     every('server-alerts', 300, probeServerAlerts);
+    (window.__WD_TIMINGS ||= {}).initialDeskRenderMs = Math.round(performance.now());
   });
 });
 
 function showWizard() {
-if (!hasSource() && !PUBLIC) {
+if (!localStorage.getItem('wd.setupComplete') && !hasSource() && !PUBLIC) {
   $('wizard').hidden = false;
   // No autofocus on the token field: it put a cursor in a Tempest-only box for people who own
   // an Ambient, and they reported the app as demanding an account they can't have.
@@ -1574,8 +1701,18 @@ if (!hasSource() && !PUBLIC) {
 // ponytail-lite self-check: `?selftest` asserts the site maths and the link the viewer is handed.
 if (location.search.includes('selftest')) {
   organizeSettings();
+  if (matchMedia('(max-width:720px) and (orientation:portrait)').matches) {
+    const menuStyle = getComputedStyle(document.querySelector('.header-overflow-menu'));
+    console.assert(menuStyle.top === 'auto' && menuStyle.bottom !== 'auto', 'phone overflow opens upward');
+    console.assert(getComputedStyle(document.querySelector('header')).zIndex !== 'auto', 'phone header overlays content');
+  }
   console.assert($('settings-basics')?.children.length > 0, 'settings: basics populated');
   console.assert($('settings-appearance')?.children.length > 0, 'settings: appearance populated');
+  const beforePreset = snapshot();
+  openDrawer(true); applyPreset('Kitchen portrait');
+  console.assert(!$('drawer').classList.contains('open'), 'layout preset reveals its result');
+  restore(beforePreset);
+  document.querySelectorAll('#notif-stack .notif').forEach((node) => node.remove());
   const sites = [{ id: 'KTLX', name: 'Oklahoma City, OK', lat: 35.33, lon: -97.28 },
     { id: 'KFWS', name: 'Dallas, TX', lat: 32.57, lon: -97.30 }];
   console.assert(nearestSite(35.4, -97.5, sites).id === 'KTLX', 'nearest site');

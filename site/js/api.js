@@ -49,6 +49,11 @@ const cacheable = (url) => url.startsWith('https://api.weather.gov/');
 // collapses those into one request; anything older than 30 s is refetched.
 const memo = new Map();
 const MEMO_MS = 30000;
+const CACHE_MAX = 64;
+
+function trimCache(map) {
+  while (map.size > CACHE_MAX) map.delete(map.keys().next().value);
+}
 
 export async function getJSON(url, opts) {
   const key = !opts || (!opts.method && !opts.headers && !opts.body) ? url : null;
@@ -57,6 +62,7 @@ export async function getJSON(url, opts) {
     if (m && Date.now() - m.t < MEMO_MS) return m.p.then(structuredClone);
     const p = fetchJSON(url, opts);
     memo.set(key, { t: Date.now(), p });
+    trimCache(memo);
     p.catch(() => memo.delete(key));
     return p.then(structuredClone);
   }
@@ -85,7 +91,7 @@ async function fetchJSON(url, opts) {
   const tag = cacheable(url) && r.headers.get('ETag');
   // Callers mutate what they get back (deviceObs converts in place), so the cache keeps its own
   // copy and hands out clones.
-  if (tag) etags.set(url, { etag: tag, body: structuredClone(body) });
+  if (tag) { etags.set(url, { etag: tag, body: structuredClone(body) }); trimCache(etags); }
   return body;
 }
 
@@ -212,7 +218,7 @@ export async function localObs(hours = 3, at = null) {
 // unaware. See `shapeOm`.
 export function betterForecast(stationId = settings().stationId) {
   // A non-Tempest source routes to open-meteo even if a stale token survives in the config (#37).
-  if (!settings().token || settings().stationSource) return omForecast();
+  if (settings().activePlace || !settings().token || settings().stationSource) return omForecast();
   return getJSON(`${SWD}/better_forecast?${qs({
     station_id: stationId, token: settings().token, ...unitParams(),
   })}`);
@@ -329,7 +335,9 @@ export function shapeOm(j, ownTuple = null) {
     wind_direction: cur.wind_direction_10m,
     sea_level_pressure: inHg(cur.pressure_msl),
     station_pressure: inHg(cur.surface_pressure),
-    precip_accum_local_day: D.precipitation_sum?.[0],
+    observed_rain_today: null,
+    forecast_rain_today: D.precipitation_sum?.[0] ?? null,
+    precip_accum_local_day: null,
     uv: at('uv_index'),
     solar_radiation: at('shortwave_radiation'),
     wet_bulb_temperature: at('wet_bulb_temperature_2m'),
@@ -339,7 +347,9 @@ export function shapeOm(j, ownTuple = null) {
     conditions: omWords(cur.weather_code),
   };
 
-  if (ownTuple) overlayStation(c, ownTuple, j.elevation);
+  // A saved place is a forecast destination, never the garden station. Overlaying the last
+  // home tuple here made an away city's alerts sit beside the home's temperature and rain.
+  if (ownTuple && !settings().activePlace) overlayStation(c, ownTuple, j.elevation);
 
   // Kept so a later observation can be overlaid on this same payload without refetching.
   return { current_conditions: c, forecast: { daily, hourly }, elevation: j.elevation };
@@ -360,6 +370,7 @@ export function overlayStation(c, tuple, elevation) {
     uv: own(o[OBS.uv]),
     solar_radiation: own(o[OBS.solar]),
     precip_accum_local_day: own(o[OBS.dayRain]),
+    observed_rain_today: own(o[OBS.dayRain]),
     station_pressure: own(o[OBS.press]),
     // The barometer gauge reads `sea_level_pressure`; without this line it showed the model's
     // MSL forever and a real barometer sat unused two fields away.

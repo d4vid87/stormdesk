@@ -100,6 +100,7 @@ const DEFAULTS = {
   // Optional shared secret for the ingest path. Empty by default: this server already trusts
   // its LAN with /config, and a console that must be told a secret is one nobody sets up.
   ingestKey: '',
+  legacyLanAccess: false,
 };
 
 // A fresh install starts with the Desk radar off: it is megabytes of wasm in the same WebKit
@@ -108,13 +109,26 @@ const DEFAULTS = {
 const FIRST_RUN = localStorage.getItem('wd.settings') == null;
 let _settings = load('wd.settings', { ...DEFAULTS, deskRadar: !FIRST_RUN });
 
+// Presentation belongs to the screen in front of the user; station and alert behavior belongs
+// to the household host. Existing installs already have these values locally, so this is also
+// the migration: future host pulls simply stop replacing them.
+export const LOCAL_SETTING_KEYS = new Set([
+  'activePlace', 'theme', 'accent', 'palette', 'density', 'fontScale', 'bigNumbers',
+  'motion', 'eco', 'kiosk', 'kioskCycleSec', 'nightDim', 'layoutLocked', 'hiddenTabs',
+  'deskRadar', 'radarSite', 'heroSummary', 'clock24', 'render',
+]);
+
 export function settings() { return _settings; }
 
 export function saveSettings(patch) {
   _settings = { ..._settings, ...patch };
   store('wd.settings', _settings);
-  window.dispatchEvent(new CustomEvent('wd:settings'));
+  window.dispatchEvent(new CustomEvent('wd:settings', { detail: patch }));
   return _settings;
+}
+
+export function sharedSettings(value = _settings) {
+  return Object.fromEntries(Object.entries(value).filter(([k]) => !LOCAL_SETTING_KEYS.has(k)));
 }
 
 export function load(key, fallback) {
@@ -507,10 +521,16 @@ export function expires(ms) {
 export function every(name, seconds, fn) {
   const prev = jobs.get(name);
   if (prev) clearInterval(prev.id);
-  const job = { due: false, base: seconds };
+  const job = { due: false, running: false, base: seconds };
   job.run = async () => {
     if (document.hidden) { job.due = true; return; }
+    if (job.running) { job.due = true; return; }
+    job.running = true;
     try { await fn(); } catch (e) { console.warn(`job ${name}:`, e.message); }
+    finally {
+      job.running = false;
+      if (job.due && !document.hidden) { job.due = false; queueMicrotask(job.run); }
+    }
   };
   job.paced = paceFor(name, seconds);
   job.id = setInterval(job.run, job.paced * 1000);

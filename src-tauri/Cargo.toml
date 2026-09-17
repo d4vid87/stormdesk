@@ -44,6 +44,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 ureq = "2"
 # The dashboard itself, so the headless binary is one file with nothing beside it.
 include_dir = "0.7"
+# Pairing credentials: OS randomness for tokens/codes and one-way storage for persistent tokens.
+getrandom = "0.2"
+sha2 = "0.10"
 # MQTT for the Home Assistant integration. The blocking client: this binary has no async
 # runtime and does not want one for a publish every ten seconds.
 # Pins us to rustls-webpki 0.102.8, which carries RUSTSEC-2026-0104 — a CRL-parsing panic this app

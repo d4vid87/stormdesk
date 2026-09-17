@@ -13,6 +13,7 @@
 
 use crate::store;
 use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 /// One pass a minute. The archive gains a row a minute at best, and a rule with a duration is
@@ -24,6 +25,7 @@ const TICK: Duration = Duration::from_secs(60);
 /// field by field rather than derived: a missing key must be a default, never a dropped rule.
 #[derive(Debug, Clone)]
 pub struct Rule {
+    pub id: String,
     pub metric: String,
     pub op: String,
     pub value: f64,
@@ -38,6 +40,7 @@ impl Rule {
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(String::from);
         let f = |k: &str| v.get(k).and_then(|x| x.as_f64());
         Some(Rule {
+            id: s("id").unwrap_or_default(),
             metric: s("metric")?,
             op: s("op").unwrap_or_else(|| ">".into()),
             value: f("value")?,
@@ -55,29 +58,58 @@ impl Rule {
 pub struct Latch {
     pub since: Option<i64>,
     pub latched: bool,
+    pub last: Option<i64>,
 }
 
 /// The metric keys `rules.js` offers, and nothing else: a saved rule naming a metric that no
 /// longer exists is skipped rather than treated as zero.
-pub const METRICS: [&str; 9] =
-    ["temp", "dew", "gust", "wind", "rh", "rain", "uv", "strikes3h", "press3h"];
+pub const METRICS: [&str; 16] = [
+    "temp",
+    "dew",
+    "gust",
+    "wind",
+    "rh",
+    "rain",
+    "uv",
+    "strikes3h",
+    "press3h",
+    "temp1h",
+    "press1h",
+    "rh1h",
+    "low18h",
+    "rain6h",
+    "gust24h",
+    "hiTomorrow",
+];
 
 fn holds(v: f64, op: &str, target: f64) -> bool {
-    if op == "<" { v < target } else { v > target }
+    if op == "<" {
+        v < target
+    } else {
+        v > target
+    }
 }
 
 /// Re-arm at 90% of the threshold (110% for a "below" rule). Without it a gust hovering on
 /// 30 mph notifies on every single report.
 fn rearmed(v: f64, op: &str, target: f64) -> bool {
-    if op == "<" { v > target * 1.1 } else { v < target * 0.9 }
+    if op == "<" {
+        v > target * 1.1
+    } else {
+        v < target * 0.9
+    }
 }
 
 fn second(m: &HashMap<&str, f64>, r: &Rule) -> bool {
-    let Some(k) = r.metric2.as_deref() else { return true };
+    let Some(k) = r.metric2.as_deref() else {
+        return true;
+    };
     if !METRICS.contains(&k) {
         return false;
     }
-    let (Some(v), Some(t)) = (m.get(k), r.value2) else { return false };
+    let (Some(v), Some(t)) = (m.get(k), r.value2) else {
+        return false;
+    };
     holds(*v, r.op2.as_deref().unwrap_or(">"), t)
 }
 
@@ -86,19 +118,32 @@ fn second(m: &HashMap<&str, f64>, r: &Rule) -> bool {
 pub fn evaluate(
     m: &HashMap<&str, f64>,
     rules: &[Rule],
-    state: &mut HashMap<usize, Latch>,
+    state: &mut HashMap<String, Latch>,
     now: i64,
 ) -> Vec<(usize, f64)> {
     let mut fired = Vec::new();
     for (i, r) in rules.iter().enumerate() {
+        let key = if r.id.is_empty() {
+            format!("legacy-{i}")
+        } else {
+            r.id.clone()
+        };
+        let st = state.entry(key).or_default();
         if !METRICS.contains(&r.metric.as_str()) {
+            st.since = None;
             continue;
         }
-        let Some(&v) = m.get(r.metric.as_str()) else { continue };
-        if v.is_nan() {
+        let Some(&v) = m.get(r.metric.as_str()) else {
+            st.since = None;
+            st.last = None;
+            continue;
+        };
+        if v.is_nan() || st.last.is_some_and(|last| now - last > 180) {
+            st.since = None;
+            st.last = Some(now);
             continue;
         }
-        let st = state.entry(i).or_default();
+        st.last = Some(now);
         if !holds(v, &r.op, r.value) || !second(m, r) {
             st.since = None;
             if st.latched && rearmed(v, &r.op, r.value) {
@@ -118,13 +163,19 @@ pub fn evaluate(
 // --- reading the archive in the units the rule was written in ---
 
 fn imperial(cfg: &std::path::Path) -> bool {
-    crate::setting(cfg, "units").unwrap_or_default().trim_matches('"') != "metric"
+    crate::setting(cfg, "units")
+        .unwrap_or_default()
+        .trim_matches('"')
+        != "metric"
 }
 
 /// m/s to whatever the wind is displayed in — the dashboard's wind unit is separately
 /// overridable, so this is not simply "metric or not".
 fn wind_factor(cfg: &std::path::Path) -> f64 {
-    let unit = crate::setting(cfg, "windUnit").unwrap_or_default().trim_matches('"').to_string();
+    let unit = crate::setting(cfg, "windUnit")
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_string();
     match unit.as_str() {
         "km/h" => 3.6,
         "m/s" => 1.0,
@@ -140,7 +191,10 @@ fn wind_factor(cfg: &std::path::Path) -> f64 {
 /// `dew` is absent: the archive holds no dew point column, and `rules.js` leaves it null on the
 /// live-tuple path for the same reason. A dew rule simply never fires here, which is what it
 /// already does for every non-Tempest station.
-fn metrics(conn: &rusqlite::Connection, cfg: &std::path::Path) -> Option<(i64, HashMap<&'static str, f64>)> {
+fn metrics(
+    conn: &rusqlite::Connection,
+    cfg: &std::path::Path,
+) -> Option<(i64, HashMap<&'static str, f64>)> {
     let imp = imperial(cfg);
     let w = wind_factor(cfg);
     /// ts, then the eight readings a rule can name, each of which any station is free to be
@@ -153,7 +207,17 @@ fn metrics(conn: &rusqlite::Connection, cfg: &std::path::Path) -> Option<(i64, H
              FROM obs ORDER BY ts DESC LIMIT 1",
             [],
             |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                    r.get(7)?,
+                    r.get(8)?,
+                ))
             },
         )
         .ok()?;
@@ -164,14 +228,27 @@ fn metrics(conn: &rusqlite::Connection, cfg: &std::path::Path) -> Option<(i64, H
             m.insert(k, v);
         }
     };
-    put("temp", temp.map(|c| if imp { c * 9.0 / 5.0 + 32.0 } else { c }));
+    put(
+        "temp",
+        temp.map(|c| if imp { c * 9.0 / 5.0 + 32.0 } else { c }),
+    );
     put("gust", gust.map(|v| v * w));
     put("wind", wind.map(|v| v * w));
     put("rh", rh);
+    if let (Some(t), Some(rh)) = (temp, rh.filter(|v| *v > 0.0)) {
+        let a = 17.625;
+        let b = 243.04;
+        let g = (rh / 100.0).ln() + a * t / (b + t);
+        let dew = b * g / (a - g);
+        put("dew", Some(if imp { dew * 9.0 / 5.0 + 32.0 } else { dew }));
+    }
     put("uv", uv);
     // The archive holds the accumulation for one report interval; the rule is written per hour.
     let mins = interval.filter(|v| *v > 0.0).unwrap_or(1.0);
-    put("rain", rain.map(|v| v * (60.0 / mins) * if imp { 1.0 / 25.4 } else { 1.0 }));
+    put(
+        "rain",
+        rain.map(|v| v * (60.0 / mins) * if imp { 1.0 / 25.4 } else { 1.0 }),
+    );
 
     // Three hours back, for the two metrics that are a change rather than a reading.
     let then: Option<f64> = conn
@@ -182,15 +259,120 @@ fn metrics(conn: &rusqlite::Connection, cfg: &std::path::Path) -> Option<(i64, H
         )
         .ok();
     if let (Some(now), Some(then)) = (press, then) {
-        put("press3h", Some((now - then) * if imp { 0.02953 } else { 1.0 }));
+        put(
+            "press3h",
+            Some((now - then) * if imp { 0.02953 } else { 1.0 }),
+        );
     }
     // Strikes are reported per interval, so three hours' worth is a sum, not a difference.
     let strikes: Option<f64> = conn
-        .query_row("SELECT SUM(strikes) FROM obs WHERE ts > ?1", [ts - 3 * 3600], |r| r.get(0))
+        .query_row(
+            "SELECT SUM(strikes) FROM obs WHERE ts > ?1",
+            [ts - 3 * 3600],
+            |r| r.get(0),
+        )
         .ok()
         .flatten();
     put("strikes3h", strikes);
+
+    type HourRow = (Option<f64>, Option<f64>, Option<f64>);
+    let hour: Option<HourRow> = conn
+        .query_row(
+            "SELECT temp, pressure, humidity FROM obs WHERE ts <= ?1 ORDER BY ts DESC LIMIT 1",
+            [ts - 3600],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .ok();
+    if let Some((old_t, old_p, old_rh)) = hour {
+        if let (Some(a), Some(b)) = (temp, old_t) {
+            put("temp1h", Some((a - b) * if imp { 1.8 } else { 1.0 }));
+        }
+        if let (Some(a), Some(b)) = (press, old_p) {
+            put("press1h", Some((a - b) * if imp { 0.02953 } else { 1.0 }));
+        }
+        if let (Some(a), Some(b)) = (rh, old_rh) {
+            put("rh1h", Some(a - b));
+        }
+    }
     Some((ts, m))
+}
+
+fn forecast_metrics(cfg: &std::path::Path) -> HashMap<&'static str, f64> {
+    static CACHE: OnceLock<Mutex<Option<(u64, HashMap<&'static str, f64>)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    let now = crate::server::epoch();
+    if let Ok(c) = cache.lock() {
+        if let Some((at, values)) = c.as_ref() {
+            if now.saturating_sub(*at) < 900 {
+                return values.clone();
+            }
+        }
+    }
+    let num = |k: &str| {
+        crate::setting(cfg, k)?
+            .trim_matches('"')
+            .parse::<f64>()
+            .ok()
+    };
+    let Some((lat, lon)) = num("lat").zip(num("lon")) else {
+        return HashMap::new();
+    };
+    let url = format!(
+        "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}\
+        &hourly=temperature_2m,precipitation_probability,wind_gusts_10m\
+        &daily=temperature_2m_max&forecast_days=2&timezone=auto&timeformat=unixtime&wind_speed_unit=ms"
+    );
+    let Ok(r) = ureq::get(&url).timeout(Duration::from_secs(20)).call() else {
+        return HashMap::new();
+    };
+    let Ok(body) = r.into_string() else {
+        return HashMap::new();
+    };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) else {
+        return HashMap::new();
+    };
+    let hourly = &v["hourly"];
+    let times = hourly["time"].as_array().cloned().unwrap_or_default();
+    let values = |key: &str, hours: u64| -> Vec<f64> {
+        let Some(arr) = hourly[key].as_array() else {
+            return Vec::new();
+        };
+        times
+            .iter()
+            .zip(arr)
+            .filter_map(|(t, x)| {
+                let t = t.as_i64()? as u64;
+                (t >= now && t <= now + hours * 3600)
+                    .then(|| x.as_f64())
+                    .flatten()
+            })
+            .collect()
+    };
+    let imp = imperial(cfg);
+    let mut out = HashMap::new();
+    let temps = values("temperature_2m", 18);
+    if let Some(x) = temps.into_iter().reduce(f64::min) {
+        out.insert("low18h", if imp { x * 1.8 + 32.0 } else { x });
+    }
+    if let Some(x) = values("precipitation_probability", 6)
+        .into_iter()
+        .reduce(f64::max)
+    {
+        out.insert("rain6h", x);
+    }
+    if let Some(x) = values("wind_gusts_10m", 24).into_iter().reduce(f64::max) {
+        out.insert("gust24h", x * wind_factor(cfg));
+    }
+    if let Some(x) = v["daily"]["temperature_2m_max"]
+        .get(1)
+        .and_then(|x| x.as_f64())
+    {
+        out.insert("hiTomorrow", if imp { x * 1.8 + 32.0 } else { x });
+    }
+    if let Ok(mut c) = cache.lock() {
+        *c = Some((now, out.clone()));
+    }
+    out
 }
 
 // --- the channels ---
@@ -198,7 +380,11 @@ fn metrics(conn: &rusqlite::Connection, cfg: &std::path::Path) -> Option<(i64, H
 /// Discord and Telegram reject the generic payload; both are recognised from the URL the user
 /// pasted, exactly as `app.js webhookBody` does. Public so the parity test can assert the shape.
 pub fn webhook_body(url: &str, title: &str, body: &str, category: &str) -> serde_json::Value {
-    let text = if body.is_empty() { title.to_string() } else { format!("{title}\n{body}") };
+    let text = if body.is_empty() {
+        title.to_string()
+    } else {
+        format!("{title}\n{body}")
+    };
     if url.contains("discord.com/api/webhooks/") || url.contains("discordapp.com/api/webhooks/") {
         return serde_json::json!({ "content": text });
     }
@@ -210,25 +396,85 @@ pub fn webhook_body(url: &str, title: &str, body: &str, category: &str) -> serde
 
 /// Off the machine. The payloads carry the title, the body and the category and nothing else:
 /// ntfy.sh is a public relay by default and a webhook goes wherever it was pointed.
-fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) {
-    let get = |k: &str| crate::setting(cfg, k).unwrap_or_default().trim_matches('"').to_string();
+fn setting_enabled(cfg: &std::path::Path, category: &str) -> bool {
+    crate::setting(cfg, "notif")
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get(category).and_then(|x| x.as_bool()))
+        != Some(false)
+}
+
+fn quiet_now(cfg: &std::path::Path) -> bool {
+    let get = |k: &str| {
+        crate::setting(cfg, k)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string()
+    };
+    let (a, b) = (get("quietStart"), get("quietEnd"));
+    if a.len() != 5 || b.len() != 5 {
+        return false;
+    }
+    let parse = |s: &str| {
+        s[..2]
+            .parse::<i64>()
+            .ok()
+            .zip(s[3..].parse::<i64>().ok())
+            .map(|(h, m)| h * 60 + m)
+    };
+    let Some((from, to)) = parse(&a).zip(parse(&b)) else {
+        return false;
+    };
+    let at = rusqlite::Connection::open_in_memory().ok().and_then(|c| c.query_row(
+        "SELECT CAST(strftime('%H','now','localtime') AS INTEGER)*60 + CAST(strftime('%M','now','localtime') AS INTEGER)", [], |r| r.get::<_, i64>(0)).ok());
+    at.is_some_and(|at| {
+        if from <= to {
+            at >= from && at < to
+        } else {
+            at >= from || at < to
+        }
+    })
+}
+
+fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) -> serde_json::Value {
+    let get = |k: &str| {
+        crate::setting(cfg, k)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string()
+    };
+    if !setting_enabled(cfg, category) || (quiet_now(cfg) && category != "severe") {
+        return serde_json::json!({ "suppressed": true, "channels": [] });
+    }
+    let mut results = serde_json::Map::new();
     let topic = get("ntfyTopic");
     if !topic.is_empty() {
         let base = {
             let u = get("ntfyUrl");
-            if u.is_empty() { "https://ntfy.sh".to_string() } else { u }
+            if u.is_empty() {
+                "https://ntfy.sh".to_string()
+            } else {
+                u
+            }
         };
         // A header value cannot contain a line break, and NWS headlines do.
         let head: String = title.replace(['\r', '\n'], " ").chars().take(200).collect();
-        let r = ureq::post(&format!("{}/{}", base.trim_end_matches('/'), urlencode(&topic)))
-            .timeout(Duration::from_secs(15))
-            .set("Title", &head)
-            .set("Tags", category)
-            .send_string(if body.is_empty() { title } else { body });
-        if let Err(e) = r {
+        let r = ureq::post(&format!(
+            "{}/{}",
+            base.trim_end_matches('/'),
+            urlencode(&topic)
+        ))
+        .timeout(Duration::from_secs(15))
+        .set("Title", &head)
+        .set("Tags", category)
+        .send_string(if body.is_empty() { title } else { body });
+        if let Err(e) = &r {
             // Never the error's Display: an ntfy URL is a credential in its own right.
             eprintln!("stormdesk: ntfy push failed ({})", err_kind(&e));
         }
+        results.insert(
+            "ntfy".into(),
+            serde_json::json!({ "ok": r.is_ok(), "error": r.err().as_ref().map(err_kind) }),
+        );
     }
     let hook = get("webhookUrl");
     if !hook.is_empty() {
@@ -236,11 +482,19 @@ fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) {
             .timeout(Duration::from_secs(15))
             .set("Content-Type", "application/json")
             .send_string(&webhook_body(&hook, title, body, category).to_string());
-        if let Err(e) = r {
+        if let Err(e) = &r {
             eprintln!("stormdesk: webhook push failed ({})", err_kind(&e));
         }
+        results.insert(
+            "webhook".into(),
+            serde_json::json!({ "ok": r.is_ok(), "error": r.err().as_ref().map(err_kind) }),
+        );
     }
     crate::mqtt::send(if category == "rule" { "rule" } else { "alert" }, title);
+    if !get("mqttUrl").is_empty() {
+        results.insert("broker".into(), serde_json::json!({ "ok": true }));
+    }
+    serde_json::json!({ "sent": results.values().any(|v| v["ok"] == true), "channels": results })
 }
 
 fn err_kind(e: &ureq::Error) -> String {
@@ -253,7 +507,9 @@ fn err_kind(e: &ureq::Error) -> String {
 fn urlencode(s: &str) -> String {
     s.bytes()
         .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
             _ => format!("%{b:02X}"),
         })
         .collect()
@@ -262,20 +518,19 @@ fn urlencode(s: &str) -> String {
 /// Fire one real notification through every configured channel. The point is that it is real —
 /// a test that takes a different path to the phone tests nothing.
 pub fn test_push(cfg: &std::path::Path) -> String {
-    let get = |k: &str| crate::setting(cfg, k).unwrap_or_default().trim_matches('"').to_string();
-    let channels: Vec<&str> = [
-        (!get("ntfyTopic").is_empty()).then_some("ntfy"),
-        (!get("webhookUrl").is_empty()).then_some("webhook"),
-        (!get("mqttUrl").is_empty()).then_some("broker"),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    push(cfg, "info", "StormDesk test alert", "If this reached you, alerts work.");
-    serde_json::json!({
-        "sent": !channels.is_empty(),
-        "channels": channels,
-    })
+    let get = |k: &str| {
+        crate::setting(cfg, k)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string()
+    };
+    let _ = get;
+    push(
+        cfg,
+        "info",
+        "StormDesk test alert",
+        "If this reached you, alerts work.",
+    )
     .to_string()
 }
 
@@ -291,12 +546,20 @@ fn alert_key(p: &serde_json::Value) -> String {
 }
 
 fn nws(cfg: &std::path::Path) -> Option<Vec<serde_json::Value>> {
-    let num = |k: &str| crate::setting(cfg, k)?.trim_matches('"').parse::<f64>().ok();
+    let num = |k: &str| {
+        crate::setting(cfg, k)?
+            .trim_matches('"')
+            .parse::<f64>()
+            .ok()
+    };
     let (lat, lon) = (num("lat")?, num("lon")?);
     let url = format!("https://api.weather.gov/alerts/active?point={lat:.4},{lon:.4}");
     let body = ureq::get(&url)
         .timeout(Duration::from_secs(20))
-        .set("User-Agent", concat!("StormDesk/", env!("CARGO_PKG_VERSION")))
+        .set(
+            "User-Agent",
+            concat!("StormDesk/", env!("CARGO_PKG_VERSION")),
+        )
         .call();
     let body = match body {
         Ok(r) => r.into_string().ok()?,
@@ -329,7 +592,11 @@ fn describe(metric: &str, cfg: &std::path::Path) -> (&'static str, String, usize
         .trim_matches('"')
         .to_string();
     let wind = if wind.is_empty() {
-        if imp { "mph".to_string() } else { "km/h".to_string() }
+        if imp {
+            "mph".to_string()
+        } else {
+            "km/h".to_string()
+        }
     } else {
         wind
     };
@@ -346,6 +613,13 @@ fn describe(metric: &str, cfg: &std::path::Path) -> (&'static str, String, usize
         "uv" => ("UV index", String::new(), 1),
         "strikes3h" => ("Lightning strikes · 3h", String::new(), 0),
         "press3h" => ("Pressure change · 3h", press.into(), 2),
+        "temp1h" => ("Temp change · 1h", temp.into(), 1),
+        "press1h" => ("Pressure change · 1h", press.into(), 2),
+        "rh1h" => ("Humidity change · 1h", "%".into(), 0),
+        "low18h" => ("Forecast low · 18h", temp.into(), 0),
+        "rain6h" => ("Forecast rain chance · 6h", "%".into(), 0),
+        "gust24h" => ("Forecast gust · 24h", wind, 0),
+        "hiTomorrow" => ("Forecast high · tomorrow", temp.into(), 0),
         _ => ("Reading", String::new(), 1),
     }
 }
@@ -353,7 +627,7 @@ fn describe(metric: &str, cfg: &std::path::Path) -> (&'static str, String, usize
 fn tick(
     data_dir: &std::path::Path,
     cfg: &std::path::Path,
-    state: &mut HashMap<usize, Latch>,
+    state: &mut HashMap<String, Latch>,
     seen: &mut std::collections::HashSet<String>,
     last_rules: &mut String,
 ) {
@@ -368,7 +642,8 @@ fn tick(
     let rs = rules(cfg);
     if !rs.is_empty() {
         if let Ok(conn) = store::open(&store::db_path(data_dir)) {
-            if let Some((ts, m)) = metrics(&conn, cfg) {
+            if let Some((ts, mut m)) = metrics(&conn, cfg) {
+                m.extend(forecast_metrics(cfg));
                 for (i, v) in evaluate(&m, &rs, state, ts) {
                     let r = &rs[i];
                     let (label, unit, digits) = describe(&r.metric, cfg);
@@ -378,7 +653,17 @@ fn tick(
                     if r.dur_min > 0.0 {
                         body.push_str(&format!(" for {} min", r.dur_min as i64));
                     }
-                    push(cfg, "rule", &title, &body);
+                    let result = push(cfg, "rule", &title, &body);
+                    crate::ingest::note(
+                        "alert-delivery",
+                        result["sent"] == true,
+                        if result["sent"] == true {
+                            "delivered"
+                        } else {
+                            "failed or suppressed"
+                        },
+                        false,
+                    );
                 }
             }
         }
@@ -386,12 +671,28 @@ fn tick(
 
     let Some(feats) = nws(cfg) else { return };
     for f in &feats {
-        let Some(p) = f.get("properties") else { continue };
+        let Some(p) = f.get("properties") else {
+            continue;
+        };
         if !is_new(seen, p) {
             continue;
         }
         let s = |k: &str| p.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
-        push(cfg, "severe", &s("event"), &s("headline"));
+        let severity = s("severity");
+        if quiet_now(cfg) && !matches!(severity.as_str(), "Severe" | "Extreme") {
+            continue;
+        }
+        let result = push(cfg, "severe", &s("event"), &s("headline"));
+        crate::ingest::note(
+            "alert-delivery",
+            result["sent"] == true,
+            if result["sent"] == true {
+                "delivered"
+            } else {
+                "failed or suppressed"
+            },
+            false,
+        );
     }
     if expire(seen, &feats) {
         crate::mqtt::send("alert", "");
@@ -424,7 +725,7 @@ fn expire(seen: &mut std::collections::HashSet<String>, feats: &[serde_json::Val
 /// issued, which is most days.
 pub fn start(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
     std::thread::spawn(move || {
-        let mut state: HashMap<usize, Latch> = HashMap::new();
+        let mut state: HashMap<String, Latch> = HashMap::new();
         let mut seen = std::collections::HashSet::new();
         let mut last_rules = String::new();
         // The page checks `/diag` to decide whether to run its own engine; say so before the
@@ -442,7 +743,16 @@ mod tests {
     use super::*;
 
     fn rule(metric: &str, op: &str, value: f64, dur_min: f64) -> Rule {
-        Rule { metric: metric.into(), op: op.into(), value, dur_min, metric2: None, op2: None, value2: None }
+        Rule {
+            id: String::new(),
+            metric: metric.into(),
+            op: op.into(),
+            value,
+            dur_min,
+            metric2: None,
+            op2: None,
+            value2: None,
+        }
     }
 
     fn m(pairs: &[(&'static str, f64)]) -> HashMap<&'static str, f64> {
@@ -456,18 +766,35 @@ mod tests {
         let rs = [rule("gust", ">", 30.0, 0.0)];
         let mut st = HashMap::new();
         assert_eq!(evaluate(&m(&[("gust", 40.0)]), &rs, &mut st, 0).len(), 1);
-        assert_eq!(evaluate(&m(&[("gust", 40.0)]), &rs, &mut st, 60).len(), 0, "latched");
-        assert_eq!(evaluate(&m(&[("gust", 29.0)]), &rs, &mut st, 120).len(), 0, "inside the re-arm band");
-        assert_eq!(evaluate(&m(&[("gust", 20.0)]), &rs, &mut st, 180).len(), 0, "re-arm is not a fire");
-        assert_eq!(evaluate(&m(&[("gust", 40.0)]), &rs, &mut st, 240).len(), 1, "fires again");
+        assert_eq!(
+            evaluate(&m(&[("gust", 40.0)]), &rs, &mut st, 60).len(),
+            0,
+            "latched"
+        );
+        assert_eq!(
+            evaluate(&m(&[("gust", 29.0)]), &rs, &mut st, 120).len(),
+            0,
+            "inside the re-arm band"
+        );
+        assert_eq!(
+            evaluate(&m(&[("gust", 20.0)]), &rs, &mut st, 180).len(),
+            0,
+            "re-arm is not a fire"
+        );
+        assert_eq!(
+            evaluate(&m(&[("gust", 40.0)]), &rs, &mut st, 240).len(),
+            1,
+            "fires again"
+        );
     }
 
     #[test]
     fn a_duration_holds_the_rule_back() {
         let rs = [rule("temp", "<", 32.0, 10.0)];
         let mut st = HashMap::new();
-        assert_eq!(evaluate(&m(&[("temp", 30.0)]), &rs, &mut st, 0).len(), 0);
-        assert_eq!(evaluate(&m(&[("temp", 30.0)]), &rs, &mut st, 599).len(), 0);
+        for now in (0..600).step_by(60) {
+            assert_eq!(evaluate(&m(&[("temp", 30.0)]), &rs, &mut st, now).len(), 0);
+        }
         assert_eq!(evaluate(&m(&[("temp", 30.0)]), &rs, &mut st, 600).len(), 1);
     }
 
@@ -475,7 +802,9 @@ mod tests {
     fn a_missing_reading_never_fires() {
         let rs = [rule("temp", "<", 32.0, 10.0)];
         let mut st = HashMap::new();
-        assert_eq!(evaluate(&m(&[]), &rs, &mut st, 0).len(), 0);
+        assert_eq!(evaluate(&m(&[("temp", 30.0)]), &rs, &mut st, 0).len(), 0);
+        assert_eq!(evaluate(&m(&[]), &rs, &mut st, 60).len(), 0);
+        assert_eq!(evaluate(&m(&[("temp", 30.0)]), &rs, &mut st, 600).len(), 0);
     }
 
     #[test]
@@ -486,10 +815,20 @@ mod tests {
         r.value2 = Some(40.0);
         let rs = [r];
         let mut st = HashMap::new();
-        assert_eq!(evaluate(&m(&[("gust", 30.0), ("rh", 50.0)]), &rs, &mut st, 0).len(), 0);
-        assert_eq!(evaluate(&m(&[("gust", 30.0), ("rh", 30.0)]), &rs, &mut st, 60).len(), 1);
+        assert_eq!(
+            evaluate(&m(&[("gust", 30.0), ("rh", 50.0)]), &rs, &mut st, 0).len(),
+            0
+        );
+        assert_eq!(
+            evaluate(&m(&[("gust", 30.0), ("rh", 30.0)]), &rs, &mut st, 60).len(),
+            1
+        );
         let mut st = HashMap::new();
-        assert_eq!(evaluate(&m(&[("gust", 30.0)]), &rs, &mut st, 0).len(), 0, "missing second reading");
+        assert_eq!(
+            evaluate(&m(&[("gust", 30.0)]), &rs, &mut st, 0).len(),
+            0,
+            "missing second reading"
+        );
     }
 
     #[test]
@@ -510,9 +849,15 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         let w = warning("Tornado Warning", "Hartford", "Severe");
         assert!(is_new(&mut seen, w.get("properties").unwrap()));
-        assert!(!is_new(&mut seen, w.get("properties").unwrap()), "same warning, continued");
+        assert!(
+            !is_new(&mut seen, w.get("properties").unwrap()),
+            "same warning, continued"
+        );
         let worse = warning("Tornado Warning", "Hartford", "Extreme");
-        assert!(is_new(&mut seen, worse.get("properties").unwrap()), "a severity change is worth a second chime");
+        assert!(
+            is_new(&mut seen, worse.get("properties").unwrap()),
+            "a severity change is worth a second chime"
+        );
     }
 
     #[test]
@@ -522,19 +867,43 @@ mod tests {
         let x = warning("Wind Advisory", "Hartford", "Moderate");
         is_new(&mut seen, w.get("properties").unwrap());
         is_new(&mut seen, x.get("properties").unwrap());
-        assert!(!expire(&mut seen, &[w.clone(), x.clone()]), "both still out");
-        assert!(!expire(&mut seen, std::slice::from_ref(&w)), "one left is not an all-clear");
+        assert!(
+            !expire(&mut seen, &[w.clone(), x.clone()]),
+            "both still out"
+        );
+        assert!(
+            !expire(&mut seen, std::slice::from_ref(&w)),
+            "one left is not an all-clear"
+        );
         assert!(expire(&mut seen, &[]), "the last one going away is");
-        assert!(!expire(&mut seen, &[]), "and a quiet month says nothing further");
+        assert!(
+            !expire(&mut seen, &[]),
+            "and a quiet month says nothing further"
+        );
     }
 
     #[test]
     fn the_two_webhooks_that_reject_the_generic_shape() {
-        let d = webhook_body("https://discord.com/api/webhooks/1/abc", "Tornado", "take cover", "severe");
+        let d = webhook_body(
+            "https://discord.com/api/webhooks/1/abc",
+            "Tornado",
+            "take cover",
+            "severe",
+        );
         assert!(d["content"].as_str().unwrap().contains("Tornado"));
-        let t = webhook_body("https://api.telegram.org/bot1:abc/sendMessage?chat_id=2", "Tornado", "take cover", "severe");
+        let t = webhook_body(
+            "https://api.telegram.org/bot1:abc/sendMessage?chat_id=2",
+            "Tornado",
+            "take cover",
+            "severe",
+        );
         assert!(t["text"].as_str().unwrap().contains("cover"));
-        let g = webhook_body("https://example.com/hook", "Tornado", "take cover", "severe");
+        let g = webhook_body(
+            "https://example.com/hook",
+            "Tornado",
+            "take cover",
+            "severe",
+        );
         assert_eq!(g["category"], "severe");
     }
 

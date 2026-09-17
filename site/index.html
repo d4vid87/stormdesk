@@ -803,6 +803,11 @@
     grid-template-columns:repeat(2,44px); gap:7px; padding:9px; background:#020604f7;
     border:1px solid #1b5c35; border-radius:10px; box-shadow:0 16px 40px #000; }
   .header-overflow-menu .iconbtn { width:44px; height:40px; }
+  /* Compact portrait puts the header at the bottom, so its menu must open into the viewport. */
+  @media (max-width:720px) and (orientation:portrait) {
+    header { position:relative; z-index:1; }
+    .header-overflow-menu { top:auto; bottom:calc(100% + 8px); }
+  }
   #hero { background:radial-gradient(circle at 78% 25%,#12632f66,transparent 27%),
     linear-gradient(145deg,#020a05,#07311a 58%,#020805); border:1px solid #2bff78;
     box-shadow:0 0 28px #20ff6b20; }
@@ -921,6 +926,10 @@
   </details>
   <button class="iconbtn" id="btn-settings" aria-label="Settings">⚙<span class="settings-label">Settings</span></button>
 </header>
+<section id="pair-viewer" hidden class="card" style="margin:10px" aria-label="Pair this device">
+  <b>Viewer mode</b><p class="muted">Weather is available. Pair this device to change household settings.</p>
+  <div class="row"><input id="pair-host" inputmode="url" placeholder="StormDesk host, e.g. 192.168.1.50:8088" aria-label="StormDesk host address"><input id="pair-code" inputmode="numeric" maxlength="6" placeholder="6-digit code" aria-label="Pairing code"><input id="pair-name" maxlength="80" placeholder="Device name" aria-label="Device name"><button id="btn-pair-viewer">Pair</button></div>
+</section>
 
 <main>
   <div id="notif-stack"></div>
@@ -928,6 +937,8 @@
   <div class="wizard-box">
     <img src="stormdesk-icon-512.png?v=20260907" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
     <h2 style="margin-top:0;text-align:center">Welcome to StormDesk</h2>
+    <p class="muted" style="text-align:center">What would you like to do?</p>
+    <div class="row" id="wizard-choices"><button id="btn-wiz-station">Use a personal weather station</button><button id="btn-wiz-host">Connect to a StormDesk host</button><button id="btn-wiz-place-mode">Weather for a place</button></div>
     <div id="wizard-progress" class="kv-rows" aria-label="Setup progress">
       <div><span>1 · Choose a station</span><span id="wiz-step-source">current</span></div>
       <div><span>2 · Receive a reading</span><span id="wiz-step-reading">waiting</span></div>
@@ -961,7 +972,7 @@
 
     <div id="wiz-first" class="muted" style="font-size:12px;margin-top:10px"></div>
     <div class="row" style="margin-top:10px">
-      <button id="btn-wiz-demo">Skip — just show me the weather somewhere</button>
+      <button id="btn-wiz-demo">Weather for a place</button>
       <button id="btn-wiz-close" style="flex:0 0 auto">Close</button>
     </div>
   </div>
@@ -1451,6 +1462,7 @@
         <button data-health-action="still">Use still radar</button>
         <button data-health-action="clear">Clear stale cache</button>
         <button data-health-action="checkpoint">Checkpoint archive</button>
+        <button data-health-action="replace-station">Replace archive station…</button>
         <button data-health-action="safe">Use Safe renderer</button>
         <button data-health-action="open">Open LAN dashboard</button>
         <button id="btn-support">Copy support report</button>
@@ -1610,6 +1622,12 @@
 
     <button id="btn-ha-test" class="ghost" style="margin-top:10px">Test both</button>
     <div id="ha-test-out" class="muted" style="font-size:12px;margin-top:6px"></div>
+
+    <h2 style="font-size:13px;margin-top:18px">Household access</h2>
+    <p class="muted" style="font-size:12px">Weather is visible to your household. Paired editors can change shared station, alert, and integration settings.</p>
+    <div class="row"><button id="btn-pair-start">Pair another device</button><button id="btn-paired-list" class="ghost">Paired devices</button></div>
+    <div id="pair-owner-out" class="muted" style="font-size:12px;margin-top:6px"></div><div id="paired-list"></div>
+    <label><input id="set-legacy-lan" type="checkbox"> Temporarily allow unpaired LAN devices to edit settings</label>
 
     <!-- Help. Plain <details> and no script: this is the manual people asked for, and it has to
          still be readable on an install whose JavaScript is having a bad day. Keep in step with

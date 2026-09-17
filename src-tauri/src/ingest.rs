@@ -53,7 +53,10 @@ fn percent_decode(s: &str) -> String {
             // `.get` rather than `&s[..]`: a `%` in front of a multi-byte character lands the end
             // of that slice mid-character, and indexing there panics on a request anyone can send.
             b'%' if i + 2 < b.len() => {
-                match s.get(i + 1..i + 3).and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                match s
+                    .get(i + 1..i + 3)
+                    .and_then(|h| u8::from_str_radix(h, 16).ok())
+                {
                     Some(v) => {
                         out.push(v);
                         i += 2;
@@ -81,7 +84,10 @@ fn parse_pairs(s: &str, into: &mut Fields) {
 fn parse_json(v: &serde_json::Value, into: &mut Fields) {
     if let Some(obj) = v.as_object() {
         for (k, val) in obj {
-            let s = val.as_str().map(String::from).unwrap_or_else(|| val.to_string());
+            let s = val
+                .as_str()
+                .map(String::from)
+                .unwrap_or_else(|| val.to_string());
             into.insert(k.to_lowercase(), s);
         }
     }
@@ -108,7 +114,9 @@ fn collect(url: &str, body: &str) -> Fields {
 // --- Mapping ---
 
 fn num(f: &Fields, keys: &[&str]) -> Option<f64> {
-    keys.iter().find_map(|k| f.get(*k)).and_then(|v| v.trim().parse::<f64>().ok())
+    keys.iter()
+        .find_map(|k| f.get(*k))
+        .and_then(|v| v.trim().parse::<f64>().ok())
 }
 
 /// The whole of multi-brand support, in one table: foreign field names on the right, `obs_st`
@@ -155,28 +163,30 @@ fn tuple(f: &Fields, ts: f64, mem: &mut Mem) -> Vec<Option<f64>> {
     let strikes = num(f, &["lightning_num", "strike_count", "lightning_day"])
         .map(|cur| delta(&mut mem.strikes, cur));
 
-    let interval = mem.last_ts.map(|prev| (((ts - prev) / 60.0).round()).clamp(1.0, 30.0));
+    let interval = mem
+        .last_ts
+        .map(|prev| (((ts - prev) / 60.0).round()).clamp(1.0, 30.0));
 
     vec![
         Some(ts),
-        None,                                 // 1 wind lull
-        wind_avg,                             // 2
-        gust,                                 // 3
-        dir,                                  // 4
-        None,                                 // 5 wind interval
-        press,                                // 6
-        temp,                                 // 7
-        rh,                                   // 8
-        None,                                 // 9 lux
-        uv,                                   // 10
-        solar,                                // 11
-        rain,                                 // 12 this interval
+        None,                                          // 1 wind lull
+        wind_avg,                                      // 2
+        gust,                                          // 3
+        dir,                                           // 4
+        None,                                          // 5 wind interval
+        press,                                         // 6
+        temp,                                          // 7
+        rh,                                            // 8
+        None,                                          // 9 lux
+        uv,                                            // 10
+        solar,                                         // 11
+        rain,                                          // 12 this interval
         rain.map(|r| if r > 0.0 { 1.0 } else { 0.0 }), // 13 precip type
-        strike_dist,                          // 14
-        strikes,                              // 15 this interval
-        None,                                 // 16 battery volts
-        interval,                             // 17
-        day_rain_mm,                          // 18
+        strike_dist,                                   // 14
+        strikes,                                       // 15 this interval
+        None,                                          // 16 battery volts
+        interval,                                      // 17
+        day_rain_mm,                                   // 18
     ]
 }
 
@@ -252,7 +262,9 @@ fn keep(now: u64, m: &Mem, raw_ts: f64) -> bool {
     if m.last_raw == Some(raw_ts) {
         return false;
     }
-    m.last_wall.map(|w| now.saturating_sub(w) >= MIN_GAP).unwrap_or(true)
+    m.last_wall
+        .map(|w| now.saturating_sub(w) >= MIN_GAP)
+        .unwrap_or(true)
 }
 
 // --- Diagnostics ---
@@ -273,7 +285,12 @@ fn diags() -> &'static Mutex<HashMap<&'static str, Diag>> {
 
 pub fn note(origin: &'static str, ok: bool, what: &str, stored: bool) {
     let Ok(mut d) = diags().lock() else { return };
-    let e = d.entry(origin).or_insert(Diag { at: 0, ok: true, what: String::new(), rows: 0 });
+    let e = d.entry(origin).or_insert(Diag {
+        at: 0,
+        ok: true,
+        what: String::new(),
+        rows: 0,
+    });
     e.at = epoch();
     e.ok = ok;
     e.what = what.into();
@@ -284,7 +301,9 @@ pub fn note(origin: &'static str, ok: bool, what: &str, stored: bool) {
 
 /// `{"push":{"at":...,"ok":true,"what":"stored","rows":42}, ...}`
 pub fn diag_json() -> String {
-    let Ok(d) = diags().lock() else { return "{}".into() };
+    let Ok(d) = diags().lock() else {
+        return "{}".into();
+    };
     let body = d
         .iter()
         .map(|(k, v)| {
@@ -327,17 +346,24 @@ fn n(v: Option<f64>) -> String {
 /// The counters are only advanced on a report we keep — a differenced total against a report we
 /// threw away would drop that interval's rain on the floor.
 fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str) -> bool {
-    if state.maintenance.load(std::sync::atomic::Ordering::Relaxed) { return false; }
+    if state.maintenance.load(std::sync::atomic::Ordering::Relaxed) {
+        return false;
+    }
     let at = epoch();
     // A console clock that is out by a day would otherwise scatter rows across the archive and
     // defeat CWOP's staleness guard. Ten minutes of slack is more than any real drift.
     let ts = raw_ts.clamp(at as f64 - 600.0, at as f64 + 600.0);
-    let wind = num(f, &["windspeedmph"]).map(|v| v * MPS_PER_MPH).or_else(|| num(f, &["wind_avg_m_s"]));
+    let wind = num(f, &["windspeedmph"])
+        .map(|v| v * MPS_PER_MPH)
+        .or_else(|| num(f, &["wind_avg_m_s"]));
     if let (Some(sp), Some(dir)) = (wind, num(f, &["winddir", "wind_dir_deg"])) {
         publish(
             state,
             "rapid_wind",
-            format!("{{\"type\":\"rapid_wind\",\"ob\":[{},{sp},{dir}],\"_at\":{at}}}", ts as i64),
+            format!(
+                "{{\"type\":\"rapid_wind\",\"ob\":[{},{sp},{dir}],\"_at\":{at}}}",
+                ts as i64
+            ),
         );
     }
 
@@ -364,20 +390,33 @@ fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static 
     m.last_raw = Some(raw_ts);
     let saved = m.json(at);
     drop(all);
+    // One transaction: never announce success or advance counters unless the observation and
+    // its rain/lightning state are durably committed together.
+    let committed = state.with_db(|conn| {
+            let source = crate::setting(&state.cfg_path, "stationSource").unwrap_or_else(|| format!("\"{origin}\""));
+            let stable = ["PASSKEY", "passkey", "mac", "station_id", "ID"].iter()
+                .find_map(|k| f.get(*k)).map(String::as_str).unwrap_or(origin);
+            let fallback = format!("{}:{}", source.trim_matches('"'), stable);
+            if !state.archive_accepts_as(conn, &fallback) {
+                return false;
+            }
+            store_observation(conn, &t, src, &counter_key(origin), &saved)
+        })
+        .unwrap_or(false);
+    if !committed {
+        note(origin, false, "archive write failed", false);
+        return false;
+    }
     note(origin, true, "stored", true);
-
-    // One lock, two writes: the row and the counters it was scored against move together, so a
-    // crash between them cannot double-count an interval of rain.
-    state.with_db(|conn| {
-        store::insert(conn, &t, src);
-        store::meta_set(conn, &counter_key(origin), &saved);
-    });
     if let (Some(d), Some(c)) = (t[14], t[15]) {
         if c > 0.0 {
             publish(
                 state,
                 "evt_strike",
-                format!("{{\"type\":\"evt_strike\",\"evt\":[{},{d},{c}],\"_at\":{at}}}", ts as i64),
+                format!(
+                    "{{\"type\":\"evt_strike\",\"evt\":[{},{d},{c}],\"_at\":{at}}}",
+                    ts as i64
+                ),
             );
         }
     }
@@ -390,6 +429,14 @@ fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static 
         ),
     );
     true
+}
+
+fn store_observation(conn: &mut rusqlite::Connection, tuple: &[Option<f64>], src: i64, key: &str, counters: &str) -> bool {
+    conn.transaction().ok().map(|tx| {
+        let inserted = store::insert(&tx, tuple, src);
+        if inserted { store::meta_set(&tx, key, counters); }
+        inserted && tx.commit().is_ok()
+    }).unwrap_or(false)
 }
 
 // --- The push route ---
@@ -413,7 +460,9 @@ pub fn accept(state: &Arc<State>, url: &str, body: &str) -> u16 {
     let f = collect(url, body);
     // Anything with no temperature and no wind in it is not a weather report — a console
     // probing the path, or a browser that wandered in.
-    if num(&f, &["tempf", "temperature_c", "temp_c", "temp"]).is_none() && num(&f, &["windspeedmph", "wind_avg_m_s"]).is_none() {
+    if num(&f, &["tempf", "temperature_c", "temp_c", "temp"]).is_none()
+        && num(&f, &["windspeedmph", "wind_avg_m_s"]).is_none()
+    {
         note("push", false, "no temperature or wind in report", false);
         return 400;
     }
@@ -429,7 +478,10 @@ fn get(url: &str, origin: &'static str) -> Option<serde_json::Value> {
     // Status code or transport kind only, never the error's Display: these URLs carry API keys in
     // their query strings and this string goes to a log.
     match ureq::get(url).timeout(Duration::from_secs(20)).call() {
-        Ok(r) => r.into_string().ok().and_then(|b| serde_json::from_str(&b).ok()),
+        Ok(r) => r
+            .into_string()
+            .ok()
+            .and_then(|b| serde_json::from_str(&b).ok()),
         Err(ureq::Error::Status(code, _)) => {
             eprintln!("stormdesk: station poll refused ({code})");
             note(origin, false, &format!("HTTP {code}"), false);
@@ -450,8 +502,13 @@ fn get(url: &str, origin: &'static str) -> Option<serde_json::Value> {
 /// 10-second poll is the same data at a resolution the gauge can't show; arm the UDP stream if
 /// somebody wants the fast needle.
 fn poll_wll(state: &Arc<State>, host: &str) {
-    let Some(v) = get(&format!("http://{host}/v1/current_conditions"), "wll") else { return };
-    let ts = v.pointer("/data/ts").and_then(|t| t.as_f64()).unwrap_or(epoch() as f64);
+    let Some(v) = get(&format!("http://{host}/v1/current_conditions"), "wll") else {
+        return;
+    };
+    let ts = v
+        .pointer("/data/ts")
+        .and_then(|t| t.as_f64())
+        .unwrap_or(epoch() as f64);
     let f = wll_fields(&v);
     if !f.is_empty() {
         take(state, &f, ts, SRC_INGEST, "wll");
@@ -461,12 +518,18 @@ fn poll_wll(state: &Arc<State>, host: &str) {
 /// The payload-to-fields half of the WLL poll, split out so it can be tested without a console.
 fn wll_fields(v: &serde_json::Value) -> Fields {
     let mut f = Fields::new();
-    let Some(conds) = v.pointer("/data/conditions").and_then(|c| c.as_array()) else { return f };
+    let Some(conds) = v.pointer("/data/conditions").and_then(|c| c.as_array()) else {
+        return f;
+    };
     for c in conds {
         let g = |k: &str| c.get(k).and_then(|x| x.as_f64());
         // Structure type 1 is the ISS — the outdoor sensor suite. The others are the barometer
         // (3), the indoor sensor (4) and any extra transmitters.
-        match c.get("data_structure_type").and_then(|x| x.as_i64()).unwrap_or(0) {
+        match c
+            .get("data_structure_type")
+            .and_then(|x| x.as_i64())
+            .unwrap_or(0)
+        {
             1 => {
                 let put = |f: &mut Fields, k: &str, v: Option<f64>| {
                     if let Some(v) = v {
@@ -482,7 +545,10 @@ fn wll_fields(v: &serde_json::Value) -> Fields {
                 put(&mut f, "uv", g("uv_index"));
                 // Davis reports rain as tip counts and tells you separately how big a tip is.
                 if let Some(counts) = g("rainfall_daily") {
-                    f.insert("dailyrainmm".into(), (counts * rain_bucket_mm(c)).to_string());
+                    f.insert(
+                        "dailyrainmm".into(),
+                        (counts * rain_bucket_mm(c)).to_string(),
+                    );
                 }
             }
             3 => {
@@ -511,13 +577,21 @@ fn rain_bucket_mm(c: &serde_json::Value) -> f64 {
 /// it has no local protocol at all. Also covers any Ambient console whose owner would rather
 /// not point it away from Ambient's own servers.
 fn poll_awn(state: &Arc<State>, api_key: &str, app_key: &str) {
-    let url = format!("https://rt.ambientweather.net/v1/devices?applicationKey={app_key}&apiKey={api_key}");
+    let url = format!(
+        "https://rt.ambientweather.net/v1/devices?applicationKey={app_key}&apiKey={api_key}"
+    );
     let Some(v) = get(&url, "awn") else { return };
-    let Some(last) = v.get(0).and_then(|d| d.get("lastData")) else { return };
+    let Some(last) = v.get(0).and_then(|d| d.get("lastData")) else {
+        return;
+    };
     let mut f = Fields::new();
     parse_json(last, &mut f);
     // `dateutc` is milliseconds here, unlike everywhere else in this file.
-    let ts = last.get("dateutc").and_then(|t| t.as_f64()).map(|ms| ms / 1000.0).unwrap_or(epoch() as f64);
+    let ts = last
+        .get("dateutc")
+        .and_then(|t| t.as_f64())
+        .map(|ms| ms / 1000.0)
+        .unwrap_or(epoch() as f64);
     take(state, &f, ts, SRC_CLOUD, "awn");
 }
 
@@ -548,8 +622,15 @@ fn lacrosse_token(email: &str, pass: &str) -> Option<String> {
 }
 
 fn bearer(url: &str, token: &str) -> Option<serde_json::Value> {
-    match ureq::get(url).timeout(Duration::from_secs(20)).set("Authorization", &format!("Bearer {token}")).call() {
-        Ok(r) => r.into_string().ok().and_then(|b| serde_json::from_str(&b).ok()),
+    match ureq::get(url)
+        .timeout(Duration::from_secs(20))
+        .set("Authorization", &format!("Bearer {token}"))
+        .call()
+    {
+        Ok(r) => r
+            .into_string()
+            .ok()
+            .and_then(|b| serde_json::from_str(&b).ok()),
         Err(ureq::Error::Status(code, _)) => {
             eprintln!("stormdesk: La Crosse read refused ({code})");
             note("lacrosse", false, &format!("HTTP {code}"), false);
@@ -565,28 +646,55 @@ fn bearer(url: &str, token: &str) -> Option<serde_json::Value> {
 
 fn poll_lacrosse(state: &Arc<State>, token: &str) {
     const GW: &str = "https://lax-gateway.appspot.com/_ah/api/lacrosseClient/v1.1/active-user";
-    let Some(locs) = bearer(&format!("{GW}/locations"), token) else { return };
-    let Some(loc) = locs.pointer("/items/0/id").and_then(|v| v.as_str().map(String::from).or_else(|| v.as_i64().map(|i| i.to_string()))) else { return };
-    let Some(devs) = bearer(&format!("{GW}/location/{loc}/sensorAssociations?prettyPrint=false"), token) else { return };
-    let Some(dev) = devs.pointer("/items/0/sensor") else { return };
-    let Some(id) = dev.get("id").and_then(|v| v.as_str()) else { return };
+    let Some(locs) = bearer(&format!("{GW}/locations"), token) else {
+        return;
+    };
+    let Some(loc) = locs.pointer("/items/0/id").and_then(|v| {
+        v.as_str()
+            .map(String::from)
+            .or_else(|| v.as_i64().map(|i| i.to_string()))
+    }) else {
+        return;
+    };
+    let Some(devs) = bearer(
+        &format!("{GW}/location/{loc}/sensorAssociations?prettyPrint=false"),
+        token,
+    ) else {
+        return;
+    };
+    let Some(dev) = devs.pointer("/items/0/sensor") else {
+        return;
+    };
+    let Some(id) = dev.get("id").and_then(|v| v.as_str()) else {
+        return;
+    };
 
     let feed = format!(
         "https://ingv2.lacrossetechnology.com/api/v1.1/active-user/device-association/ref.user-device.{id}/feed\
          ?fields=temperature,humidity,barometric_pressure,wind_speed,wind_heading,rain_total&aggregates=ai.ticks.1&types=spot"
     );
-    let Some(v) = bearer(&feed, token) else { return };
+    let Some(v) = bearer(&feed, token) else {
+        return;
+    };
     // The feed nests one object per field, each with its own trailing sample. Walk it rather
     // than index it: which fields come back depends on which sensors the account owns.
     let mut f = Fields::new();
     let mut ts = epoch() as f64;
     for (_, per_device) in v.as_object().into_iter().flatten() {
         for (name, series) in per_device.as_object().into_iter().flatten() {
-            let Some(last) = series.pointer("/values").and_then(|a| a.as_array()).and_then(|a| a.last()) else { continue };
+            let Some(last) = series
+                .pointer("/values")
+                .and_then(|a| a.as_array())
+                .and_then(|a| a.last())
+            else {
+                continue;
+            };
             if let Some(u) = last.get("u").and_then(|u| u.as_f64()) {
                 ts = u;
             }
-            let Some(val) = last.pointer("/s").and_then(|s| s.as_f64()) else { continue };
+            let Some(val) = last.pointer("/s").and_then(|s| s.as_f64()) else {
+                continue;
+            };
             let key = match name.as_str() {
                 "temperature" => "temperature_c",
                 "humidity" => "humidity",
@@ -628,7 +736,10 @@ pub fn start_pollers(state: Arc<State>) {
             // an archive is the reason most people run this, and a non-Tempest install has no
             // cloud to backfill from once a year is gone.
             if tick % 360 == 1 {
-                let years = s("retentionYears").trim_matches('"').parse::<i64>().unwrap_or(0);
+                let years = s("retentionYears")
+                    .trim_matches('"')
+                    .parse::<i64>()
+                    .unwrap_or(0);
                 if years > 0 {
                     let cutoff = epoch() as i64 - years * 365 * 86400;
                     // A week per lock: the UDP listener writes on its own connection and gives up
@@ -648,7 +759,10 @@ pub fn start_pollers(state: Arc<State>) {
             if tick % 12 == 0 && !email.is_empty() && !pass.is_empty() {
                 // Tokens last an hour; mint a new one at fifty minutes rather than discover the
                 // expiry as a 401 on a station that then reads as offline.
-                let fresh = lax.as_ref().map(|(_, at)| epoch() - at < 3000).unwrap_or(false);
+                let fresh = lax
+                    .as_ref()
+                    .map(|(_, at)| epoch() - at < 3000)
+                    .unwrap_or(false);
                 if !fresh {
                     lax = lacrosse_token(&email, &pass).map(|t| (t, epoch()));
                 }
@@ -672,7 +786,10 @@ mod tests {
     #[test]
     fn counters_survive_a_restart_and_a_rollover_while_down() {
         let now = 1_700_000_000u64;
-        let mut m = Mem { rain: Some(0.4), ..Default::default() };
+        let mut m = Mem {
+            rain: Some(0.4),
+            ..Default::default()
+        };
         let saved = m.json(now);
 
         // Restart: the seed is picked up and the next report scores only the difference.
@@ -743,7 +860,11 @@ mod tests {
         assert!(close(t[11], 812.4));
         assert!(close(t[10], 7.0));
         assert!(close(t[14], 12.0));
-        assert!(close(t[18], 2.54), "0.10 in of rain is 2.54 mm, got {:?}", t[18]);
+        assert!(
+            close(t[18], 2.54),
+            "0.10 in of rain is 2.54 mm, got {:?}",
+            t[18]
+        );
         // Nothing to difference against yet, so the first report claims no rain and no strikes.
         assert_eq!((t[12], t[15]), (Some(0.0), Some(0.0)));
         // Slots no other brand reports stay empty rather than zero.
@@ -753,7 +874,11 @@ mod tests {
     #[test]
     fn absolute_pressure_wins_over_relative() {
         let t = build("/ingest", ECOWITT);
-        assert!(close(t[6], 1013.21), "took the sea-level figure: {:?}", t[6]);
+        assert!(
+            close(t[6], 1013.21),
+            "took the sea-level figure: {:?}",
+            t[6]
+        );
     }
 
     #[test]
@@ -766,7 +891,11 @@ mod tests {
         assert!(close(t[4], 180.0));
         assert!(close(t[6], 1013.21), "29.92 inHg in mb, got {:?}", t[6]);
         assert!(close(t[11], 812.4));
-        assert!(close(t[18], 2.54), "0.10 in of daily rain is 2.54 mm, got {:?}", t[18]);
+        assert!(
+            close(t[18], 2.54),
+            "0.10 in of daily rain is 2.54 mm, got {:?}",
+            t[18]
+        );
     }
 
     #[test]
@@ -775,8 +904,14 @@ mod tests {
         let a = build(AMBIENT, "");
         let w = build(WU, "");
         for slot in [2, 3, 4, 6, 7, 8, 18] {
-            assert_eq!(e[slot], a[slot], "slot {slot} differs between Ecowitt and Ambient");
-            assert_eq!(e[slot], w[slot], "slot {slot} differs between Ecowitt and WU");
+            assert_eq!(
+                e[slot], a[slot],
+                "slot {slot} differs between Ecowitt and Ambient"
+            );
+            assert_eq!(
+                e[slot], w[slot],
+                "slot {slot} differs between Ecowitt and WU"
+            );
         }
     }
 
@@ -789,14 +924,29 @@ mod tests {
             x.insert("dailyrainin".into(), mm.into());
             x
         };
-        assert_eq!(tuple(&f("0.10"), 0.0, &mut m)[12], Some(0.0), "first report must not claim the day's rain");
+        assert_eq!(
+            tuple(&f("0.10"), 0.0, &mut m)[12],
+            Some(0.0),
+            "first report must not claim the day's rain"
+        );
         let t = tuple(&f("0.15"), 60.0, &mut m);
-        assert!(close(t[12], 0.05 * MM_PER_IN), "0.05 in fell, got {:?}", t[12]);
+        assert!(
+            close(t[12], 0.05 * MM_PER_IN),
+            "0.05 in fell, got {:?}",
+            t[12]
+        );
         assert_eq!(t[13], Some(1.0), "rain fell but precip type says dry");
         // Midnight: the console's daily total restarts. The drop is a rollover, not negative rain.
         let t = tuple(&f("0.02"), 120.0, &mut m);
-        assert!(close(t[12], 0.02 * MM_PER_IN), "rollover mishandled: {:?}", t[12]);
-        assert!(t[12].unwrap() >= 0.0, "a negative rainfall would poison every SUM");
+        assert!(
+            close(t[12], 0.02 * MM_PER_IN),
+            "rollover mishandled: {:?}",
+            t[12]
+        );
+        assert!(
+            t[12].unwrap() >= 0.0,
+            "a negative rainfall would poison every SUM"
+        );
         // Dry interval.
         let t = tuple(&f("0.02"), 180.0, &mut m);
         assert_eq!((t[12], t[13]), (Some(0.0), Some(0.0)));
@@ -813,7 +963,11 @@ mod tests {
         };
         assert_eq!(tuple(&f("3"), 0.0, &mut m)[15], Some(0.0));
         assert_eq!(tuple(&f("7"), 60.0, &mut m)[15], Some(4.0));
-        assert_eq!(tuple(&f("1"), 120.0, &mut m)[15], Some(1.0), "counter reset should not go negative");
+        assert_eq!(
+            tuple(&f("1"), 120.0, &mut m)[15],
+            Some(1.0),
+            "counter reset should not go negative"
+        );
     }
 
     #[test]
@@ -821,11 +975,19 @@ mod tests {
         let mut m = Mem::default();
         let mut f = Fields::new();
         f.insert("tempf".into(), "70".into());
-        assert_eq!(tuple(&f, 0.0, &mut m)[17], None, "no previous report, no interval");
+        assert_eq!(
+            tuple(&f, 0.0, &mut m)[17],
+            None,
+            "no previous report, no interval"
+        );
         m.last_ts = Some(0.0);
         assert_eq!(tuple(&f, 60.0, &mut m)[17], Some(1.0));
         m.last_ts = Some(0.0);
-        assert_eq!(tuple(&f, 86_400.0, &mut m)[17], Some(30.0), "a day's gap must clamp, not scale");
+        assert_eq!(
+            tuple(&f, 86_400.0, &mut m)[17],
+            Some(30.0),
+            "a day's gap must clamp, not scale"
+        );
     }
 
     #[test]
@@ -885,14 +1047,27 @@ mod tests {
         assert!(keep(now, &m, ahead), "first report always keeps");
         m.last_wall = Some(now);
         m.last_raw = Some(ahead);
-        assert!(!keep(now + 10, &m, ahead + 10.0), "ten seconds later is still the same minute");
-        assert!(keep(now + MIN_GAP, &m, ahead + 60.0), "a minute of our time must let a row through");
+        assert!(
+            !keep(now + 10, &m, ahead + 10.0),
+            "ten seconds later is still the same minute"
+        );
+        assert!(
+            keep(now + MIN_GAP, &m, ahead + 60.0),
+            "a minute of our time must let a row through"
+        );
     }
 
     #[test]
     fn a_repeated_poll_result_is_not_a_new_interval() {
-        let m = Mem { last_wall: Some(0), last_raw: Some(500.0), ..Mem::default() };
-        assert!(!keep(1_000, &m, 500.0), "same payload stamp is the same reading");
+        let m = Mem {
+            last_wall: Some(0),
+            last_raw: Some(500.0),
+            ..Mem::default()
+        };
+        assert!(
+            !keep(1_000, &m, 500.0),
+            "same payload stamp is the same reading"
+        );
         assert!(keep(1_000, &m, 501.0));
     }
 
@@ -900,7 +1075,13 @@ mod tests {
     fn sources_do_not_throttle_each_other() {
         // Two entries in the map, so a push and a poll each get their own minute.
         let mut map: HashMap<&'static str, Mem> = HashMap::new();
-        map.insert("push", Mem { last_wall: Some(1_000), ..Mem::default() });
+        map.insert(
+            "push",
+            Mem {
+                last_wall: Some(1_000),
+                ..Mem::default()
+            },
+        );
         assert!(keep(1_010, map.entry("wll").or_default(), 1_010.0));
         assert!(!keep(1_010, &map["push"], 1_010.0));
     }
@@ -908,7 +1089,10 @@ mod tests {
     #[test]
     fn percent_encoding_and_plus_signs_decode() {
         let f = collect("/ingest", "dateutc=2026-08-19+14%3A30%3A00&tempf=77.0");
-        assert_eq!(f.get("dateutc").map(String::as_str), Some("2026-08-19 14:30:00"));
+        assert_eq!(
+            f.get("dateutc").map(String::as_str),
+            Some("2026-08-19 14:30:00")
+        );
         assert_eq!(f.get("tempf").map(String::as_str), Some("77.0"));
     }
 
@@ -917,11 +1101,26 @@ mod tests {
     /// of crafted requests was enough to leave the dashboard unanswered.
     #[test]
     fn a_stray_percent_before_a_wide_character_does_not_panic() {
-        assert_eq!(percent_decode("%41"), "A", "a real escape must still decode");
+        assert_eq!(
+            percent_decode("%41"),
+            "A",
+            "a real escape must still decode"
+        );
         assert_eq!(percent_decode("%€"), "%€");
         assert_eq!(percent_decode("a%€b"), "a%€b");
         // And arriving the way it would off the wire: the rest of the body still parses.
         let f = collect("/ingest", "tempf=%€&humidity=55");
         assert_eq!(f.get("humidity").map(String::as_str), Some("55"));
+    }
+
+    #[test]
+    fn a_failed_observation_does_not_advance_counters() {
+        let mut conn = store::open(std::path::Path::new(":memory:")).unwrap();
+        conn.execute_batch("CREATE TRIGGER reject_obs BEFORE INSERT ON obs BEGIN SELECT RAISE(ABORT, 'test'); END;").unwrap();
+        let mut tuple = vec![None; 19];
+        tuple[0] = Some(1_700_000_000.0);
+        assert!(!store_observation(&mut conn, &tuple, store::SRC_UDP, "counter:test", "advanced"));
+        assert!(store::meta_get(&conn, "counter:test").is_none());
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
     }
 }

@@ -6,7 +6,13 @@ import { syncSpokenAlerts } from './app.js';
 
 // Last-good copies of the two payloads the Desk can't render without. An outage that spans a
 // reload would otherwise leave the whole page at `--`; in-session failures already keep the DOM.
-async function cached(key, fetcher) {
+function cacheContext(kind) {
+  const s = settings(), c = coords();
+  return `${kind}:${s.stationSource || 'tempest'}:${s.stationId || ''}:${c.lat ?? ''}:${c.lon ?? ''}:${s.units}:${s.windUnit || ''}`;
+}
+
+async function cached(kind, fetcher) {
+  const key = `wd.cache.${cacheContext(kind)}`;
   try {
     const j = await fetcher();
     store(key, j);
@@ -90,28 +96,33 @@ export function renderHeroAlerts(feats, status = '') {
 }
 
 export async function refreshDesk() {
+  const timingStarted = performance.now();
   // Not `configured()`: an Ecowitt or a Davis has no Tempest forecast, and `api.betterForecast`
   // hands those installs the open-meteo payload in the same shape — which needs a location and
   // nothing else, so an install with only a saved place gets a forecast too.
   if (!hasSource() && !hasLocation()) return;
+  const requestContext = cacheContext('forecast');
   let res;
   try {
-    res = await cached('wd.cache.fc', api.betterForecast);
+    res = await cached('forecast', api.betterForecast);
   } catch (e) {
     if (!toldFcFail) { toldFcFail = true; notify({ title: 'Forecast failed', body: e.message }); }
     throw e;
   }
   const { j: fc, fresh } = res;
+  if (requestContext !== cacheContext('forecast')) return;
   if (fresh) toldFcFail = false;
   else if (!toldFcFail) {
     toldFcFail = true;
     notify({ title: 'Forecast stale — showing cached copy', body: res.err.message });
   }
   latestForecast = fc;
+  fc._provenance = `${fresh ? '' : 'Cached · '}${hasSource() && !settings().activePlace ? 'Station' : 'Forecast'}`;
   renderCurrent(fc.current_conditions);
   renderTenDay(fc.forecast.daily);
   if (fresh) stamp('tenday', 300);
   window.dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
+  (window.__WD_TIMINGS ||= {}).forecastRefreshMs = Math.round(performance.now() - timingStarted);
 }
 
 // A forecast is fetched every few minutes; the station reports every few seconds. Repaint the
@@ -131,7 +142,7 @@ window.addEventListener('wd:ws-obs', (e) => {
   if (document.hidden) { pendingObs = e.detail; return; }
   api.overlayStation(latestForecast.current_conditions, e.detail, latestForecast.elevation);
   renderCurrent(latestForecast.current_conditions);
-  window.dispatchEvent(new CustomEvent('wd:forecast', { detail: latestForecast }));
+  window.dispatchEvent(new CustomEvent('wd:current', { detail: latestForecast }));
 });
 
 function renderCurrent(c) {
@@ -162,8 +173,11 @@ export async function refreshAlerts() {
   let j;
   try { j = await api.alerts(); }
   catch (error) {
-    renderHeroAlerts(null, 'Alert feed unavailable · check official sources');
-    $('alerts').textContent = 'Alert feed unavailable. Check official sources for current watches, warnings and advisories.';
+    const unsupported = /^404\b/.test(error.message);
+    const message = unsupported ? 'NWS alerts are available in the United States only' : 'Alert feed unavailable · check official sources';
+    renderHeroAlerts(null, message);
+    $('alerts').textContent = unsupported ? `${message}. Worldwide forecasts remain available.`
+      : 'Alert feed unavailable. Check official sources for current watches, warnings and advisories.';
     throw error;
   }
   if (requestedPlace !== JSON.stringify(coords())) return;
@@ -228,7 +242,9 @@ const aqiLabel = (v) => ({ good: 'Good', mod: 'Moderate', usg: 'Unhealthy (sensi
 
 export async function refreshObs() {
   if (!configured()) return;
-  const { j, fresh } = await cached('wd.cache.obs', api.stationObs);
+  const requestContext = cacheContext('observation');
+  const { j, fresh } = await cached('observation', api.stationObs);
+  if (requestContext !== cacheContext('observation')) return;
   const o = j.obs?.[0];
   if (!o) return;
   if (fresh) stamp('hero', settings().refreshSec);

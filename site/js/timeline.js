@@ -47,7 +47,11 @@ function candidate(kind, start, title, summary, metrics = {}, severity = 'info',
 export function mergeEvents(input, gap = 90 * 60) {
   const out = [];
   for (const e of [...input].sort((a, b) => a.start - b.start || a.kind.localeCompare(b.kind))) {
-    const prev = [...out].reverse().find((x) => x.kind === e.kind && e.start <= x.end + gap);
+    // Official alerts keep their identity. Merging every `alert` together hid a tornado warning
+    // inside an overlapping heat advisory. Forecast windows merge only when they describe the
+    // same event from the same source at the same severity.
+    const prev = [...out].reverse().find((x) => x.kind === e.kind && x.source === e.source
+      && x.title === e.title && x.severity === e.severity && e.start <= x.end + gap);
     if (prev) {
       prev.end = Math.max(prev.end, e.end);
       prev.severity = ['info', 'watch', 'warning'].indexOf(e.severity) > ['info', 'watch', 'warning'].indexOf(prev.severity)
@@ -189,6 +193,7 @@ function render() {
 }
 
 async function refresh() {
+  const timingStarted = performance.now();
   const fc = deskForecast();
   if (!fc) return;
   const settled = await Promise.allSettled([api.localObs(24), api.alerts(), api.aqi(), api.nowcast()]);
@@ -197,6 +202,7 @@ async function refresh() {
   aqi = settled[2].status === 'fulfilled' ? settled[2].value : aqi;
   const near = settled[3].status === 'fulfilled' ? settled[3].value : null;
   events = buildTimeline({ forecast: fc, observations: history, nws: alerts, air: aqi, nowcast: near, modelData: models });
+  (window.__WD_TIMINGS ||= {}).timelineBuildMs = Math.round(performance.now() - timingStarted);
   render();
 }
 
@@ -230,6 +236,9 @@ export function initTimeline() {
 if (location.search.includes('selftest')) {
   const a = candidate('wind', 1000, 'a', 'a'), b = candidate('wind', 4600, 'b', 'b');
   console.assert(mergeEvents([a, b]).length === 1, 'timeline: adjacent hours merge');
+  const alerts = [candidate('alert', 1000, 'Heat Advisory', 'hot', {}, 'warning', 'NWS'),
+    candidate('alert', 1100, 'Tornado Warning', 'shelter', {}, 'warning', 'NWS')];
+  console.assert(mergeEvents(alerts).length === 2, 'timeline: distinct official alerts remain distinct');
   console.assert(eventId('wind', 3601) === eventId('wind', 7199), 'timeline: ids are stable within an hour');
   console.assert(modelConfidence(null, a)[0] === 'Unavailable', 'timeline: missing models are honest');
   const mixed = { _fetchedAt: Date.now() / 1000, hourly: { time: [new Date(1000 * 1000).toISOString()] } };

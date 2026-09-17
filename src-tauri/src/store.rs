@@ -59,7 +59,8 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
 }
 
 pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).ok()
+    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+        .ok()
 }
 
 pub fn meta_set(conn: &Connection, key: &str, value: &str) {
@@ -75,7 +76,10 @@ fn insert_sql() -> &'static str {
     static SQL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     SQL.get_or_init(|| {
         let cols = FIELDS.join(", ");
-        let holes = (1..=20).map(|i| format!("?{i}")).collect::<Vec<_>>().join(", ");
+        let holes = (1..=20)
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         format!("INSERT OR IGNORE INTO obs (ts, {cols}, src) VALUES ({holes})")
     })
 }
@@ -83,7 +87,9 @@ fn insert_sql() -> &'static str {
 /// One raw SI tuple, exactly as the hub broadcast it. `INSERT OR IGNORE` on the timestamp
 /// primary key is what makes the import, the backfill and a re-broadcasting hub all idempotent.
 pub fn insert(conn: &Connection, obs: &[Option<f64>], src: i64) -> bool {
-    let Some(Some(ts)) = obs.first().copied() else { return false };
+    let Some(Some(ts)) = obs.first().copied() else {
+        return false;
+    };
     let mut vals: Vec<Option<f64>> = Vec::with_capacity(20);
     vals.push(Some(ts));
     for i in 1..=FIELDS.len() {
@@ -91,8 +97,12 @@ pub fn insert(conn: &Connection, obs: &[Option<f64>], src: i64) -> bool {
     }
     vals.push(Some(src as f64));
     // prepare_cached: the statement is parsed once per connection instead of once per reading.
-    let Ok(mut stmt) = conn.prepare_cached(insert_sql()) else { return false };
-    stmt.execute(params_from_iter(vals)).map(|n| n > 0).unwrap_or(false)
+    let Ok(mut stmt) = conn.prepare_cached(insert_sql()) else {
+        return false;
+    };
+    stmt.execute(params_from_iter(vals))
+        .map(|n| n > 0)
+        .unwrap_or(false)
 }
 
 /// Every tuple in the v2 JSONL log, oldest file first. Lines that don't parse are skipped rather
@@ -108,9 +118,13 @@ fn read_log(dir: &Path) -> Vec<Vec<Option<f64>>> {
     files.sort();
     let mut out = Vec::new();
     for f in files {
-        let Ok(text) = std::fs::read_to_string(&f) else { continue };
+        let Ok(text) = std::fs::read_to_string(&f) else {
+            continue;
+        };
         for line in text.lines() {
-            let Ok(v) = serde_json::from_str::<Vec<serde_json::Value>>(line) else { continue };
+            let Ok(v) = serde_json::from_str::<Vec<serde_json::Value>>(line) else {
+                continue;
+            };
             out.push(v.iter().map(|x| x.as_f64()).collect());
         }
     }
@@ -145,7 +159,10 @@ pub fn daily_json(conn: &Connection, tz_off_min: i64) -> String {
             .unwrap_or(0),
         tz_off_min,
     );
-    daily_join(&daily_head_json(conn, tz_off_min, ds), daily_today_row(conn, tz_off_min, ds).as_deref())
+    daily_join(
+        &daily_head_json(conn, tz_off_min, ds),
+        daily_today_row(conn, tz_off_min, ds).as_deref(),
+    )
 }
 
 /// Midnight local, as an epoch second. `div_euclid` rather than `/`: a negative offset west of
@@ -245,7 +262,11 @@ pub fn tuples_json(conn: &Connection, from: i64, to: i64) -> String {
     let rows = stmt.query_map([from, to], |r| {
         let mut out = vec![r.get::<_, i64>(0)?.to_string()];
         for i in 1..=FIELDS.len() {
-            out.push(r.get::<_, Option<f64>>(i)?.map(|v| v.to_string()).unwrap_or_else(|| "null".into()));
+            out.push(
+                r.get::<_, Option<f64>>(i)?
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".into()),
+            );
         }
         Ok(format!("[{}]", out.join(",")))
     });
@@ -272,13 +293,20 @@ pub fn stamp(conn: &Connection) -> (i64, i64) {
 /// What the almanac needs to say "records since <date>".
 pub fn coverage_json(conn: &Connection, backfill: &str) -> String {
     let (first, last, count): (Option<i64>, Option<i64>, i64) = conn
-        .query_row("SELECT MIN(ts), MAX(ts), COUNT(*) FROM obs", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .query_row("SELECT MIN(ts), MAX(ts), COUNT(*) FROM obs", [], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
         .unwrap_or((None, None, 0));
     let n = |v: Option<i64>| v.map(|x| x.to_string()).unwrap_or_else(|| "null".into());
+    let fingerprint = meta_get(conn, "station_fingerprint").unwrap_or_default();
+    let error = meta_get(conn, "backfill_error").unwrap_or_default();
     format!(
-        "{{\"first\":{},\"last\":{},\"count\":{count},\"backfill\":\"{backfill}\"}}",
+        "{{\"first\":{},\"last\":{},\"count\":{count},\"backfill\":\"{backfill}\",\"stationFingerprint\":{},\"partial\":{},\"lastError\":{}}}",
         n(first),
-        n(last)
+        n(last),
+        serde_json::Value::from(fingerprint),
+        backfill != "complete",
+        serde_json::Value::from(error)
     )
 }
 
@@ -286,8 +314,12 @@ pub fn coverage_json(conn: &Connection, backfill: &str) -> String {
 /// `integrity_check`: it catches structural damage without turning a drawer click into a long scan.
 pub fn health(conn: &Connection, path: &Path) -> serde_json::Value {
     let (first, last) = stamp(conn);
-    let rows: i64 = conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get(0)).unwrap_or(0);
-    let check: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0)).unwrap_or_else(|_| "unavailable".into());
+    let rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM obs", [], |r| r.get(0))
+        .unwrap_or(0);
+    let check: String = conn
+        .query_row("PRAGMA quick_check", [], |r| r.get(0))
+        .unwrap_or_else(|_| "unavailable".into());
     let bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     serde_json::json!({ "ok": check == "ok", "check": check, "rows": rows,
         "first": first, "last": last, "bytes": bytes })
@@ -312,7 +344,13 @@ pub struct CsvPager {
 
 impl CsvPager {
     pub fn new(conn: Connection) -> Self {
-        CsvPager { conn, after: -1, buf: CSV_HEADER.as_bytes().to_vec(), at: 0, done: false }
+        CsvPager {
+            conn,
+            after: -1,
+            buf: CSV_HEADER.as_bytes().to_vec(),
+            at: 0,
+            done: false,
+        }
     }
 
     fn refill(&mut self) {
@@ -391,58 +429,101 @@ pub fn bundle_to(conn: &Connection, dest: &Path, config: &str) -> rusqlite::Resu
     let manifest = serde_json::json!({
         "format": BACKUP_FORMAT, "app": env!("CARGO_PKG_VERSION"),
         "created": crate::server::epoch()
-    }).to_string();
-    bundle.execute("INSERT INTO meta (key,value) VALUES ('backup:manifest',?1)
-        ON CONFLICT(key) DO UPDATE SET value=?1", [&manifest])?;
-    bundle.execute("INSERT INTO meta (key,value) VALUES ('backup:config',?1)
-        ON CONFLICT(key) DO UPDATE SET value=?1", [config])?;
+    })
+    .to_string();
+    bundle.execute(
+        "INSERT INTO meta (key,value) VALUES ('backup:manifest',?1)
+        ON CONFLICT(key) DO UPDATE SET value=?1",
+        [&manifest],
+    )?;
+    bundle.execute(
+        "INSERT INTO meta (key,value) VALUES ('backup:config',?1)
+        ON CONFLICT(key) DO UPDATE SET value=?1",
+        [config],
+    )?;
     bundle.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
     Ok(())
 }
 
 pub fn inspect_bundle(path: &Path) -> Result<serde_json::Value, String> {
     use rusqlite::OpenFlags;
-    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|_| "not a SQLite backup")?;
-    let check: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(|_| "integrity check failed")?;
-    if check != "ok" { return Err("integrity check failed".into()); }
-    let manifest: serde_json::Value = serde_json::from_str(&meta_get(&conn, "backup:manifest").ok_or("missing backup manifest")?)
-        .map_err(|_| "invalid backup manifest")?;
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "not a SQLite backup")?;
+    let check: String = conn
+        .query_row("PRAGMA quick_check", [], |r| r.get(0))
+        .map_err(|_| "integrity check failed")?;
+    if check != "ok" {
+        return Err("integrity check failed".into());
+    }
+    let manifest: serde_json::Value =
+        serde_json::from_str(&meta_get(&conn, "backup:manifest").ok_or("missing backup manifest")?)
+            .map_err(|_| "invalid backup manifest")?;
     let format = manifest["format"].as_i64().ok_or("invalid backup format")?;
-    if format > BACKUP_FORMAT { return Err("backup was made by a newer StormDesk".into()); }
-    if format < 1 { return Err("unsupported backup format".into()); }
-    let config: serde_json::Value = serde_json::from_str(&meta_get(&conn, "backup:config").ok_or("missing backup settings")?)
-        .map_err(|_| "invalid backup settings")?;
-    if !config.is_object() { return Err("invalid backup settings".into()); }
-    let mut stmt = conn.prepare("PRAGMA table_info(obs)").map_err(|_| "missing observation archive")?;
-    let cols: Vec<String> = stmt.query_map([], |r| r.get(1)).map_err(|_| "missing observation archive")?
-        .flatten().collect();
-    let required = std::iter::once("ts").chain(FIELDS.iter().copied()).chain(std::iter::once("src"));
-    if required.clone().any(|c| !cols.iter().any(|x| x == c)) { return Err("backup archive schema is incomplete".into()); }
+    if format > BACKUP_FORMAT {
+        return Err("backup was made by a newer StormDesk".into());
+    }
+    if format < 1 {
+        return Err("unsupported backup format".into());
+    }
+    let config: serde_json::Value =
+        serde_json::from_str(&meta_get(&conn, "backup:config").ok_or("missing backup settings")?)
+            .map_err(|_| "invalid backup settings")?;
+    if !config.is_object() {
+        return Err("invalid backup settings".into());
+    }
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(obs)")
+        .map_err(|_| "missing observation archive")?;
+    let cols: Vec<String> = stmt
+        .query_map([], |r| r.get(1))
+        .map_err(|_| "missing observation archive")?
+        .flatten()
+        .collect();
+    let required = std::iter::once("ts")
+        .chain(FIELDS.iter().copied())
+        .chain(std::iter::once("src"));
+    if required.clone().any(|c| !cols.iter().any(|x| x == c)) {
+        return Err("backup archive schema is incomplete".into());
+    }
     let (first, last) = stamp(&conn);
-    let rows: i64 = conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get(0)).unwrap_or(0);
-    if first < 0 || last < first { return Err("backup contains invalid timestamps".into()); }
-    Ok(serde_json::json!({ "format": format, "app": manifest["app"], "created": manifest["created"],
+    let rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM obs", [], |r| r.get(0))
+        .unwrap_or(0);
+    if first < 0 || last < first {
+        return Err("backup contains invalid timestamps".into());
+    }
+    Ok(
+        serde_json::json!({ "format": format, "app": manifest["app"], "created": manifest["created"],
         "station": config.pointer("/settings/stationName").and_then(|v| v.as_str()).unwrap_or("StormDesk"),
-        "first": first, "last": last, "rows": rows }))
+        "first": first, "last": last, "rows": rows }),
+    )
 }
 
 pub fn bundle_config(path: &Path) -> Result<String, String> {
     use rusqlite::OpenFlags;
-    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|_| "cannot open backup")?;
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|_| "cannot open backup")?;
     meta_get(&conn, "backup:config").ok_or_else(|| "missing backup settings".into())
 }
 
 pub fn replace_from_bundle(conn: &Connection, path: &Path) -> rusqlite::Result<()> {
     let cols = format!("ts, {}, src", FIELDS.join(", "));
-    conn.execute("ATTACH DATABASE ?1 AS restore", [path.to_string_lossy().to_string()])?;
-    let sql = format!("BEGIN IMMEDIATE;
+    conn.execute(
+        "ATTACH DATABASE ?1 AS restore",
+        [path.to_string_lossy().to_string()],
+    )?;
+    let sql = format!(
+        "BEGIN IMMEDIATE;
         DELETE FROM obs;
         INSERT INTO obs ({cols}) SELECT {cols} FROM restore.obs;
         DELETE FROM meta;
         INSERT INTO meta SELECT key, value FROM restore.meta WHERE key NOT LIKE 'backup:%';
-        COMMIT;");
+        COMMIT;"
+    );
     let result = conn.execute_batch(&sql);
-    if result.is_err() { let _ = conn.execute_batch("ROLLBACK;"); }
+    if result.is_err() {
+        let _ = conn.execute_batch("ROLLBACK;");
+    }
     let _ = conn.execute_batch("DETACH DATABASE restore;");
     result
 }
@@ -454,17 +535,23 @@ pub fn replace_from_bundle(conn: &Connection, path: &Path) -> rusqlite::Result<(
 ///
 /// The token rides in the query string of every request here, so failures are reported by status
 /// code only — a formatted `ureq` error echoes the URL, and this goes to a log file.
-pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
+pub fn backfill(conn: &Connection, token: &str, device_id: &str) -> bool {
     if meta_get(conn, "backfill_done").is_some() || token.is_empty() || device_id.is_empty() {
-        return;
+        return meta_get(conn, "backfill_done").is_some();
     }
     let chunk = 4 * 86_400;
     let mut cursor: i64 = meta_get(conn, "backfill_cursor")
         .and_then(|v| v.parse().ok())
-        .or_else(|| conn.query_row("SELECT MIN(ts) FROM obs", [], |r| r.get::<_, Option<i64>>(0)).ok().flatten())
+        .or_else(|| {
+            conn.query_row("SELECT MIN(ts) FROM obs", [], |r| {
+                r.get::<_, Option<i64>>(0)
+            })
+            .ok()
+            .flatten()
+        })
         .unwrap_or(0);
     if cursor == 0 {
-        return; // nothing heard yet — no idea where the station's history ends
+        return false; // nothing heard yet — no idea where the station's history ends
     }
     let mut empty = 0;
     let mut retries = 0;
@@ -473,17 +560,31 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
         let url = format!(
             "https://swd.weatherflow.com/swd/rest/observations/device/{device_id}?token={token}&time_start={start}&time_end={cursor}"
         );
-        let body = match ureq::get(&url).timeout(std::time::Duration::from_secs(30)).call() {
+        let body = match ureq::get(&url)
+            .timeout(std::time::Duration::from_secs(30))
+            .call()
+        {
             Ok(r) => r.into_string().unwrap_or_default(),
             Err(ureq::Error::Status(code, _)) => {
                 if (code == 429 || code >= 500) && retries < 5 {
                     retries += 1;
-                    eprintln!("stormdesk: backfill paused on HTTP {code}, retrying in 60s ({retries}/5)");
+                    eprintln!(
+                        "stormdesk: backfill paused on HTTP {code}, retrying in 60s ({retries}/5)"
+                    );
                     std::thread::sleep(std::time::Duration::from_secs(60));
                     continue;
                 }
                 eprintln!("stormdesk: backfill stopped on HTTP {code}");
-                break;
+                meta_set(
+                    conn,
+                    "backfill_error",
+                    if code == 401 || code == 403 {
+                        "authorization"
+                    } else {
+                        "upstream"
+                    },
+                );
+                return false;
             }
             Err(_) if retries < 5 => {
                 retries += 1;
@@ -492,10 +593,11 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
                 continue;
             }
             Err(_) => {
-                eprintln!("stormdesk: backfill gave up on this chunk after 5 retries; skipping it");
-                cursor -= chunk;
-                retries = 0;
-                continue;
+                eprintln!(
+                    "stormdesk: backfill paused after 5 retries; the same window will resume later"
+                );
+                meta_set(conn, "backfill_error", "network");
+                return false;
             }
         };
         let rows: Vec<Vec<Option<f64>>> = serde_json::from_str::<serde_json::Value>(&body)
@@ -504,7 +606,11 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
             .and_then(|o| o.as_array().cloned())
             .unwrap_or_default()
             .iter()
-            .map(|o| o.as_array().map(|a| a.iter().map(|x| x.as_f64()).collect()).unwrap_or_default())
+            .map(|o| {
+                o.as_array()
+                    .map(|a| a.iter().map(|x| x.as_f64()).collect())
+                    .unwrap_or_default()
+            })
             .collect();
         let mut added = 0;
         for o in &rows {
@@ -512,14 +618,19 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) {
                 added += 1;
             }
         }
-        eprintln!("stormdesk: backfill {start}..{cursor} — {} rows, {added} new", rows.len());
+        eprintln!(
+            "stormdesk: backfill {start}..{cursor} — {} rows, {added} new",
+            rows.len()
+        );
         empty = if rows.is_empty() { empty + 1 } else { 0 };
         cursor = start;
         meta_set(conn, "backfill_cursor", &cursor.to_string());
+        meta_set(conn, "backfill_error", "");
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     meta_set(conn, "backfill_done", "1");
     eprintln!("stormdesk: backfill complete");
+    true
 }
 
 // ponytail: one check, on the two things here that can be silently wrong — an insert that
@@ -538,7 +649,9 @@ mod tests {
         obs[7] = Some(21.5);
         assert!(insert(&conn, &obs, 3));
         assert!(!insert(&conn, &obs, 3), "same timestamp inserts once");
-        let src: i64 = conn.query_row("SELECT src FROM obs", [], |r| r.get(0)).unwrap();
+        let src: i64 = conn
+            .query_row("SELECT src FROM obs", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(src, 3);
     }
 
@@ -548,11 +661,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let source = open(&dir.join("source.db")).unwrap();
-        let mut obs = vec![None; 19]; obs[0] = Some(1_700_000_000.0); obs[7] = Some(21.5);
+        let mut obs = vec![None; 19];
+        obs[0] = Some(1_700_000_000.0);
+        obs[7] = Some(21.5);
         assert!(insert(&source, &obs, 3));
         meta_set(&source, "kept", "yes");
         let bundle = dir.join("stormdesk.wdbak");
-        let config = r#"{"settings":{"stationName":"Back yard","token":"secret"},"layout":{"hero":{}}}"#;
+        let config =
+            r#"{"settings":{"stationName":"Back yard","token":"secret"},"layout":{"hero":{}}}"#;
         bundle_to(&source, &bundle, config).unwrap();
         let summary = inspect_bundle(&bundle).unwrap();
         assert_eq!(summary["rows"], 1);
@@ -560,10 +676,16 @@ mod tests {
         assert_eq!(bundle_config(&bundle).unwrap(), config);
 
         let target = open(&dir.join("target.db")).unwrap();
-        let mut other = vec![None; 19]; other[0] = Some(1_800_000_000.0);
+        let mut other = vec![None; 19];
+        other[0] = Some(1_800_000_000.0);
         insert(&target, &other, 0);
         replace_from_bundle(&target, &bundle).unwrap();
-        assert_eq!(target.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+        assert_eq!(
+            target
+                .query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
         assert_eq!(meta_get(&target, "kept").as_deref(), Some("yes"));
         assert!(meta_get(&target, "backup:config").is_none());
         let _ = std::fs::remove_dir_all(dir);
@@ -572,15 +694,23 @@ mod tests {
     #[test]
     fn portable_backup_rejects_corruption_and_newer_formats() {
         let dir = std::env::temp_dir().join(format!("wd-bundle-bad-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir); std::fs::create_dir_all(&dir).unwrap();
-        let corrupt = dir.join("bad.wdbak"); std::fs::write(&corrupt, b"not sqlite").unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let corrupt = dir.join("bad.wdbak");
+        std::fs::write(&corrupt, b"not sqlite").unwrap();
         assert!(inspect_bundle(&corrupt).is_err());
         let source = open(&dir.join("source.db")).unwrap();
         let newer = dir.join("newer.wdbak");
         bundle_to(&source, &newer, "{}").unwrap();
         let edit = open(&newer).unwrap();
-        meta_set(&edit, "backup:manifest", &serde_json::json!({"format": BACKUP_FORMAT + 1}).to_string());
-        edit.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)").unwrap(); drop(edit);
+        meta_set(
+            &edit,
+            "backup:manifest",
+            &serde_json::json!({"format": BACKUP_FORMAT + 1}).to_string(),
+        );
+        edit.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .unwrap();
+        drop(edit);
         assert!(inspect_bundle(&newer).unwrap_err().contains("newer"));
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -588,12 +718,18 @@ mod tests {
     #[test]
     fn failed_restore_keeps_the_live_archive() {
         let target = open(std::path::Path::new(":memory:")).unwrap();
-        let mut live = vec![None; 19]; live[0] = Some(1_700_000_000.0);
+        let mut live = vec![None; 19];
+        live[0] = Some(1_700_000_000.0);
         assert!(insert(&target, &live, 0));
         let missing = std::env::temp_dir().join(format!("wd-missing-{}.wdbak", std::process::id()));
         let _ = std::fs::remove_file(&missing);
         assert!(replace_from_bundle(&target, &missing).is_err());
-        assert_eq!(target.query_row("SELECT ts FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 1_700_000_000);
+        assert_eq!(
+            target
+                .query_row("SELECT ts FROM obs", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1_700_000_000
+        );
     }
 
     /// The cache key for /history/daily: no COUNT(*), and it still moves when the archive does.
@@ -613,7 +749,11 @@ mod tests {
         c.execute_batch(&format!(
             "CREATE TABLE obs (ts INTEGER PRIMARY KEY, {}, src INTEGER NOT NULL DEFAULT 0);
              CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);",
-            FIELDS.iter().map(|f| format!("{f} REAL")).collect::<Vec<_>>().join(", ")
+            FIELDS
+                .iter()
+                .map(|f| format!("{f} REAL"))
+                .collect::<Vec<_>>()
+                .join(", ")
         ))
         .unwrap();
         c
@@ -630,12 +770,20 @@ mod tests {
     fn insert_is_idempotent_and_keeps_every_field() {
         let c = mem();
         assert!(insert(&c, &obs(1_700_000_000, 21.5, 0.4), SRC_UDP));
-        assert!(!insert(&c, &obs(1_700_000_000, 99.0, 9.0), SRC_UDP), "same timestamp inserted twice");
+        assert!(
+            !insert(&c, &obs(1_700_000_000, 99.0, 9.0), SRC_UDP),
+            "same timestamp inserted twice"
+        );
         let (temp, rain, day_rain): (f64, f64, f64) = c
-            .query_row("SELECT temp, rain, day_rain FROM obs", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .query_row("SELECT temp, rain, day_rain FROM obs", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
             .unwrap();
         assert_eq!((temp, rain), (21.5, 0.4));
-        assert_eq!(day_rain, 1_700_000_000.0, "last tuple field lost — column list is off by one");
+        assert_eq!(
+            day_rain, 1_700_000_000.0,
+            "last tuple field lost — column list is off by one"
+        );
     }
 
     #[test]
@@ -664,7 +812,11 @@ mod tests {
         }
         // Days 0/5 go together (one week from the oldest), then 10, then 20 — three rounds.
         assert_eq!(rounds, 3);
-        assert_eq!(stamp(&c), (30 * day, 30 * day), "only the rows past the cutoff are left");
+        assert_eq!(
+            stamp(&c),
+            (30 * day, 30 * day),
+            "only the rows past the cutoff are left"
+        );
         assert_eq!(prune(&c, cutoff), 0, "a settled archive is a no-op");
 
         let empty = open(std::path::Path::new(":memory:")).unwrap();
@@ -680,16 +832,26 @@ mod tests {
         assert_eq!(day_start(midnight + 3600, 0), midnight);
         assert_eq!(day_start(midnight - 1, 0), midnight - 86400);
         // Five hours west: local midnight is 05:00 UTC, so 02:00 UTC is still yesterday.
-        assert_eq!(day_start(midnight + 2 * 3600, -300), midnight - 86400 + 5 * 3600);
+        assert_eq!(
+            day_start(midnight + 2 * 3600, -300),
+            midnight - 86400 + 5 * 3600
+        );
 
         let c = open(std::path::Path::new(":memory:")).unwrap();
         insert(&c, &obs(midnight - 3600, 10.0, 1.0), SRC_UDP);
         let head = daily_head_json(&c, 0, midnight);
         assert!(head.contains("2023-11-14"));
-        assert!(daily_today_row(&c, 0, midnight).is_none(), "an empty day has no row");
+        assert!(
+            daily_today_row(&c, 0, midnight).is_none(),
+            "an empty day has no row"
+        );
 
         insert(&c, &obs(midnight + 3600, 20.0, 2.0), SRC_UDP);
-        assert_eq!(daily_head_json(&c, 0, midnight), head, "today's reading never touches the head");
+        assert_eq!(
+            daily_head_json(&c, 0, midnight),
+            head,
+            "today's reading never touches the head"
+        );
         let today = daily_today_row(&c, 0, midnight).unwrap();
         assert!(today.contains("2023-11-15") && today.contains("\"tempMax\":20"));
 
@@ -697,7 +859,10 @@ mod tests {
         let rows: Vec<serde_json::Value> = serde_json::from_str(&joined).unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(daily_join("[]", None), "[]");
-        assert_eq!(daily_join("[]", Some("{\"day\":\"x\"}")), "[{\"day\":\"x\"}]");
+        assert_eq!(
+            daily_join("[]", Some("{\"day\":\"x\"}")),
+            "[{\"day\":\"x\"}]"
+        );
     }
 
     /// Both ends of the window are honoured — the detail panel asks for a day either side of the
@@ -709,8 +874,14 @@ mod tests {
             insert(&c, &obs(t, 20.0, 0.0), SRC_UDP);
         }
         let body = tuples_json(&c, 1_500, 2_500);
-        assert!(body.contains("[2000,"), "the row inside the window is there");
-        assert!(!body.contains("[1000,") && !body.contains("[3000,"), "the rows outside it are not");
+        assert!(
+            body.contains("[2000,"),
+            "the row inside the window is there"
+        );
+        assert!(
+            !body.contains("[1000,") && !body.contains("[3000,"),
+            "the rows outside it are not"
+        );
         assert_eq!(tuples_json(&c, 9_000, 9_999), "{\"obs\":[]}");
     }
 }

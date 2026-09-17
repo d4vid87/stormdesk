@@ -148,12 +148,19 @@ export function evaluate(m, rules = settings().rules || [], nowSec = Math.floor(
   rules.forEach((r, i) => {
     const spec = METRICS[r.metric];
     const v = m[r.metric];
-    if (!spec || v == null || Number.isNaN(v)) return;
-    const st = state.get(i) || { since: null, latched: false };
+    const key = r.id || `legacy-${i}`;
+    const st = state.get(key) || { since: null, latched: false, last: null };
+    if (!spec || v == null || Number.isNaN(v) || (st.last != null && nowSec - st.last > 180)) {
+      st.since = null;
+      st.last = v == null || Number.isNaN(v) ? null : nowSec;
+      state.set(key, st);
+      return;
+    }
+    st.last = nowSec;
     if (!holds(v, r.op, r.value) || !second(m, r)) {
       st.since = null;
       if (st.latched && rearmed(v, r.op, r.value)) st.latched = false;
-      state.set(i, st);
+      state.set(key, st);
       return;
     }
     st.since ??= nowSec;
@@ -161,7 +168,7 @@ export function evaluate(m, rules = settings().rules || [], nowSec = Math.floor(
       st.latched = true;
       fired.push({ rule: r, value: v, index: i });
     }
-    state.set(i, st);
+    state.set(key, st);
   });
   return fired;
 }
@@ -246,6 +253,10 @@ export function renderRules() {
 }
 
 export function initRules() {
+  const saved = settings().rules || [];
+  if (saved.some((r) => !r.id)) {
+    saveSettings({ rules: saved.map((r, i) => ({ id: r.id || `rule-${Date.now()}-${i}`, ...r })) });
+  }
   $('btn-rule-and').onclick = () => {
     const row = $('rule-and-row');
     row.style.display = row.style.display === 'none' ? '' : 'none';
@@ -258,6 +269,7 @@ export function initRules() {
     const and = $('rule-and-row').style.display !== 'none' && !Number.isNaN(value2);
     saveSettings({
       rules: [...(settings().rules || []), {
+        id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         metric: $('rule-metric').value,
         op: $('rule-op').value,
         value,
@@ -287,11 +299,15 @@ if (location.search.includes('selftest')) {
   console.assert(evaluate({ gust: 40 }, r, 240).length === 1, 'rules: fires again after re-arm');
   state.clear();
   const d = [{ metric: 'temp', op: '<', value: 32, durMin: 10 }];
-  console.assert(evaluate({ temp: 30 }, d, 0).length === 0, 'rules: duration not yet met');
-  console.assert(evaluate({ temp: 30 }, d, 599).length === 0, 'rules: still short');
+  for (let now = 0; now < 600; now += 60) {
+    console.assert(evaluate({ temp: 30 }, d, now).length === 0, 'rules: duration not yet met');
+  }
   console.assert(evaluate({ temp: 30 }, d, 600).length === 1, 'rules: fires at the duration');
   state.clear();
   console.assert(evaluate({ temp: null }, d, 0).length === 0, 'rules: missing reading never fires');
+  evaluate({ temp: 30 }, d, 0);
+  evaluate({ temp: null }, d, 60);
+  console.assert(evaluate({ temp: 30 }, d, 120).length === 0, 'rules: missing reading resets duration');
   state.clear();
 
   // AND rules: both halves, and a pre-v3 rule with no second half unchanged

@@ -1,7 +1,7 @@
 // 04 Data — nine boards. Station history from observations/device, forecast
 // intelligence from open-meteo + wd.verify, official context from NWS.
 import * as api from './api.js';
-import { settings, coords, configured, U, num, every, expires } from './app.js';
+import { settings, coords, configured, hasSource, U, num, every, expires } from './app.js';
 import { chart } from './charts.js';
 import { openDetail } from './detail.js';
 import { accuracy } from './track.js';
@@ -16,13 +16,16 @@ let history = [];
 const note = (id, msg) => { $(id).innerHTML = `<div class="muted">${msg}</div>`; };
 
 export async function refreshBoards() {
-  if (!configured() || !settings().deviceId) {
-    note('data-history-status', 'Connect a station with a numeric device ID in Settings to explore its history.');
+  if (!hasSource()) {
+    note('data-history-status', 'Connect a weather station to explore measured history. Forecast analysis remains available below.');
+    drawModels(); drawAccuracy(); drawOfficial(); drawOutlook();
     return;
   }
   const end = Math.floor(Date.now() / 1000);
   try {
-    const j = await api.deviceObs(settings().deviceId, end - 7 * DAY, end);
+    const j = window.__WD_SRV !== undefined || settings().stationSource
+      ? await api.localObs(7 * 24)
+      : await api.deviceObs(settings().deviceId, end - 7 * DAY, end);
     history = j.obs || [];
   } catch (e) {
     note('data-history-status', `History unavailable: ${e.message}`);

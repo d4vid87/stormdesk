@@ -15,11 +15,12 @@ def rect(value):
 
 
 if __name__ == "__main__":
+    package = os.environ.get("PACKAGE", "io.github.davidmay87.stormdesk")
     adb("shell", "uiautomator", "dump", "/sdcard/stormdesk-insets-check.xml")
     root = ET.fromstring(adb("shell", "cat", "/sdcard/stormdesk-insets-check.xml"))
     views = [rect(n.get("bounds")) for n in root.iter("node")
              if n.get("class") == "android.webkit.WebView"
-             and n.get("package") == "io.github.davidmay87.stormdesk"]
+             and n.get("package") == package]
     assert views, "Open StormDesk before running this check"
     bars = {rect(m) for m in re.findall(
         r"InsetsSource id=\S+ type=(?:statusBars|navigationBars) "

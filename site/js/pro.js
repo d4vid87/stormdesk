@@ -51,6 +51,10 @@ function renderHero(fc) {
   setWx($('hero-icon'), c.icon, 150);
   setScene(c.icon);
   renderNormal(d);
+  if (fc._provenance) {
+    $('hero-live').className = `live ${fc._provenance.startsWith('Cached') ? '' : 'on'}`;
+    $('hero-live').textContent = fc._provenance;
+  }
 }
 
 // Dew point in whatever the display unit is: the words are °F thresholds, and a metric install
@@ -433,11 +437,12 @@ function renderGauges(fc) {
     sub: `1h gust ${num(c.wind_gust)} · ${deg2compass(c.wind_direction)}`,
   });
 
-  const rain = c.precip_accum_local_day;
+  const rain = c.observed_rain_today ?? c.forecast_rain_today ?? c.precip_accum_local_day;
+  const measured = c.observed_rain_today != null;
   gauge('g-rain', {
     face: 'dial', min: 0, max: metric ? 25 : 1, frac: rain / (metric ? 25 : 1),
     value: rain, fmt: (x) => num(x, 2), unit: U.precip(),
-    sub: rain == null ? 'Reading unavailable' : 'Today',
+    sub: rain == null ? 'Measured rainfall unavailable' : measured ? 'Today · Station' : 'Today · Forecast',
   });
 
   const rhT = trend(I.rh, 3);
@@ -669,6 +674,11 @@ function renderLocal(o) {
 // hand the normal render owns the screen and this does nothing.
 window.addEventListener('wd:ws-obs', (e) => { if (!document.hidden && !deskForecast()) renderLocal(e.detail); });
 window.addEventListener('wd:forecast', (e) => renderPro(e.detail));
+window.addEventListener('wd:current', (e) => {
+  if (document.hidden || !e.detail) return;
+  renderHero(e.detail);
+  renderGauges(e.detail);
+});
 
 // One dot per station source the LAN server is holding, hover for the /diag line itself. Nothing
 // at all on a static host or a desktop with no server — there is no source to be healthy.
