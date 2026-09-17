@@ -5,7 +5,7 @@
 .hero{padding-top:32px;background:radial-gradient(ellipse at 50% 40%,#1479ab25,transparent 65%)}
 .hero h1{font-size:clamp(2.5rem,6vw,4.6rem)}
 .hero .lede{margin:16px auto 22px;max-width:740px}
-.hero-shot{margin-top:28px}
+.hero-shot{width:100%;margin-top:28px;overflow:hidden}
 .hero h1 span{color:var(--blue)}
 .hero .eyebrow{display:inline-block;border:1px solid var(--line);border-radius:30px;padding:7px 15px;background:#0b2030}
 .community-links{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:22px 0;color:var(--muted)}
@@ -13,7 +13,7 @@
 .community-links a:hover{border-color:var(--blue);background:#0b2436}
 .tour-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px 15px;text-align:left;font-size:.85rem;color:var(--muted)}
 .tour-bar strong{color:var(--text)}
-.hero-shot video{display:block;width:100%;aspect-ratio:3/2;background:#071426;border-radius:10px}
+.hero-shot video{display:block;width:100%;max-width:100%;height:auto;background:#071426;border-radius:10px;object-fit:contain}
 .tour-caption{padding:14px 10px 4px;color:var(--muted);font-size:.85rem}
 .feature-showcase{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 .feature-showcase article{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:#0b1b2c}
