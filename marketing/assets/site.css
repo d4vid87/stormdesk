@@ -8,8 +8,9 @@
 .hero-shot{margin-top:28px}
 .hero h1 span{color:var(--blue)}
 .hero .eyebrow{display:inline-block;border:1px solid var(--line);border-radius:30px;padding:7px 15px;background:#0b2030}
-.community-links{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin:22px 0;color:var(--muted)}
-.community-links a{text-decoration:none;font-weight:700}
+.community-links{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin:22px 0;color:var(--muted)}
+.community-links a{padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:#071625cc;text-decoration:none;font-weight:700}
+.community-links a:hover{border-color:var(--blue);background:#0b2436}
 .tour-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px 15px;text-align:left;font-size:.85rem;color:var(--muted)}
 .tour-bar strong{color:var(--text)}
 .hero-shot video{display:block;width:100%;aspect-ratio:3/2;background:#071426;border-radius:10px}
