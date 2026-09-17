@@ -13,7 +13,7 @@ weather stations. You can also use StormDesk without a weather station.
 No StormDesk account. No subscription. No ads.
 
 [Download StormDesk](https://github.com/d4vid87/stormdesk/releases/latest) ·
-[Visit the website](https://hookecho.io/stormdesk/) ·
+[Visit the website](https://mystormdesk.com/) ·
 [Get help](https://github.com/d4vid87/stormdesk/issues)
 
 ![A tour of the redesigned StormDesk dashboard, timeline, local weather, history and radar](docs/stormdesk-hero.gif)
