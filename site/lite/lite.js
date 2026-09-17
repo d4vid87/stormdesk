@@ -1,5 +1,5 @@
 import { settings, saveSettings, coords, U, msToWind, deg2compass, num, timeStr, dayStr, expires } from '../js/app.js';
-import * as api from '../js/api.js';
+import * as api from '../js/api.js?v=station-fields1';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];

@@ -125,8 +125,16 @@ export function stations() {
   return getJSON(`${SWD}/stations?${qs({ token: settings().token })}`);
 }
 
-export function stationObs(id = settings().stationId) {
-  return getJSON(`${SWD}/observations/stn/${id}?${qs({ token: settings().token, ...unitParams() })}`);
+export function normalizeStationObs(body) {
+  const aliases = { air_temp: 'air_temperature', rh: 'relative_humidity', wind_dir: 'wind_direction', local_day_precip_accumulation: 'precip_accum_local_day' };
+  return { ...body, obs: (body.obs || []).map(row => {
+    if (!Array.isArray(row)) return row;
+    return Object.fromEntries((body.ob_fields || []).map((field, i) => [aliases[field] || field, row[i] ?? null]));
+  }) };
+}
+
+export async function stationObs(id = settings().stationId) {
+  return normalizeStationObs(await getJSON(`${SWD}/observations/stn/${id}?${qs({ token: settings().token, ...unitParams() })}`));
 }
 
 // --- METAR via NWS, shaped like a Tempest station obs so the comparison rows need no branches ---
