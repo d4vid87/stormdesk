@@ -5,6 +5,18 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const SRV = window.__WD_SRV || '';
 let latest = null;
+let baseForecast = null;
+let observation = null;
+let observationError = '';
+let forecastError = false;
+let observationKey = '';
+const stationKey = () => JSON.stringify([settings().stationId, settings().stationSource, settings().units, settings().windUnit]);
+const configured = () => !!(settings().stationSource || (settings().token && settings().stationId));
+function browsePlace(lat, lon, name) {
+  saveSettings({ places: [...(settings().places || []).filter(p => p.id !== 'lite-browse'), { id: 'lite-browse', lat, lon, name }], activePlace: 'lite-browse' });
+  baseForecast = null;
+}
+
 let sites = [];
 let radarLoaded = false;
 let stationStep = 0;
@@ -79,7 +91,7 @@ async function saveHost(patch) {
 
 function overlaySnapshot(forecast, snapshot) {
   const current = snapshot?.current;
-  if (!current || Date.now() / 1000 - current.at > 3600) return forecast;
+  if (!current?.at) return forecast;
   const metric = settings().units === 'metric';
   const temperature = (v) => v == null ? null : metric ? v : v * 9 / 5 + 32;
   const rain = (v) => v == null ? null : metric ? v : v / 25.4;
@@ -117,22 +129,24 @@ function render(forecast) {
   $('.weather-icon').textContent = icon(c.icon);
   $('.condition-copy').firstChild.textContent = c.conditions || 'Conditions unavailable';
   $('.condition-copy small').textContent = `Feels like ${num(c.feels_like)}°`;
-  $('.condition-copy').parentElement.nextElementSibling.innerHTML = `High <strong>${num(today.air_temp_high)}°</strong> · Low <strong>${num(today.air_temp_low)}°</strong>`;
-  $('#windValue').textContent = c.wind_avg == null ? 'Unavailable' : `${deg2compass(c.wind_direction)} ${num(c.wind_avg)} ${U.wind()}`;
+  $('.condition-copy').parentElement.nextElementSibling.innerHTML = `Forecast high <strong>${num(today.air_temp_high)}°</strong> · Low <strong>${num(today.air_temp_low)}°</strong>`;
+  $('#windValue').textContent = c.wind_avg == null ? 'Unavailable' : `${deg2compass(c.wind_direction)} ${num(c.wind_avg)} ${U.wind()} · gust ${num(c.wind_gust)} ${U.wind()}`;
   $('.stat:nth-child(2) strong').textContent = c.relative_humidity == null ? 'Unavailable' : `${num(c.relative_humidity)}%`;
   $('#rainValue').textContent = c.precip_accum_local_day == null ? 'Unavailable' : `${num(c.precip_accum_local_day, 2)} ${U.precip()}`;
   $('.stat:nth-child(4) strong').textContent = today.precip_probability == null ? 'Unavailable' : `${num(today.precip_probability)}%`;
-  const stale = c.time && Date.now() / 1000 - c.time > (forecast._station ? 300 : 5400);
-  const source = forecast._station?.name || (settings().stationSource ? settings().stationName || 'Personal station' : 'Open-Meteo');
-  $('#sourceLine').innerHTML = `Weather source: ${esc(source)} · <span class="${stale ? 'stale' : ''}">${age(c.time)}</span>`;
+  const state = observationError ? 'Offline' : observation ? (Date.now() / 1000 - observation.time > 300 ? 'Delayed' : 'Live') : configured() ? 'Waiting for reading' : 'Forecast-only';
+  const source = forecast._station?.name || (settings().activePlace || !settings().token || settings().stationSource ? 'Open-Meteo forecast' : 'Tempest forecast');
+  $('#sourceLine').textContent = `${source} · ${forecast._station ? state + ' · ' : ''}${age(c.time)}${forecastError ? ' · Forecast update unavailable' : ''}`;
   $('#todayHourly').innerHTML = hours.slice(0, 6).map((h, i) => `<div class="hour"><span>${i ? timeStr(h.time) : 'Now'}</span><i aria-hidden="true">${icon(h.icon)}</i><b>${num(h.air_temperature)}°</b><span>${h.precip_probability == null ? 'Rain —' : `${num(h.precip_probability)}% rain`}</span></div>`).join('');
   $('#fiveDay').innerHTML = days.slice(0, 5).map((d, i) => `<div class="day card"><span>${i ? dayStr(d.day_start_local) : 'Today'}</span><i aria-hidden="true">${icon(d.icon)}</i><b>${num(d.air_temp_high)}° <span class="low">${num(d.air_temp_low)}°</span></b><span>${d.precip_probability == null ? 'Rain —' : `${num(d.precip_probability)}% rain`}</span></div>`).join('');
   renderForecast($('#forecastList').dataset.mode || 'hourly');
-  const connected = !!forecast._station?.name || !!settings().stationSource || !!settings().token;
-  $('#connectTitle').textContent = connected ? settings().stationName || forecast._station?.name || 'Personal weather station' : 'Have a weather station?';
-  $('#connectCopy').textContent = connected ? `${stale ? 'Data stale' : 'Connected'} · ${age(c.time)}` : 'Connect it to replace public observations with readings from your own backyard.';
+  const connected = configured() || !!observation;
+  $('#connectTitle').textContent = connected ? settings().stationName || 'Personal weather station' : 'Have a weather station?';
+  $('#connectCopy').textContent = connected ? `${state} · ${age(observation?.time)}${observationError ? ' · ' + observationError : ''}` : 'Connect it to see readings from your own backyard.';
   $('#connectButton').textContent = connected ? 'Manage station' : 'Connect station';
-  $('#stationStatus').innerHTML = `<i class="status-dot"></i>${connected ? `${settings().stationName || forecast._station?.name || 'Station'} connected` : 'Forecast-only mode'}`;
+  $('#stationStatus').textContent = state;
+  $('#returnStation').hidden = !settings().activePlace || !connected;
+
 }
 
 function renderForecast(mode) {
@@ -146,19 +160,61 @@ function renderForecast(mode) {
     : `<div class="forecast-row"><strong>${dayStr(row.day_start_local)}</strong><span>${icon(row.icon)}</span><span class="muted">${esc(row.conditions)}</span><span>${num(row.air_temp_low)}°</span><strong>${num(row.air_temp_high)}°</strong></div>`).join('');
 }
 
-async function refresh() {
-  if (coords().lat == null) { openDialog('locationDialog'); return; }
-  $('#sourceLine').textContent = 'Updating weather…';
-  try {
-    const [forecast, current] = await Promise.all([api.betterForecast(), snapshot()]);
-    render(current ? overlaySnapshot(forecast, current) : forecast);
-    localStorage.setItem('wd.liteForecast', JSON.stringify(forecast));
-  } catch (error) {
-    const cached = JSON.parse(localStorage.getItem('wd.liteForecast') || 'null');
-    if (cached) { render(cached); $('#sourceLine').innerHTML = `<span class="stale">Cached weather · update failed</span>`; }
-    else $('#sourceLine').innerHTML = `<span class="stale">Weather unavailable · ${error.message}</span>`;
+function renderWeather() {
+  const forecast = structuredClone(baseForecast || { current_conditions: {}, forecast: { hourly: [], daily: [] } });
+  if (observation && !settings().activePlace) {
+    forecast.current_conditions = { ...forecast.current_conditions, ...observation };
+    forecast._station = { name: settings().stationName || 'Personal weather station' };
   }
+  render(forecast);
+}
+
+async function refreshObservation() {
+  const key = stationKey();
+  if (key !== observationKey) {
+    observation = null; observationKey = key;
+    try { const saved = JSON.parse(localStorage.getItem('wd.liteObservation')); if (saved?.key === key) { observation = saved.reading; observationError = 'Checking station'; } } catch {}
+  }
+  if (!configured()) { renderWeather(); return; }
+  try {
+    let reading;
+    if (!settings().stationSource && settings().token) {
+      const body = await api.stationObs();
+      if (body.status?.status_code) throw new Error('Station access rejected. Check credentials.');
+      const o = body.obs?.[0];
+      if (o?.timestamp) reading = Object.fromEntries(['air_temperature', 'feels_like', 'relative_humidity', 'wind_avg', 'wind_gust', 'wind_direction', 'precip_accum_local_day', 'uv'].map(k => [k, o[k] ?? null]));
+      if (reading) reading.time = o.timestamp;
+    } else {
+      const body = await snapshot();
+      if (!body) throw new Error('StormDesk host unavailable');
+      if (body.current?.at) reading = overlaySnapshot({ current_conditions: {} }, body).current_conditions;
+    }
+    if (key !== stationKey()) return;
+    observationError = '';
+    if (reading) { observation = reading; try { localStorage.setItem('wd.liteObservation', JSON.stringify({ key, reading })); } catch {} }
+  } catch (error) {
+    if (key !== stationKey()) return;
+    observationError = /401|403|rejected/i.test(error.message) ? 'Check station credentials' : 'Station update unavailable';
+  }
+  renderWeather();
+}
+
+async function refreshForecast() {
+  if (coords().lat == null) { openDialog('locationDialog'); return; }
+  const key = JSON.stringify([coords(), settings().units]);
+  if (!baseForecast) { try { const saved = JSON.parse(localStorage.getItem('wd.liteForecast')); if (saved?.key === key) baseForecast = saved.forecast; } catch {} }
+  try {
+    const forecast = await api.betterForecast();
+    if (key !== JSON.stringify([coords(), settings().units])) return;
+    baseForecast = forecast;
+    try { localStorage.setItem('wd.liteForecast', JSON.stringify({ key, forecast })); } catch {}
+    forecastError = false;
+  } catch { forecastError = true; }
+  renderWeather();
   refreshAlerts();
+}
+async function refresh() {
+  await Promise.allSettled([refreshForecast(), refreshObservation()]);
 }
 
 async function refreshAlerts() {
@@ -172,7 +228,7 @@ async function refreshAlerts() {
     $('#warningBanner strong').textContent = p.event;
     $('#warningBanner p').textContent = `${p.areaDesc || ''} · until ${new Date(p.ends || p.expires).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     $('#warningDialog .dialog-head h2').textContent = p.event;
-    $('#warningDialog .dialog-body').innerHTML = `<div class="eyebrow">Official warning</div><p><strong>${p.headline || p.areaDesc || ''}</strong></p><p>${(p.description || '').replace(/[<>]/g, '')}</p><div class="notice">Source: National Weather Service · ${age(Date.parse(p.sent) / 1000)}</div><div class="dialog-actions"><button class="button primary" type="button" data-close>Done</button></div>`;
+    $('#warningDialog .dialog-body').innerHTML = `<div class="eyebrow">Official warning</div><p><strong>${esc(p.headline || p.areaDesc || '')}</strong></p><p>${esc(p.description || '')}</p><div class="notice">Source: National Weather Service · ${age(Date.parse(p.sent) / 1000)}</div><div class="dialog-actions"><button class="button primary" type="button" data-close>Done</button></div>`;
   } catch { $('#warningBanner').hidden = true; }
 }
 
@@ -221,7 +277,7 @@ function playRadar() {
 
 function stopRadar() {
   const frame = $('#radarViewer');
-  frame.src = '';
+  frame.removeAttribute('src');
   frame.hidden = true;
   $('#radarStill').hidden = !$('#radarStill').naturalWidth;
   $('#radarPlay').textContent = '▶';
@@ -240,7 +296,7 @@ function stationUI() {
   if (stationStep === 1 && stationBrand === 'ecowitt') $('#stationStep').innerHTML = `<div class="eyebrow">Step 2 of 4 · Ecowitt</div><h3>Point your gateway at StormDesk</h3><div class="notice"><strong>Always-on host required</strong><br>In WSView Plus choose Customized → Ecowitt and enter this address.</div><div class="field"><label for="ingestAddress">Upload address</label><input id="ingestAddress" readonly value="${location.origin}/ingest"></div><div class="dialog-actions"><button class="button" data-back>Back</button><button class="button primary" data-check>Check host</button></div>`;
   if (stationStep === 1 && stationBrand === 'other') $('#stationStep').innerHTML = `<div class="eyebrow">Supported connections</div><h3>Use the full setup for this station</h3><p>Ambient Weather, Weather Underground protocol, WeeWX, Davis WeatherLink Live, Ambient Weather Network, AcuRite through rtl_433, and La Crosse keep their existing tested StormDesk setup.</p><div class="dialog-actions"><button class="button" data-back>Back</button><a class="button primary" href="../">Open full setup</a></div>`;
   if (stationStep === 2) $('#stationStep').innerHTML = `<div class="eyebrow">Step 3 of 4</div><h3>${stationResult === 'success' ? 'Connection verified' : 'Connection needs attention'}</h3><div class="notice ${stationResult === 'success' ? 'success' : 'error'}">${stationResult === 'success' ? 'StormDesk can reach the station source.' : esc(stationResult)}</div><div class="dialog-actions"><button class="button" data-back>Back</button>${stationResult === 'success' ? '<button class="button primary" data-next>Wait for reading</button>' : ''}</div>`;
-  if (stationStep === 3) $('#stationStep').innerHTML = `<div class="eyebrow">Step 4 of 4</div><h3>Waiting for the first reading</h3><p>StormDesk will keep the forecast visible while the station begins reporting.</p><div class="notice">No reading is converted to zero. Optional sensors remain unavailable until the station reports them.</div><div class="dialog-actions"><button class="button primary" data-finish>Finish</button></div>`;
+  if (stationStep === 3) $('#stationStep').innerHTML = `<div class="eyebrow">Step 4 of 4</div><h3>${observation ? "Reading received" : observationError ? "Station needs attention" : "Waiting for the first reading"}</h3><p>${observation ? esc(age(observation.time)) : esc(observationError || "No station observation received yet. Weather forecasts remain available.")}</p><div class="notice">No reading is converted to zero. Optional sensors remain unavailable until the station reports them.</div><div class="dialog-actions"><button class="button primary" data-finish>Finish</button></div>`;
 }
 
 async function checkStation() {
@@ -253,8 +309,11 @@ async function checkStation() {
       if (!token || !/^\d+$/.test(stationId)) throw new Error('Enter a token and numeric Station ID.');
       saveSettings({ token, stationId, stationSource: '' });
       const body = await api.station(stationId);
-      const station = body.stations?.[0] || body;
-      await saveHost({ token, stationId, stationSource: '', stationName: station.name || station.public_name || `Tempest ${stationId}`, lat: station.latitude, lon: station.longitude });
+      const station = body.stations?.[0];
+      if (!station) throw new Error('Station not found or access rejected');
+      const readings = await api.stationObs(stationId);
+      if (readings.status?.status_code) throw new Error('Station access rejected');
+      await saveHost({ token, stationId, activePlace: null, stationSource: '', stationName: station.name || station.public_name || `Tempest ${stationId}`, lat: station.latitude, lon: station.longitude });
     } else {
       const current = await snapshot();
       if (!current) throw new Error('StormDesk host is not reachable here. Run the desktop app or Docker image and open its Lite URL.');
@@ -265,6 +324,7 @@ async function checkStation() {
     saveSettings(before);
     stationResult = /401|403/.test(error.message) ? 'Credentials were rejected. Check the complete token and Station ID.' : error.message;
   }
+  if (stationResult === 'success') await refreshObservation();
   stationStep = 2;
   stationUI();
 }
@@ -301,7 +361,7 @@ $('#locationForm').addEventListener('submit', async (event) => {
     if (!place) throw new Error('No matching place found. Try a town and state or a ZIP code.');
     const [lon, lat] = place.geometry.coordinates;
     const name = api.placeLabel(place.properties);
-    await saveHost({ lat, lon, stationName: name });
+    browsePlace(lat, lon, name);
     $('#locationButton').textContent = `⌖ ${name}`;
     $('#locationDialog').close();
     radarLoaded = false;
@@ -309,6 +369,7 @@ $('#locationForm').addEventListener('submit', async (event) => {
   } catch (error) { $('.location-error').textContent = error.message; }
   finally { submit.disabled = false; }
 });
+$('#returnStation').addEventListener('click', () => { saveSettings({ activePlace: null }); baseForecast = null; $('#locationButton').textContent = settings().stationName || 'My station'; radarLoaded = false; refresh(); });
 $('#connectButton').addEventListener('click', () => { stationStep = 0; stationResult = ''; stationUI(); openDialog('stationDialog'); });
 $('#settingsButton').addEventListener('click', () => openDialog('settingsDialog'));
 $('#settingsForm').addEventListener('submit', async (event) => {
@@ -342,17 +403,25 @@ async function start() {
   const initial = new URLSearchParams(location.search);
   document.documentElement.dataset.theme = ['light', 'dark', 'system'].includes(initial.get('theme')) ? initial.get('theme') : localStorage.getItem('wd.liteTheme') || 'system';
   $('#themeSelect').value = document.documentElement.dataset.theme;
-  const lat = Number(initial.get('lat'));
-  const lon = Number(initial.get('lon'));
-  if (Number.isFinite(lat) && Number.isFinite(lon)) saveSettings({ lat, lon, stationName: initial.get('name') || 'Selected location' });
   await loadHost();
+  if (settings().token && settings().stationId && !settings().stationSource) {
+    try {
+      const body = await api.station();
+      const station = body.stations?.[0];
+      if (station && Number.isFinite(station.latitude) && Number.isFinite(station.longitude)) saveSettings({ lat: station.latitude, lon: station.longitude, stationName: station.name || station.public_name || settings().stationName });
+    } catch { /* Observation refresh reports connection errors without losing saved settings. */ }
+  }
+  const lat = Number(initial.get('lat')), lon = Number(initial.get('lon'));
+  if (initial.get('lat')?.trim() && initial.get('lon')?.trim() && Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) browsePlace(lat, lon, initial.get('name') || 'Selected location');
   $('#unitsSelect').value = settings().units;
   const point = coords();
   if (point.name) $('#locationButton').textContent = `⌖ ${point.name}`;
   sites = await fetch('../sites.json').then((response) => response.json()).catch(() => []);
   await refresh();
   if (['today', 'forecast', 'radar', 'more'].includes(initial.get('page'))) showPage(initial.get('page'));
-  setInterval(refresh, 5 * 60 * 1000);
+  setInterval(() => { if (!document.hidden) refreshForecast(); }, 300000);
+  setInterval(() => { if (!document.hidden) refreshObservation(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 
 start();
