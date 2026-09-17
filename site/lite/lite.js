@@ -25,15 +25,14 @@ let stationResult = '';
 let publicViewer = false;
 
 const icon = (name = '') => {
-  if (name.includes('thunder')) return '⛈️';
-  if (name.includes('snow')) return '🌨️';
-  if (name.includes('sleet')) return '🌧️';
-  if (name.includes('rain')) return '🌦️';
-  if (name.includes('fog')) return '🌫️';
-  if (name.includes('cloudy') && !name.includes('partly')) return '☁️';
-  if (name.includes('clear-night') || name.includes('partly-cloudy-night')) return '🌙';
-  if (name.includes('clear')) return '☀️';
-  return '⛅';
+  const sun = '<circle cx="40" cy="40" r="17" fill="currentColor" opacity=".2"/><circle cx="40" cy="40" r="12" fill="currentColor"/><path d="M40 9v8m0 46v8M9 40h8m46 0h8M18 18l6 6m32 32 6 6M18 62l6-6m32-32 6-6"/>';
+  const cloud = '<path d="M20 51a12 12 0 0 1 0-24 18 18 0 0 1 34-3 14 14 0 1 1 5 27Z" fill="currentColor" fill-opacity=".15"/>';
+  let shape = /cloud|rain|snow|sleet|thunder|fog/.test(name) ? cloud : /night/.test(name) ? '<path d="M53 12a28 28 0 1 0 15 43A27 27 0 0 1 53 12Z" fill="currentColor" fill-opacity=".2"/>' : sun;
+  if (/rain|sleet/.test(name)) shape += '<path d="m25 59-4 9m20-9-4 9m20-9-4 9"/>';
+  if (/snow/.test(name)) shape += '<path d="M25 60v10m-5-5h10m20-5v10m-5-5h10"/>';
+  if (/thunder/.test(name)) shape += '<path d="m42 51-10 12h12l-9 12"/>';
+  if (/fog/.test(name)) shape += '<path d="M16 61h48M22 69h36"/>';
+  return `<svg class="weather-svg" viewBox="0 0 80 80" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${shape}</svg>`;
 };
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
@@ -126,15 +125,19 @@ function render(forecast) {
   const temp = num(c.air_temperature);
   $('.temperature span').textContent = temp;
   $('.temperature sup').textContent = settings().units === 'metric' ? '°C' : '°F';
-  $('.weather-icon').textContent = icon(c.icon);
+  $('.weather-icon').innerHTML = icon(c.icon);
+  $('#placeTitle').textContent = coords().name || 'Your weather';
   $('.condition-copy').firstChild.textContent = c.conditions || 'Conditions unavailable';
   $('.condition-copy small').textContent = `Feels like ${num(c.feels_like)}°`;
-  $('.condition-copy').parentElement.nextElementSibling.innerHTML = `Forecast high <strong>${num(today.air_temp_high)}°</strong> · Low <strong>${num(today.air_temp_low)}°</strong>`;
-  $('#windValue').textContent = c.wind_avg == null ? 'Unavailable' : `${deg2compass(c.wind_direction)} ${num(c.wind_avg)} ${U.wind()} · gust ${num(c.wind_gust)} ${U.wind()}`;
+  $('.condition-copy').parentElement.nextElementSibling.innerHTML = `Forecast high <strong>${num(today.air_temp_high)}°</strong> · Low <strong>${num(today.air_temp_low)}°</strong> · ${num(today.precip_probability)}% chance of rain`;
+  $('#windValue').innerHTML = c.wind_avg == null ? 'Unavailable' : `${deg2compass(c.wind_direction)} ${num(c.wind_avg)} ${U.wind()}<small>Gusts ${num(c.wind_gust)} ${U.wind()}</small>`;
   $('.stat:nth-child(2) strong').textContent = c.relative_humidity == null ? 'Unavailable' : `${num(c.relative_humidity)}%`;
   $('#rainValue').textContent = c.precip_accum_local_day == null ? 'Unavailable' : `${num(c.precip_accum_local_day, 2)} ${U.precip()}`;
   $('.stat:nth-child(4) strong').textContent = today.precip_probability == null ? 'Unavailable' : `${num(today.precip_probability)}%`;
   const state = observationError ? 'Offline' : observation ? (Date.now() / 1000 - observation.time > 300 ? 'Delayed' : 'Live') : configured() ? 'Waiting for reading' : 'Forecast-only';
+  $('#readingBadge').textContent = forecast._station ? state : 'Forecast';
+  $('#readingBadge').dataset.state = forecast._station ? state : 'Forecast';
+  $('#todayTitle').textContent = forecast._station?.name || 'Local forecast';
   const source = forecast._station?.name || (settings().activePlace || !settings().token || settings().stationSource ? 'Open-Meteo forecast' : 'Tempest forecast');
   $('#sourceLine').textContent = `${source} · ${forecast._station ? state + ' · ' : ''}${age(c.time)}${forecastError ? ' · Forecast update unavailable' : ''}`;
   $('#todayHourly').innerHTML = hours.slice(0, 6).map((h, i) => `<div class="hour"><span>${i ? timeStr(h.time) : 'Now'}</span><i aria-hidden="true">${icon(h.icon)}</i><b>${num(h.air_temperature)}°</b><span>${h.precip_probability == null ? 'Rain —' : `${num(h.precip_probability)}% rain`}</span></div>`).join('');
@@ -234,7 +237,7 @@ async function refreshAlerts() {
 
 function showPage(name) {
   $$('.page').forEach((page) => { page.hidden = page.id !== `${name}Page`; });
-  $$('nav [data-page]').forEach((button) => button.toggleAttribute('aria-current', button.dataset.page === name));
+  $$('nav [data-page]').forEach((button) => button.setAttribute('aria-current', button.dataset.page === name ? 'page' : 'false'));
   if (name === 'radar') loadRadarStill();
   if (name !== 'radar') stopRadar();
   scrollTo(0, 0);

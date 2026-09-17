@@ -1,6 +1,6 @@
 # Polished weather preview and Tempest repair
 
-Review the separate clickable preview at https://app.mystormdesk.com/lite/preview/ . The production interface remains at /lite/.
+Review the separate clickable preview at https://app.mystormdesk.com/lite/preview/ . The approved visual design is now integrated with live readings at /lite/. The separate preview remains available with illustrative data.
 
 The preview uses original inline SVG, warm white/slate surfaces, amber accents, large readings, a dedicated measurement row, and labeled sample states. Appearance follows the device unless changed. Today, Forecast, Radar and More are interactive; radar links to the production viewer without loading it in the mockup. No credentials or weather requests are made by the preview.
 
