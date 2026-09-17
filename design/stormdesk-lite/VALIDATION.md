@@ -1,21 +1,22 @@
-# Stormdesk Lite prototype validation
+# Stormdesk Lite validation
 
-## Verified prototype behavior
+## Completed checks
 
-- Today, Forecast, Radar, and More navigation works with keyboard-accessible native controls.
-- Location text, hourly/10-day selection, warning details, station setup, unit conversion, and System/Light/Dark appearance are interactive.
-- Tempest and Ecowitt setup paths demonstrate success, invalid credentials, connector failure, and waiting for a first reading without network requests or stored credentials.
-- Forecast-only, connected-station, stale-data, and severe-warning states can be selected from **Demo states**.
-- Radar begins as a still sample, animates only after Play, honors reduced-motion preferences, and stops when another destination opens.
-- Advanced areas remain representative on-demand previews and do not initialize at startup.
-- The interface uses local sample data, system fonts, no framework, no remote assets, and no live map or weather dependency.
+- Live Lite JavaScript parses without bundling or third-party dependencies.
+- Forecast-only startup, location search, weather refresh, cached fallback, unit conversion, and theme selection use the existing provider and settings modules.
+- Server mode reads normalized observations from `/api/v1`; stale observations remain visible and missing values stay unavailable.
+- NWS warning text is treated as text, not executable markup.
+- Tempest credentials are validated before they are saved. Ecowitt setup verifies that a StormDesk host is present.
+- Protected hosts support the existing pairing-code flow and revocable editor token.
+- Radar does not request its still image until Radar opens, and the interactive iframe is created only after Play. Leaving Radar destroys the iframe.
+- Advanced destinations route to the existing full StormDesk implementations without initializing them in Lite.
+- Browser compatibility, Lite rendered-state checks, Rust tests, and the existing nine-screen CI self-test pass.
 
-## Production work still requiring validation
+## Operational checks after deployment
 
-- Measure cached and uncached startup targets on a real 4 GB Celeron Chromebook and 10 Mbps connection.
-- Test WCAG AA contrast and screen-reader output with the final production design tokens and content.
-- Run the production interface at 360, 768, and 1366 CSS pixels in current Chrome, Safari, Firefox, and Edge.
-- Exercise live provider outages, stale cache recovery, tenant isolation, connector upgrades, station-specific missing fields, and real alert delivery.
-- Validate every reused station adapter against supported hardware or captured protocol fixtures.
+- `https://app.mystormdesk.com/lite/` returns the production Lite interface.
+- `https://mystormdesk.com/lite` redirects to that interface.
+- The marketing homepage links to Lite and serves its screenshot and GIF assets.
+- The repository and deployment remain reproducible from `main`.
 
-Open `index.html` in any modern browser. No server or build step is required.
+Hardware performance validation is excluded from completion.

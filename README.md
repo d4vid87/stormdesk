@@ -6,7 +6,7 @@
 
 ## Stormdesk Lite prototype
 
-Stormdesk Lite is a fast, focused interface for current conditions, forecasts, warnings, and on-demand radar. [Try the prototype](https://mystormdesk.com/lite/) or read the [design specification](design/stormdesk-lite/SPECIFICATION.md).
+Stormdesk Lite is a fast, focused interface for current conditions, forecasts, warnings, and on-demand radar. [Open Stormdesk Lite](https://app.mystormdesk.com/lite/) or read the [design specification](design/stormdesk-lite/SPECIFICATION.md).
 
 ![Stormdesk Lite desktop overview](docs/stormdesk-lite-desktop.png)
 

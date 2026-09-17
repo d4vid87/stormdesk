@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Stormdesk Lite</title>
+<meta name="description" content="Stormdesk Lite: a fast, focused weather dashboard for forecasts, warnings, radar, and personal weather stations.">
+<link rel="canonical" href="https://mystormdesk.com/lite/">
+<link rel="icon" href="../stormdesk-favicon-32.png">
+<meta property="og:title" content="Stormdesk Lite prototype">
+<meta property="og:description" content="A fast, focused weather dashboard that works on everyday hardware.">
+<meta property="og:image" content="https://mystormdesk.com/images/stormdesk-lite-desktop.png">
+<style>
+  :root {
+    color-scheme: light;
+    --bg:#f4f6f8; --surface:#fff; --surface-2:#eef1f4; --text:#17202a;
+    --muted:#5e6a78; --line:#d8dde3; --amber:#c96b05; --amber-soft:#fff1dc;
+    --danger:#b3261e; --danger-soft:#fff0ee; --good:#24734b; --shadow:0 8px 24px #1b27330d;
+  }
+  @media (prefers-color-scheme:dark) {
+    html[data-theme="system"] { color-scheme:dark; --bg:#101419; --surface:#181e25; --surface-2:#222a33; --text:#f2f5f7; --muted:#aab4bf; --line:#313b46; --amber:#f5a33b; --amber-soft:#3b2a17; --danger:#ff8d86; --danger-soft:#3b2021; --good:#76c69b; --shadow:none; }
+  }
+  html[data-theme="dark"] { color-scheme:dark; --bg:#101419; --surface:#181e25; --surface-2:#222a33; --text:#f2f5f7; --muted:#aab4bf; --line:#313b46; --amber:#f5a33b; --amber-soft:#3b2a17; --danger:#ff8d86; --danger-soft:#3b2021; --good:#76c69b; --shadow:none; }
+  * { box-sizing:border-box; }
+  html { background:var(--bg); }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  button,input,select { font:inherit; }
+  button { cursor:pointer; }
+  :focus-visible { outline:3px solid var(--amber); outline-offset:2px; }
+  [hidden] { display:none !important; }
+  .shell { min-height:100vh; min-height:100dvh; padding-bottom:74px; }
+  header { position:sticky; top:0; z-index:10; background:color-mix(in srgb,var(--surface) 94%,transparent); border-bottom:1px solid var(--line); backdrop-filter:blur(10px); }
+  .header-inner { max-width:1120px; margin:auto; min-height:64px; padding:10px 20px; display:flex; align-items:center; gap:16px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:750; letter-spacing:-.02em; white-space:nowrap; }
+  .brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; background:var(--amber); color:#211202; font-size:19px; }
+  .brand small { display:block; color:var(--muted); font-size:10px; font-weight:650; letter-spacing:.12em; text-transform:uppercase; }
+  .location-button { margin-left:auto; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .button { border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--text); padding:9px 13px; min-height:42px; }
+  .button:hover { background:var(--surface-2); }
+  .button.primary { background:var(--amber); border-color:var(--amber); color:#211202; font-weight:700; }
+  .button.ghost { background:transparent; border-color:transparent; }
+  .page { max-width:1120px; margin:auto; padding:22px 20px 38px; }
+  .page > h1 { font-size:28px; margin:0 0 4px; letter-spacing:-.03em; }
+  .page-lede { color:var(--muted); margin:0 0 20px; }
+  .warning { background:var(--danger-soft); border-left:5px solid var(--danger); border-radius:12px; padding:14px 16px; margin-bottom:16px; display:flex; align-items:center; gap:14px; }
+  .warning strong { display:block; }
+  .warning p { margin:2px 0 0; color:var(--muted); }
+  .warning .button { margin-left:auto; flex:none; }
+  .hero { background:linear-gradient(135deg,var(--surface),var(--amber-soft)); border:1px solid var(--line); border-radius:18px; padding:24px; box-shadow:var(--shadow); display:grid; grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr); gap:24px; }
+  .eyebrow { color:var(--muted); font-size:12px; font-weight:750; letter-spacing:.09em; text-transform:uppercase; }
+  .condition { display:flex; align-items:center; gap:16px; margin:12px 0 4px; }
+  .weather-icon { font-size:52px; line-height:1; }
+  .temperature { font-size:82px; line-height:.9; letter-spacing:-.075em; font-weight:700; font-variant-numeric:tabular-nums; }
+  .temperature sup { font-size:28px; vertical-align:top; letter-spacing:0; }
+  .condition-copy { font-size:20px; font-weight:650; }
+  .condition-copy small { display:block; color:var(--muted); font-size:14px; font-weight:450; }
+  .source { color:var(--muted); font-size:12px; margin-top:16px; }
+  .stale { color:var(--danger); font-weight:700; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:10px; align-content:center; }
+  .stat { background:color-mix(in srgb,var(--surface) 74%,transparent); border:1px solid var(--line); border-radius:12px; padding:13px; }
+  .stat span { color:var(--muted); display:block; font-size:12px; }
+  .stat strong { font-size:20px; font-variant-numeric:tabular-nums; }
+  .section { margin-top:24px; }
+  .section-head { display:flex; align-items:end; justify-content:space-between; gap:12px; margin-bottom:10px; }
+  .section h2 { font-size:18px; margin:0; }
+  .section-head span { color:var(--muted); font-size:12px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); }
+  .hourly { display:grid; grid-template-columns:repeat(6,1fr); overflow:hidden; }
+  .hour { text-align:center; padding:16px 8px; border-right:1px solid var(--line); }
+  .hour:last-child { border-right:0; }
+  .hour b,.day b { display:block; margin-top:6px; font-size:18px; }
+  .hour span,.day span { color:var(--muted); font-size:12px; }
+  .hour i,.day i { display:block; font-style:normal; font-size:25px; margin:8px 0; }
+  .days { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .day { padding:16px; min-width:0; }
+  .day .low { color:var(--muted); font-weight:500; }
+  .connect { margin-top:24px; padding:18px; display:flex; align-items:center; gap:16px; }
+  .connect-icon { width:42px; height:42px; border-radius:12px; background:var(--amber-soft); display:grid; place-items:center; font-size:22px; flex:none; }
+  .connect p { margin:3px 0 0; color:var(--muted); }
+  .connect .button { margin-left:auto; flex:none; }
+  .segmented { display:inline-flex; padding:3px; border-radius:10px; background:var(--surface-2); margin-bottom:16px; }
+  .segmented button { border:0; background:transparent; color:var(--muted); padding:8px 14px; border-radius:8px; }
+  .segmented button[aria-pressed="true"] { background:var(--surface); color:var(--text); box-shadow:var(--shadow); }
+  .forecast-list { overflow:hidden; }
+  .forecast-row { display:grid; grid-template-columns:90px 38px 1fr 65px 65px; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); }
+  .forecast-row:last-child { border-bottom:0; }
+  .forecast-row .muted { color:var(--muted); }
+  .forecast-row strong:last-child { text-align:right; }
+  .radar-frame { min-height:430px; position:relative; overflow:hidden; background:linear-gradient(142deg,#17262e,#385c67 55%,#253941); }
+  .radar-image,.radar-viewer { position:absolute; inset:0; width:100%; height:100%; border:0; object-fit:cover; }
+  .radar-map { position:absolute; inset:0; opacity:.72; background:repeating-linear-gradient(18deg,transparent 0 70px,#ffffff12 71px 72px),repeating-linear-gradient(104deg,transparent 0 95px,#ffffff10 96px 97px); }
+  .radar-map::before,.radar-map::after { content:""; position:absolute; border-radius:50%; filter:blur(2px); }
+  .radar-map::before { width:270px; height:190px; left:48%; top:17%; background:radial-gradient(ellipse,#ffcf33 0 10%,#ef7f2d 11% 22%,#61a744 23% 48%,transparent 50%); transform:rotate(-28deg); }
+  .radar-map::after { width:180px; height:130px; left:24%; top:52%; background:radial-gradient(ellipse,#d9573b 0 8%,#efba35 9% 22%,#4c9b51 23% 47%,transparent 50%); transform:rotate(18deg); }
+  .radar-label { position:absolute; inset:16px auto auto 16px; background:#111c; color:white; padding:8px 10px; border-radius:8px; font-weight:650; }
+  .radar-time { position:absolute; inset:auto 16px 16px auto; background:#111c; color:white; padding:7px 9px; border-radius:8px; }
+  .radar-play { position:absolute; inset:50% auto auto 50%; transform:translate(-50%,-50%); border:0; border-radius:50%; width:68px; height:68px; background:#fff; color:#17202a; font-size:24px; box-shadow:0 8px 30px #0008; }
+  .radar-frame.playing .radar-map { animation:radarPulse 1.3s steps(4) infinite; }
+  @keyframes radarPulse { 50% { opacity:.5; transform:scale(1.015); } }
+  @media (prefers-reduced-motion:reduce) { .radar-frame.playing .radar-map { animation:none; } }
+  .more-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  .more-card { text-align:left; padding:18px; display:flex; gap:14px; align-items:flex-start; width:100%; }
+  .more-card .icon { font-size:24px; }
+  .more-card strong { display:block; }
+  .more-card span { display:block; color:var(--muted); margin-top:2px; }
+  .more-card.status { cursor:default; }
+  .status-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--good); margin-right:6px; }
+  nav { position:fixed; z-index:20; left:0; right:0; bottom:0; background:var(--surface); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
+  .nav-inner { max-width:680px; margin:auto; display:grid; grid-template-columns:repeat(4,1fr); }
+  nav button { min-height:64px; border:0; background:transparent; color:var(--muted); display:grid; place-content:center; gap:1px; }
+  nav button span:first-child { font-size:20px; }
+  nav button span:last-child { font-size:11px; font-weight:700; }
+  nav button[aria-current="page"] { color:var(--amber); }
+  dialog { color:var(--text); background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 70px #0007; width:min(600px,calc(100% - 24px)); max-height:90dvh; padding:0; }
+  dialog::backdrop { background:#0a1017a8; }
+  .dialog-head { display:flex; align-items:center; gap:12px; padding:18px 20px; border-bottom:1px solid var(--line); }
+  .dialog-head h2 { margin:0; font-size:20px; }
+  .dialog-head .button { margin-left:auto; }
+  .dialog-body { padding:20px; overflow:auto; }
+  .field { margin-bottom:16px; }
+  .field label,.field .label { display:block; font-weight:700; margin-bottom:6px; }
+  .field input,.field select { width:100%; border:1px solid var(--line); border-radius:10px; min-height:44px; padding:9px 11px; color:var(--text); background:var(--bg); }
+  .hint { color:var(--muted); font-size:12px; margin:5px 0 0; }
+  .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  .brand-options { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .brand-option { padding:14px; min-height:76px; text-align:left; }
+  .brand-option[aria-pressed="true"] { border-color:var(--amber); background:var(--amber-soft); }
+  .brand-option small { display:block; color:var(--muted); margin-top:3px; }
+  .stepper { display:flex; gap:5px; margin-bottom:18px; }
+  .stepper i { height:4px; flex:1; border-radius:4px; background:var(--line); }
+  .stepper i.done { background:var(--amber); }
+  .notice { border-radius:10px; padding:12px; background:var(--surface-2); margin:12px 0; }
+  .notice:empty { display:none; }
+  .notice.error { background:var(--danger-soft); color:var(--danger); }
+  .notice.success { color:var(--good); }
+  .scenario-bar { position:fixed; z-index:30; right:14px; bottom:84px; }
+  .scenario-panel { position:absolute; right:0; bottom:48px; width:260px; padding:12px; }
+  .scenario-panel label { display:block; font-weight:700; font-size:12px; margin-bottom:6px; }
+  .scenario-panel select { width:100%; min-height:40px; border:1px solid var(--line); border-radius:8px; color:var(--text); background:var(--bg); padding:6px; }
+  @media (max-width:720px) {
+    .header-inner,.page { padding-left:14px; padding-right:14px; }
+    .brand small { display:none; }
+    .location-button { max-width:170px; }
+    .hero { grid-template-columns:1fr; padding:18px; gap:16px; }
+    .temperature { font-size:68px; }
+    .hourly { overflow-x:auto; grid-template-columns:repeat(6,92px); }
+    .days { grid-template-columns:repeat(5,130px); overflow-x:auto; padding-bottom:4px; }
+    .warning { align-items:flex-start; flex-wrap:wrap; }
+    .warning .button { margin-left:0; }
+    .connect { align-items:flex-start; flex-wrap:wrap; }
+    .connect .button { margin-left:58px; }
+    .forecast-row { grid-template-columns:68px 32px 1fr 48px 48px; gap:6px; padding:12px; }
+    .more-grid,.brand-options { grid-template-columns:1fr; }
+    .radar-frame { min-height:360px; }
+  }
+  @media (max-width:400px) {
+    .header-inner { gap:8px; }
+    .brand { font-size:14px; }
+    .brand-mark { width:29px; height:29px; }
+    .location-button { max-width:145px; padding-left:9px; padding-right:9px; }
+    .condition { gap:10px; }
+    .weather-icon { font-size:40px; }
+    .temperature { font-size:61px; }
+    .condition-copy { font-size:17px; }
+    .stats { gap:7px; }
+    .stat { padding:10px; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="header-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">☁</span><span>Stormdesk Lite<small>Live weather</small></span></div>
+      <button class="button location-button" id="locationButton" type="button" aria-haspopup="dialog">⌖ Oklahoma City, OK</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="page" id="todayPage" aria-labelledby="todayTitle">
+      <div class="warning" id="warningBanner" hidden>
+        <span aria-hidden="true">⚠️</span>
+        <div><strong>Weather warning</strong><p>Loading official alert details…</p></div>
+        <button class="button" type="button" data-open="warningDialog">View warning</button>
+      </div>
+      <div class="hero">
+        <div>
+          <div class="eyebrow" id="todayTitle">Current conditions</div>
+          <div class="condition">
+            <span class="weather-icon" aria-hidden="true">⛅</span>
+            <div class="temperature"><span>--</span><sup>°</sup></div>
+            <div class="condition-copy">Loading weather<small>Feels like --°</small></div>
+          </div>
+          <div>High <strong>--</strong>° · Low <strong>--</strong>°</div>
+          <div class="source" id="sourceLine">Loading weather…</div>
+        </div>
+        <div class="stats" aria-label="Current measurements">
+          <div class="stat"><span>Wind</span><strong id="windValue">--</strong></div>
+          <div class="stat"><span>Humidity</span><strong>--</strong></div>
+          <div class="stat"><span>Rain today</span><strong id="rainValue">--</strong></div>
+          <div class="stat"><span>Rain chance</span><strong>--</strong></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head"><h2>Next six hours</h2><span>Live forecast</span></div>
+        <div class="hourly card" id="todayHourly"></div>
+      </div>
+      <div class="section">
+        <div class="section-head"><h2>Five-day outlook</h2><button class="button ghost" type="button" data-page="forecast">See 10 days →</button></div>
+        <div class="days" id="fiveDay"></div>
+      </div>
+      <div class="connect card" id="connectCard">
+        <div class="connect-icon" aria-hidden="true">⌁</div>
+        <div><strong id="connectTitle">Have a weather station?</strong><p id="connectCopy">Connect it to replace public observations with readings from your own backyard.</p></div>
+        <button class="button primary" id="connectButton" type="button">Connect station</button>
+      </div>
+    </section>
+
+    <section class="page" id="forecastPage" aria-labelledby="forecastTitle" hidden>
+      <h1 id="forecastTitle">Forecast</h1><p class="page-lede">Hourly and 10-day weather</p>
+      <div class="segmented" role="group" aria-label="Forecast range">
+        <button type="button" data-forecast="hourly" aria-pressed="true">Hourly</button>
+        <button type="button" data-forecast="daily" aria-pressed="false">10-day</button>
+      </div>
+      <div class="forecast-list card" id="forecastList"></div>
+    </section>
+
+    <section class="page" id="radarPage" aria-labelledby="radarTitle" hidden>
+      <h1 id="radarTitle">Radar</h1><p class="page-lede">Still image first to save memory and battery. Playback starts only when requested.</p>
+      <div class="radar-frame card" id="radarFrame" aria-label="Weather radar near the selected location">
+        <img class="radar-image" id="radarStill" alt="Latest weather radar"><iframe class="radar-viewer" id="radarViewer" title="Interactive HookEcho weather radar" hidden></iframe><div class="radar-label">Loading nearest radar…</div>
+        <button class="radar-play" id="radarPlay" type="button" aria-label="Play live radar">▶</button>
+      </div>
+    </section>
+
+    <section class="page" id="morePage" aria-labelledby="moreTitle" hidden>
+      <h1 id="moreTitle">More</h1><p class="page-lede">Station tools and advanced weather details load only when opened.</p>
+      <div class="more-grid">
+        <button class="more-card card" type="button" data-preview="Station details|Live measurements, sensor health, battery status, and the age of the last report."> <span class="icon">⌁</span><span><strong>Station details</strong><span id="stationStatus"><i class="status-dot"></i>Forecast-only mode</span></span></button>
+        <button class="more-card card" type="button" data-preview="History and analysis|Charts, records, rain totals, model comparisons, and your local weather archive."><span class="icon">▥</span><span><strong>History & analysis</strong><span>Charts, records, rain totals</span></span></button>
+        <button class="more-card card" type="button" data-preview="Timeline and local signals|Past conditions, upcoming weather events, nearby sensors, lightning, and recent notifications."><span class="icon">↝</span><span><strong>Timeline & local signals</strong><span>Past day and next two days</span></span></button>
+        <button class="more-card card" type="button" data-preview="Alert rules|Create alerts for wind, rain, heat, cold, and other station or forecast thresholds."><span class="icon">⚠</span><span><strong>Alert rules</strong><span>Custom thresholds and notices</span></span></button>
+        <button class="more-card card" type="button" data-preview="Integrations|Connect Home Assistant, MQTT, ntfy, webhooks, and supported smart-home workflows."><span class="icon">⌘</span><span><strong>Integrations</strong><span>Home Assistant, MQTT, webhooks</span></span></button>
+        <button class="more-card card" type="button" data-preview="Backup and export|Download a complete backup or export weather history as CSV."><span class="icon">⇩</span><span><strong>Backup & export</strong><span>Protect or download your data</span></span></button>
+        <button class="more-card card" type="button" data-preview="Account|Manage paired devices and private access on your StormDesk host."><span class="icon">♙</span><span><strong>Access & devices</strong><span>Pairing, viewers, and privacy</span></span></button>
+        <button class="more-card card" id="settingsButton" type="button"><span class="icon">⚙</span><span><strong>Settings</strong><span>Units, appearance, location</span></span></button>
+      </div>
+    </section>
+  </main>
+
+  <nav aria-label="Primary navigation"><div class="nav-inner">
+    <button type="button" data-page="today" aria-current="page"><span aria-hidden="true">☀</span><span>Today</span></button>
+    <button type="button" data-page="forecast"><span aria-hidden="true">▤</span><span>Forecast</span></button>
+    <button type="button" data-page="radar"><span aria-hidden="true">◎</span><span>Radar</span></button>
+    <button type="button" data-page="more"><span aria-hidden="true">•••</span><span>More</span></button>
+  </div></nav>
+</div>
+
+<dialog id="locationDialog"><div class="dialog-head"><h2>Change location</h2><button class="button ghost" type="button" data-close aria-label="Close">✕</button></div><form class="dialog-body" id="locationForm"><div class="field"><label for="locationInput">Town or ZIP code</label><input id="locationInput" value="Oklahoma City, OK" autocomplete="postal-code"><p class="hint">US locations are prioritized for official warnings and radar.</p><p class="notice error location-error" aria-live="polite"></p></div><div class="dialog-actions"><button class="button" type="button" data-close>Cancel</button><button class="button primary" type="submit">Show weather</button></div></form></dialog>
+
+<dialog id="warningDialog"><div class="dialog-head"><h2>Weather warning</h2><button class="button ghost" type="button" data-close aria-label="Close">✕</button></div><div class="dialog-body"><p>Loading official warning details…</p></div></dialog>
+
+<dialog id="stationDialog"><div class="dialog-head"><h2 id="stationDialogTitle">Connect a weather station</h2><button class="button ghost" type="button" data-close aria-label="Close">✕</button></div><div class="dialog-body"><div class="stepper" aria-label="Setup progress"><i class="done"></i><i></i><i></i><i></i></div><div id="stationStep"></div></div></dialog>
+
+<dialog id="settingsDialog"><div class="dialog-head"><h2>Settings</h2><button class="button ghost" type="button" data-close aria-label="Close">✕</button></div><form class="dialog-body" id="settingsForm"><div class="field"><label for="unitsSelect">Units</label><select id="unitsSelect"><option value="imperial">US customary (°F, mph, in)</option><option value="metric">Metric (°C, km/h, mm)</option></select></div><div class="field"><label for="themeSelect">Appearance</label><select id="themeSelect"><option value="system">Follow device</option><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="dialog-actions"><button class="button primary" type="submit">Save</button></div></form></dialog>
+
+<script type="module" src="lite.js"></script>
+</body>
+</html>
