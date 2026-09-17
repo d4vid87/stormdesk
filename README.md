@@ -4,6 +4,14 @@
 
 **Your weather station, made clear.**
 
+## Stormdesk Lite prototype
+
+Stormdesk Lite is a fast, focused interface for current conditions, forecasts, warnings, and on-demand radar. [Try the prototype](https://mystormdesk.com/lite/) or read the [design specification](design/stormdesk-lite/SPECIFICATION.md).
+
+![Stormdesk Lite desktop overview](docs/stormdesk-lite-desktop.png)
+
+[View the interface tour](docs/stormdesk-lite-tour.gif) · [View the mobile warning state](docs/stormdesk-lite-mobile.png)
+
 StormDesk brings your current weather, forecast, alerts, radar, and history together on one clean
 screen. Use it on a computer, wall tablet, phone, or another screen in your home.
 
