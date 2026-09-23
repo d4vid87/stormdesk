@@ -37,6 +37,9 @@ const { chromium } = require('playwright');
   await p.goto('http://127.0.0.1:8094/#desk');
   await p.waitForTimeout(4000);
   fs.mkdirSync('shots/marketing',{recursive:true});
+  for (const file of fs.readdirSync('shots/marketing')) {
+    if (/^frame-\d{3}\.png$/.test(file)) fs.unlinkSync(`shots/marketing/${file}`);
+  }
   for (const [name, palette] of [['oled','oled'],['blue',''],['light',''],['contrast','contrast'],['ember','ember']]) {
     await p.evaluate(({palette,name}) => {
       const s=JSON.parse(localStorage.getItem('wd.settings'));
