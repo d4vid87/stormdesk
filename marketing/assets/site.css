@@ -18,6 +18,7 @@
 .feature-showcase{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 .feature-showcase article{overflow:hidden;border:1px solid var(--line);border-radius:20px;background:#0b1b2c}
 .feature-showcase article:first-child{grid-column:1/-1;display:grid;grid-template-columns:1fr 1.4fr;align-items:center}
+.feature-showcase article:first-child img{width:calc(100% - 32px);margin:16px;border:1px solid var(--line);border-radius:12px}
 .feature-showcase .copy{padding:30px}
 .feature-showcase h3{font-size:1.7rem;line-height:1.2;margin:12px 0}
 .feature-showcase p{color:var(--muted)}
