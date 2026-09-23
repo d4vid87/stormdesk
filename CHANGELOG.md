@@ -8,6 +8,18 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-09-23
+
+### Changed
+- Open directly to a fixed nine-gauge Weather dashboard with a six-day forecast, rain chance outlook, and a short summary of what happens next. Gauge details link to filtered History.
+- Focus Radar on the HookEcho map and an official warning banner. History now starts with clear snapshot cards, with detailed charts and records available when needed.
+- Default to OLED black and offer blue, light, high contrast, and ember themes in Appearance.
+- Start setup with a location and make station connection optional. Keep source and freshness information visible, and put integrations and detailed rules under Advanced.
+
+### Fixed
+- Preserve existing station connections, history, integrations, and notification choices while protecting the gauge arrangement from accidental edits.
+- Improve alert status wording and make custom sounds and speech opt-in.
+
 ## [4.3.4] - 2026-09-15
 
 ### Fixed
@@ -708,7 +720,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.3.4...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.4.0...HEAD
+[4.4.0]: https://github.com/d4vid87/stormdesk/compare/v4.3.4...v4.4.0
 [4.3.4]: https://github.com/d4vid87/stormdesk/compare/v4.3.3...v4.3.4
 [4.3.2]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/d4vid87/stormdesk/compare/v4.3.0...v4.3.1

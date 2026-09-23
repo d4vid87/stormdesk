@@ -3,9 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const file = resolve('marketing/lite/index.html');
+const file = resolve('site/lite/index.html');
 const source = readFileSync(file, 'utf8');
-const production = readFileSync(resolve('site/lite/index.html'), 'utf8');
 const productionJs = readFileSync(resolve('site/lite/lite.js'), 'utf8');
 const chrome = process.env.CHROME || 'chromium';
 
@@ -15,7 +14,7 @@ assert.match(source, /data-page="forecast"/);
 assert.match(source, /data-page="radar"/);
 assert.match(source, /data-page="more"/);
 assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|WebSocket/);
-assert.match(production, /src="lite\.js(?:\?[^"]*)?"/);
+assert.match(source, /src="lite\.js(?:\?[^"]*)?"/);
 assert.match(productionJs, /api\.betterForecast\(\)/);
 assert.match(productionJs, /hostJSON\('\/api\/v1'\)/);
 assert.match(productionJs, /\/pair\/claim/);
