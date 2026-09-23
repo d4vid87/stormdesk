@@ -37,6 +37,9 @@ export const METRICS = {
     blurb: 'Sunlight power landing on the station. The clean daily arc is a clear day; bites out of it are clouds passing over.' },
   strikes: { label: 'Lightning', idx: I.strikes, unit: () => '', digits: 0, bar: true, sum: true,
     blurb: 'Strikes detected per interval, out to roughly 25 miles. The station hears the radio crack of a strike — counts rise before a storm is overhead.' },
+  wbgt: { label: 'WBGT', idx: null, blurb: 'An estimated heat stress reading that combines temperature, moisture and sunlight. Take extra care as it rises.' },
+  dew: { label: 'Dew point', idx: null, blurb: 'A measure of moisture in the air. Higher dew points feel more humid.' },
+  wet: { label: 'Wet bulb', idx: null, blurb: 'The temperature reached as water evaporates. Higher readings make it harder for the body to cool.' },
 };
 
 let returnTo = null;
@@ -45,19 +48,32 @@ function build() {
   if ($('detail')) return;
   const el = document.createElement('div');
   el.id = 'detail';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'detail-title');
   el.setAttribute('aria-hidden', 'true');
   el.innerHTML = '<button class="iconbtn" id="detail-close" title="Close">✕</button>'
     + '<h2 id="detail-title"></h2><div id="detail-now"></div>'
     + '<canvas id="detail-chart" class="chart" style="height:180px"></canvas>'
-    + '<div id="detail-stats" class="kv-rows"></div><p id="detail-blurb" class="muted"></p>';
+    + '<div id="detail-stats" class="kv-rows"></div><p id="detail-blurb" class="muted"></p>'
+    + '<button type="button" id="detail-history">See History →</button>';
   document.body.appendChild(el);
   $('detail-close').onclick = close;
+  $('detail-history').onclick = () => {
+    const map = { temp: 'data-temperature', rh: 'data-temperature', dew: 'data-temperature', wet: 'data-temperature', wbgt: 'data-temperature', uv: 'data-records-7-days', solar: 'data-records-7-days', press: 'data-pressure', windAvg: 'data-wind', windGust: 'data-wind', rain: 'data-rain', strikes: 'data-records-7-days' };
+    $('history-filter').value = map[$('detail').dataset.selectedMetric] || 'all';
+    $('history-filter').dispatchEvent(new Event('change', { bubbles: true }));
+    close();
+    document.querySelector('.tab[data-section="data"]')?.click();
+  };
 }
 
 function close() {
   const el = $('detail');
   el.classList.remove('open');
   el.setAttribute('aria-hidden', 'true');
+  document.querySelector('main')?.removeAttribute('inert');
+  document.querySelector('header')?.removeAttribute('inert');
   returnTo?.focus?.();
   returnTo = null;
 }
@@ -72,6 +88,7 @@ export async function openDetail(metric, at = null) {
   const mine = ++gen;
   build();
   const el = $('detail');
+  el.dataset.selectedMetric = metric;
   returnTo = document.activeElement;
   $('detail-title').textContent = at
     ? `${m.label} · ${new Date(at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric' })}`
@@ -81,7 +98,17 @@ export async function openDetail(metric, at = null) {
   $('detail-stats').innerHTML = '';
   el.classList.add('open');
   el.setAttribute('aria-hidden', 'false');
+  document.querySelector('main')?.setAttribute('inert', '');
+  document.querySelector('header')?.setAttribute('inert', '');
   $('detail-close').focus();
+  if (m.idx == null) {
+    $('detail-now').textContent = document.querySelector(`[data-metric="${metric}"] .ginner b`)?.textContent || 'Reading unavailable';
+    $('detail-chart').hidden = true;
+    $('detail-history').hidden = false;
+    return;
+  }
+  $('detail-chart').hidden = false;
+  $('detail-history').hidden = false;
   try {
     const obs = (await api.localObs(48, at)).obs || [];
     if (mine !== gen) return;
@@ -115,6 +142,13 @@ document.addEventListener('keydown', (e) => {
   const open = $('detail')?.classList.contains('open');
   // boot.js's shortcut handler skips Escape while this is open, so one press closes one thing.
   if (e.key === 'Escape') { if (open) close(); return; }
+  if (open && e.key === 'Tab') {
+    const items = [...$('detail').querySelectorAll('button:not([hidden])')];
+    const first = items[0], last = items.at(-1);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    return;
+  }
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const t = hit(e);
   if (t) { e.preventDefault(); openDetail(t.dataset.metric); }
@@ -125,7 +159,7 @@ export function initDetail() {
   for (const el of document.querySelectorAll('[data-metric]')) {
     el.setAttribute('role', 'button');
     el.setAttribute('tabindex', '0');
-    el.title = 'Click for the last 48 hours';
+    el.title = 'Open measurement details';
   }
 }
 

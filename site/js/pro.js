@@ -52,8 +52,11 @@ function renderHero(fc) {
   setScene(c.icon);
   renderNormal(d);
   if (fc._provenance) {
-    $('hero-live').className = `live ${fc._provenance.startsWith('Cached') ? '' : 'on'}`;
-    $('hero-live').textContent = fc._provenance;
+    const last = history.at(-1);
+    const age = last ? Math.max(0, Math.round((Date.now() / 1000 - last[I.time]) / 60)) : null;
+    $('hero-live').className = age != null && age < 10 ? 'live on' : 'live';
+    $('hero-live').textContent = age == null ? fc._provenance
+      : `Station · ${age < 10 ? 'live' : `${age}m old`} · ${fc._provenance.startsWith('Cached') ? 'cached forecast' : 'forecast'} otherwise`;
   }
 }
 
@@ -82,7 +85,7 @@ function renderStatus() {
   $('hero-batt').textContent = v ? `${num(v, 2)} V` : '';
   const ageMin = last ? (Date.now() / 1000 - last[I.time]) / 60 : 999;
   $('hero-live').className = ageMin < 10 ? 'live on' : 'live';
-  $('hero-live').textContent = ageMin < 10 ? '● Live now' : `● ${Math.round(ageMin)}m old`;
+  $('hero-live').textContent = ageMin < 10 ? '● Station · live now' : `● Station · ${Math.round(ageMin)}m old`;
 }
 
 // ---------- ticker ----------
@@ -216,11 +219,11 @@ function put48(id, html, cls = '') {
 
 function render48(fc) {
   const hrs = fc.forecast.hourly.slice(0, 48);
+  if (!hrs.length) return;
   const temps = hrs.map((h) => h.air_temperature).filter((t) => t != null && !Number.isNaN(t));
-  if (!temps.length) return;
-  const lo = Math.min(...temps), hi = Math.max(...temps);
+  const lo = temps.length ? Math.min(...temps) : 0, hi = temps.length ? Math.max(...temps) : 1;
   const W = 1000, H = 90;
-  const x = (i) => (i / (hrs.length - 1)) * (W - 20) + 10;
+  const x = (i) => (i / Math.max(hrs.length - 1, 1)) * (W - 20) + 10;
   const y = (t) => H - 12 - ((t - lo) / Math.max(hi - lo, 1)) * (H - 30);
 
   // The band is on its own hourly grid; line it up by timestamp and clamp to the drawn box, so
@@ -258,12 +261,13 @@ function render48(fc) {
     ${marks}</svg>`);
 
   // dots, not bars: diameter carries the chance and a 0% hour still leaves a visible baseline
-  const maxPop = Math.max(10, ...hrs.map((h) => h.precip_probability || 0));
+  const rainChances = hrs.map((h) => h.precip_probability).filter(Number.isFinite);
+  const maxPop = Math.max(10, ...rainChances);
   put48('c48-rain', hrs.map((h, i) => {
-    const pop = h.precip_probability || 0;
-    const d = 4 + (pop / maxPop) * 16;
-    return `<div class="rbar" title="${timeStr(h.time)} ${pop}%">
-      <i style="width:${d.toFixed(1)}px;height:${d.toFixed(1)}px;opacity:${(0.4 + 0.6 * (pop / maxPop)).toFixed(2)}"></i>
+    const pop = Number.isFinite(h.precip_probability) ? h.precip_probability : null;
+    const d = 4 + ((pop ?? 0) / maxPop) * 16;
+    return `<div class="rbar" title="${timeStr(h.time)} ${pop == null ? 'rain chance unavailable' : `${pop}%`}">
+      <i style="width:${d.toFixed(1)}px;height:${d.toFixed(1)}px;opacity:${pop == null ? '.15' : (0.4 + 0.6 * (pop / maxPop)).toFixed(2)}"></i>
       ${i % 6 === 0 ? `<u>${num(pop)}%</u>` : ''}</div>`;
   }).join(''));
 
@@ -276,11 +280,19 @@ function render48(fc) {
   put48('c48-axis', hrs.filter((_, i) => i % 6 === 0)
     .map((h, j) => `<span>${j === 0 ? 'Now' : new Date(h.time * 1000).toLocaleTimeString([], { hour: 'numeric' }).replace(' ', '')}</span>`).join(''));
 
-  const nextRain = hrs.find((h) => (h.precip_probability || 0) >= 30);
+  const nextRain = hrs.find((h) => Number.isFinite(h.precip_probability) && h.precip_probability >= 30);
+  const metric = $('outlook-metric').value;
+  const peakRain = rainChances.length ? Math.max(...rainChances) : null;
+  const winds = hrs.map((h) => h.wind_avg).filter(Number.isFinite);
+  const headline = metric === 'rain' ? (peakRain == null ? 'Rain chance unavailable' : `Peak rain chance ${num(peakRain)}%`)
+    : metric === 'wind' ? (winds.length ? `Peak wind ${num(Math.max(...winds))} ${U.wind()}` : 'Wind forecast unavailable')
+      : (temps.length ? `${num(lo)}°–${num(hi)}°` : 'Temperature unavailable');
+  const context = metric === 'rain' ? (peakRain == null ? 'No rain forecast available' : nextRain
+    ? `Next 30% chance ${timeStr(nextRain.time)}` : 'Rain chance stays below 30%')
+    : (peakRain == null ? 'Rain chance unavailable' : `Peak rain ${num(peakRain)}%`);
   put48('c48-summary', `<span>48 hr forecast</span>
-    <span class="big">${num(lo)}°–${num(hi)}°</span>
-    <span>Peak rain ${num(Math.max(...hrs.map((h) => h.precip_probability || 0)))}%</span>
-    <span>${nextRain ? `Next rain ${num(nextRain.precip_probability)}% ${timeStr(nextRain.time)}` : 'No rain signal'}</span>`);
+    <span class="big">${headline}</span>
+    <span>${context}</span>`);
 }
 
 // ---------- day cards ----------
@@ -700,18 +712,19 @@ export function registerClock() {
   every('clock', 1, () => {
     const d = new Date();
     const h12 = settings().clock24 === 'auto' || !settings().clock24 ? {} : { hour12: settings().clock24 === '12' };
-    $('clock-time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit', ...h12 });
+    $('clock-time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...h12 });
     $('clock-date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   });
 }
 
 export function initPro() {
   if (!deskForecast()) renderGauges({ current_conditions: {} });
-  const dayToggle = $('daycards-toggle');
-  if (dayToggle) dayToggle.onclick = () => {
-    const all = document.body.classList.toggle('days-all');
-    dayToggle.textContent = all ? 'Show 4 days' : 'Show all 6 days';
-  };
+  const metric = $('outlook-metric');
+  if (!metric.dataset.ready) {
+    metric.value = 'rain';
+    metric.onchange = () => { if (deskForecast()) render48(deskForecast()); };
+    metric.dataset.ready = 'true';
+  }
   every('pro-health', 300, renderHealth);
   every('pro-history', 300, async () => { await loadHistory(); renderPro(); });
   every('pro-consensus', 900, async () => { await loadConsensus(); renderPro(); });
@@ -744,4 +757,12 @@ if (location.search.includes('selftest')) {
   console.assert(wbgtC(35, 50, 0, 1) < sun, 'pro: shade must read cooler than sun');
   console.assert(wbgtC(35, 50, 800, 8) < sun, 'pro: wind must carry heat off the globe');
   console.assert(wbgtC(20, 0, 500, 1) === null, 'pro: no humidity, no WBGT');
+  const metric = $('outlook-metric');
+  metric.value = 'rain';
+  render48({ forecast: { hourly: [{ time: Date.now() / 1000, air_temperature: 80, precip_probability: 40, wind_avg: 5 }] } });
+  if ($('c48-summary').querySelector('.big').textContent !== 'Peak rain chance 40%')
+    throw new Error('pro: rain outlook headline should follow rain chance');
+  render48({ forecast: { hourly: [{ time: Date.now() / 1000, air_temperature: 80, precip_probability: null, wind_avg: 5 }] } });
+  if ($('c48-summary').querySelector('.big').textContent !== 'Rain chance unavailable')
+    throw new Error('pro: missing rain chance should not appear as zero');
 }

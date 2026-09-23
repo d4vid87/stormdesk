@@ -39,7 +39,6 @@
 #desk #daycards .dc-temp b { color:var(--text); font-family:inherit; text-shadow:none; font-weight:500; }
 #desk #daycards .dc-head { color:var(--muted); font-size:13px; margin-bottom:16px; }
 #desk #daycards .dc-cond, #desk #daycards .dc-pop { color:var(--muted); font-size:12px; margin-top:8px; }
-#desk #daycards-toggle { border:0; color:var(--accent); background:none; padding:10px 0; margin:0; min-height:44px; }
 #desk #c48, #desk #trends, #desk #timeline-peek, #desk #desk-grid > .card { border:1px solid var(--line); background:var(--panel); border-radius:16px; padding:22px; box-shadow:none; }
 #desk #timeline-peek h2, #desk #desk-grid h2 { color:var(--text); font-size:15px; font-weight:500; text-transform:none; letter-spacing:0; }
 #desk .timeline-strip .tl-event { background:var(--panel2); border-color:var(--line); border-left-color:var(--accent); box-shadow:none; }

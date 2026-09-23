@@ -27,7 +27,7 @@ const DEFAULTS = {
   // Push channels. All three dark until filled in, all three fire-and-forget: a dashboard must
   // not stall on a phone notification.
   ntfyUrl: 'https://ntfy.sh', ntfyTopic: '', webhookUrl: '',
-  windGustAlert: 30, layoutLocked: false, hiddenTabs: [],
+  windGustAlert: 30, layoutLocked: true, hiddenTabs: [],
   // '' = whichever radar site is nearest the station. The camera itself lives in `wd.radar`,
   // written once a second by the embedded viewer — not here, where it would re-init the app.
   radarSite: '',
@@ -73,11 +73,11 @@ const DEFAULTS = {
   // a Severe or Extreme alert still comes through, because that is what the setting is for.
   quietStart: '', quietEnd: '',
   // Read official warnings, watches and emergencies aloud while the dashboard is open.
-  speakAlerts: true,
+  speakAlerts: false,
   // Browser notifications, secure origins only. Off until asked for: the permission prompt is
   // rude unprompted, and the desktop app already raises real ones through Tauri.
   webNotif: false,
-  // Palette pack on top of the theme: '', 'oled', 'solarized', 'contrast', 'eink'.
+  // New installations start with OLED black; saved palettes remain intact.
   palette: 'oled',
   // The LAN server's port. Empty means 8088. Desktop only, and a restart applies it.
   httpPort: '',
@@ -107,7 +107,7 @@ const DEFAULTS = {
 // process as everything else, and on a weak Linux box loading it is what made the app look hung.
 // Turn it on in Settings. An install that already has settings keeps the radar it has been showing.
 const FIRST_RUN = localStorage.getItem('wd.settings') == null;
-let _settings = load('wd.settings', { ...DEFAULTS, deskRadar: !FIRST_RUN });
+let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'oled' : '', deskRadar: !FIRST_RUN });
 
 // Presentation belongs to the screen in front of the user; station and alert behavior belongs
 // to the household host. Existing installs already have these values locally, so this is also
@@ -650,7 +650,7 @@ export function refreshAll() {
 export function initNav() {
   const tabs = [...document.querySelectorAll('.tab')];
   const show = (id) => {
-    tabs.forEach((t) => t.classList.toggle('active', t.dataset.section === id));
+    tabs.forEach((t) => t.classList.toggle('active', t.dataset.section === id || ((id === 'timeline' || id === 'signals') && t.dataset.section === 'desk')));
     document.querySelectorAll('section.page').forEach((s) => s.classList.toggle('active', s.id === id));
     location.hash = id;
     // The ticker is a 60s transform animation: composited every frame, forever. Only let it run
@@ -680,6 +680,9 @@ export function initNav() {
     window.dispatchEvent(new CustomEvent('wd:section', { detail: id }));
   };
   tabs.forEach((t) => (t.onclick = () => show(t.dataset.section)));
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    button.onclick = () => show(button.dataset.view);
+  });
   show(location.hash.slice(1) || 'desk');
   applyTabs();
 }
@@ -687,14 +690,9 @@ export function initNav() {
 // Desk has no checkbox in the drawer, so it can never be hidden — that is the guard against
 // hiding every tab and stranding the user on a blank shell.
 export function applyTabs() {
-  const hidden = _settings.hiddenTabs || [];
-  let bounce = false;
   document.querySelectorAll('.tab').forEach((t) => {
-    const off = hidden.includes(t.dataset.section);
-    t.style.display = off ? 'none' : '';
-    if (off && t.classList.contains('active')) bounce = true;
+    t.style.display = '';
   });
-  if (bounce) document.querySelector('.tab[data-section="desk"]').click();
 }
 
 // ponytail-lite self-check: the pace table, where a wrong branch means a dashboard that quietly

@@ -10,71 +10,29 @@ embedded here and centered on the station.
 
 If StormDesk is useful to you, please [give the project a star](https://github.com/d4vid87/stormdesk/stargazers).
 
-![StormDesk walkthrough showing the Desk, grouped Timeline, Local Signals, history charts, and
-HookEcho Storm watch, using labeled sample readings](stormdesk-hero.gif)
+![StormDesk Weather, Radar, History, and Appearance with labeled demo data](stormdesk-hero.gif)
 
-![The streamlined StormDesk: calm weather overview, immediate conditions,
-four-day forecast and a consolidated outlook](stormdesk-dashboard.png)
+![The default OLED black Weather page with nine fixed gauges](stormdesk-dashboard.png)
 
-![StormDesk Radar using HookEcho's Dark Streets map with live reflectivity, warnings, and playback](stormdesk-radar.png)
+![StormDesk Radar using HookEcho with live reflectivity and an official warning banner](stormdesk-radar.png)
 
-## Sections
+## The three destinations
 
-- **Desk** — every panel drags by its grip and resizes from its corner, with the arrangement kept
-  in `localStorage`; sky-gradient hero (astro + moon phase + battery + live-observation age), signal ticker,
-  station-vs-model trend strip, 48h temp/rain/wind chart, inline radar, six day cards with
-  temperature arcs, eight dial gauges, 10-day list, alert center, weather story, model agreement,
-  forecast changes, forecast accuracy, air quality, sun & moon detail (golden hour, day-length
-  change, moonrise/set), fire weather & dryness (including the county's US Drought Monitor class,
-  on installs that run the app's own server), and station health (battery, signal, sensor
-  faults, time since the last report).
-- **Timeline** — one continuous view from 24 hours ago through the next 48 hours. It merges rain,
-  storms, winter weather, freeze and heat-index crossings, wind, air quality, rapid station
-  changes, sun times and official alerts into readable windows. Forecast events carry a
-  plain-language confidence label; expand one for the contributing model values and source age.
-  The three nearest events also appear on the Desk. Timeline events do not notify by themselves.
-- **Radar** — full-screen NEXRAD radar, embedded from [HookEcho](https://hookecho.io/).
+- **Weather** opens with current conditions, alerts, nine fixed gauges, all six forecast days, a 48-hour rain chance outlook, and a short “What happens next” summary. Timeline and Local Signals remain available from this page when deeper context helps.
+- **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
+- **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 
-The Desk radar loads itself, in HookEcho's embedded mode: no chrome, and one frame a minute until
-you touch it. That matters because a live radar loop repaints ten times a second, and the WebKit
-webview the desktop app uses on Linux and macOS redraws the whole Desk on every one of those
-frames — enough to saturate a CPU core. Touch the map and it animates normally; the Radar
-tab is the full-chrome view.
+The gauge order is Rain, Lightning, Wind; WBGT, Humidity, UV; Pressure, Dew Point, Wet Bulb. Layout editing is retired. Existing installations retain their saved layout data, but the visible arrangement is fixed and scales with the screen width.
 
-It is also the heaviest thing on the page — megabytes of wasm, sharing one WebKit process with the
-whole Desk on Linux — so it never loads during startup or while Settings is open, and only once the
-panel is actually on screen. On a fresh install it starts switched off; Settings → **Radar panel on
-the Desk** turns it on. On a slow machine, leave it off and use the Radar tab instead.
+Choose a location first to open Weather. A station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
 
-Settings → **Radar site** picks which radar, out of all 201 WSR-88D and TDWR sites, nearest first;
-leave it on *Nearest to my station* and it follows the station. Wherever you leave the map — site,
-product, tilt, basemap, zoom — is remembered here and handed back to the viewer on the next launch.
-It has to work that way round: browsers partition an iframe's storage, so the embedded viewer
-cannot remember anything on its own. The Desk and the Lab share one remembered view.
+Settings → Appearance → Theme offers OLED black (the new-install default), blue, light, high contrast, and orange & red. Solarized and e-ink remain available in the extended list. Each screen keeps its own appearance choice.
 
-**Is the radar live?** It is as live as NEXRAD gets: a WSR-88D takes 4–10 minutes to finish a
-volume scan, and delivery adds a little more, so the newest frame is always a few minutes behind
-the sky. Nothing on the internet is fresher — that delay is the radar itself, not the viewer.
-- **Local Signals** — nearby-sensor comparison table, the Tempest live wind feed, a 24-hour
-  lightning-strike log and the notification history. Set a **nearby sensor radius** in Settings
-  and the airports (NWS/METAR) inside it are added on their own, with the same table on the Desk
-  as a *Nearby sensors* panel. Other people's Tempest stations can't be read unless they are
-  shared publicly, so those are still added by ID (or by pasting their tempestwx.com link).
-- **Data** — ten boards off 7-day device history, including a wind rose, plus multi-model output
-  and the local verification log, a garden card (growing degree days, evaporation, watering
-  shortfall), the almanac (all-time records, this day last year, rain month by month with last
-  year dashed over it), and an archive explorer: pick any two dates and any column and get the
-  chart, the range and the total.
+The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Advanced → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 
-Three more Desk cards appear only when they have something to say, and hide themselves again
-afterwards: the **severe outlook** (SPC categorical risk for your exact point, with the day's peak
-CAPE and the cap holding it down), **snowfall** for the week, and the **tropics** when there is a
-named storm in the Atlantic or the eastern Pacific.
+The embedded map can be expensive on older WebKit devices. Motion and eco settings reduce activity, and a still preview may appear when the live viewer would overload the screen. The latest NEXRAD frame is normally several minutes behind conditions outside because each volume scan and its delivery take time.
 
-Every chart has a crosshair — hover, or touch on a tablet, for the value and the time at the
-nearest real sample. The hero says how today compares with the 1991–2020 normal for the date.
-
-## Quiet hours, speech and the panel catalog
+## Quiet hours and speech
 
 `Settings → Quiet hours` silences the chime and every push channel between two times — Severe and
 Extreme warnings still come through, because that is what the setting is for. On a kiosk, **Read
@@ -89,9 +47,7 @@ briefing on a tablet nobody has touched since boot waits for the first tap.
 `Settings → Dim the screen overnight` fades a wall panel down over the hour after sunset and back
 up over the hour before sunrise, using the station's own sun times.
 
-`Settings → Panel catalog` moves any Desk panel to the Data or Local Signals tab; it keeps working
-where it lands. `Settings → Palette` adds OLED black, Solarized, high contrast and a flat e-ink
-mode on top of the light and dark themes.
+The nine Weather gauges cannot be moved, resized, or hidden. Appearance changes their colors without changing their order.
 
 `Settings → LAN dashboard port` moves the server off 8088 (restart to apply); the window title
 always shows the address a tablet should open.
@@ -147,26 +103,9 @@ A panel that has stopped updating keeps its last good numbers and marks itself w
 corner, rather than blanking or lying. The forecast and current observations are cached, so a
 reload during an outage still renders something.
 
-## Moving things around
+## Fixed gauge arrangement
 
-The Desk is one 12-column grid and every panel is a free agent. Drag a panel by the grip in its
-top-right corner to drop it anywhere in the grid; drag its right edge to change how many columns it
-spans, its bottom edge for height, the corner for both. Double-click the grip to restore one panel,
-or Settings → **Reset panel layout** to put everything back.
-
-Name an arrangement in Settings → **Save layout** to keep it, and load it back from the list below
-— one layout for the wall tablet, another for the desktop window. The padlock in the header hides
-every grip and handle, so a mounted tablet can't be rearranged by a passing sleeve.
-
-Both gestures are pointer events, so they work the same with a mouse, a pen or a finger — the
-tablet case is the one that matters, and HTML5 drag-and-drop never fires for touch.
-
-On a phone-sized screen — the Android app on a handset, or a phone browser — the grips are off
-until you ask for them: left on, they sit over the panel titles and swallow taps meant for the
-panel underneath. Settings → **Rearrange panels** turns them on, and the button turns them off
-again. Moving and hiding work there; resizing does not, because a phone gives every panel the full
-width and its natural height anyway. That mode is per-device and lasts until the app is closed —
-the layout it writes is the shared one, so a panel moved on the phone moves on the wall tablet too.
+The Weather gauges are loaded automatically and stay in their protected order across mouse, touch, keyboard, reload, and restart. Earlier saved layouts remain in storage for existing installations, but no longer change the visible gauge arrangement. Desktop and tablet widths scale the same nine gauges without a separate editing mode.
 
 ## Tests
 
@@ -333,7 +272,7 @@ the in-app updater can update in place; the `.deb` updates through `apt` instead
 Already running [WeeWX](https://weewx.com)? It can feed StormDesk with a five-line config
 stanza — see the [WeeWX guide](weewx.md).
 
-**One config for the whole house.** The desktop app also keeps your settings and dashboard layout
+**One config for the whole house.** The desktop app also keeps your settings and dashboard appearance
 on the host computer. Any browser that opens the LAN URL loads that configuration — no re-typing the
 token, no re-arranging panels per device — and a save from any of those browsers writes back, so the
 next device to load picks it up. Open sessions don't update live; reload to fetch. Note that this
@@ -475,8 +414,7 @@ pointing yours at StormDesk takes it off whichever network it was on. Put the st
 for either service under `Settings → This computer` and the app re-sends each reading once a
 minute.
 
-**Panels.** The × beside a panel's grip hides it; `Settings → Hidden panels` lists what is hidden
-and puts it back. `Reset panel layout` restores everything at once.
+**Panels.** Weather gauges are permanently visible in their fixed order. Select a gauge to open its explanation and recent trend.
 
 ### Docker / no desktop at all
 

@@ -65,7 +65,6 @@ html[data-theme="dark"]:not([data-palette="solarized"]):not([data-palette="contr
 #desk #daycards .dc-date { font-size:11px; color:var(--muted); }
 #desk #daycards .dc-temp b { font-size:27px; font-weight:500; }
 #desk #daycards .dc-icon :is(img,svg) { width:42px; height:42px; }
-#desk #daycards-toggle { order:3; justify-self:end; padding:0 4px; min-height:24px; font-size:12px; margin-top:-8px; }
 #desk #desk-outlook { order:4; padding:22px 28px; background:var(--panel); border-color:var(--line); border-radius:14px; }
 #desk #outlook-title { font-family:Georgia,serif; font-size:28px; }
 #desk #c48-temp svg { width:100%; min-height:150px; background:repeating-linear-gradient(0deg,transparent 0,transparent 36px,#6b9bbd18 37px,transparent 38px); }

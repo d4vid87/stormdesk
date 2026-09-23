@@ -20,7 +20,7 @@
 <link rel="modulepreload" href="js/app.js">
 <link rel="modulepreload" href="js/api.js">
 <link rel="modulepreload" href="js/desk.js">
-<link rel="modulepreload" href="js/pro.js">
+<link rel="modulepreload" href="js/pro.js?v=outlook-20260923b">
 <link rel="modulepreload" href="js/layout.js">
 <link rel="modulepreload" href="js/icons.js">
 <link rel="modulepreload" href="js/motion.js">
@@ -566,10 +566,6 @@
   #gauges .ginner small { font-size: 12px; }
   #gauges .ginner span, #gauges .gwrap:has(svg.therm) .ginner span { max-width: none; }
   #daycards > .daycard { padding: 15px; min-height: 112px; }
-  body:not(.days-all) #daycards > .daycard:nth-child(n+5) { display: none; }
-  body:not(.days-all) #daycards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  #daycards-toggle { order: 3; align-self: flex-start; margin-top: -12px; padding: 7px 11px;
-    border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--text); cursor: pointer; }
   #daycards > .daycard:first-child { background: var(--panel2); }
   #daycards .dc-body { height: auto; justify-content: flex-start; }
   #daycards .daysvg { display: none; }
@@ -896,22 +892,21 @@
   @media(max-width:900px) { .signal-overview{grid-template-columns:repeat(2,1fr)}
     .local-decisions{grid-template-columns:1fr}.signal-hours{grid-template-columns:repeat(3,1fr)}
     #signals-grid > .card{grid-column:1/-1 !important} }
-  @media(max-width:720px) { body:not(.days-all) #daycards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 </style>
 <link rel="stylesheet" href="storm-watch.css">
 <link rel="stylesheet" href="desk-overview.css">
 <link rel="stylesheet" href="midnight.css">
+<link rel="stylesheet" href="simple.css">
+<link rel="stylesheet" href="themes.css">
 </head>
 <body>
 <header>
   <img id="brand" src="stormdesk-icon-512.png?v=20260907" alt="StormDesk">
   <h1>STORMDESK</h1>
   <nav>
-    <button class="tab" data-section="desk">Desk</button>
-    <button class="tab" data-section="timeline">Timeline</button>
+    <button class="tab" data-section="desk">Weather</button>
     <button class="tab" data-section="lab">Radar</button>
-    <button class="tab" data-section="signals">Local Signals</button>
-    <button class="tab" data-section="data">Data</button>
+    <button class="tab" data-section="data">History</button>
   </nav>
   <span id="station-name" class="muted"></span>
   <select id="station-switch" class="iconbtn" hidden title="Switch station"></select>
@@ -920,7 +915,7 @@
     <div class="header-overflow-menu">
       <button class="iconbtn" id="btn-refresh" title="Refresh">↻</button>
       <button class="iconbtn" id="btn-full" title="Fullscreen">⛶</button>
-      <button class="iconbtn" id="btn-lock" title="Lock panel layout">🔓</button>
+      <button class="iconbtn" id="btn-lock" hidden aria-hidden="true" tabindex="-1">🔒</button>
       <button class="iconbtn" id="btn-kiosk" title="Kiosk mode">🖥</button>
     </div>
   </details>
@@ -937,14 +932,14 @@
   <div class="wizard-box">
     <img src="stormdesk-icon-512.png?v=20260907" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
     <h2 style="margin-top:0;text-align:center">Welcome to StormDesk</h2>
-    <p class="muted" style="text-align:center">What would you like to do?</p>
-    <div class="row" id="wizard-choices"><button id="btn-wiz-station">Use a personal weather station</button><button id="btn-wiz-host">Connect to a StormDesk host</button><button id="btn-wiz-place-mode">Weather for a place</button></div>
-    <div id="wizard-progress" class="kv-rows" aria-label="Setup progress">
+    <p class="muted" style="text-align:center">Find your town or postcode to see your weather. You can connect a station later in Settings.</p>
+    <div class="row" id="wizard-choices"><button id="btn-wiz-place-mode">Choose a location</button><button id="btn-wiz-station">Connect a station</button><button id="btn-wiz-host">Connect to a StormDesk host</button></div>
+    <div id="wizard-progress" class="kv-rows" aria-label="Setup progress" hidden>
       <div><span>1 · Choose a station</span><span id="wiz-step-source">current</span></div>
       <div><span>2 · Receive a reading</span><span id="wiz-step-reading">waiting</span></div>
       <div><span>3 · Verify forecast</span><span id="wiz-step-forecast">waiting</span></div>
     </div>
-    <p class="muted" style="font-size:13px">Pick the brand of station in the garden. Every brand
+    <p class="muted" id="wiz-station-intro" style="font-size:13px">Pick the brand of station in the garden. Every brand
       except Tempest needs no token and no account — the readings come from your own sensors, the
       forecast from open-meteo.</p>
     <select id="wiz-source"></select>
@@ -959,15 +954,15 @@
     </div>
     <p id="wiz-target" class="muted" style="font-size:12px"></p>
 
-    <h3 style="font-size:13px;margin:16px 0 4px">Tempest owners</h3>
-    <p class="muted" style="font-size:12px">Paste a personal use token — tempestwx.com &rarr;
+    <h3 id="wiz-tempest-title" style="font-size:13px;margin:16px 0 4px">Tempest owners</h3>
+    <p class="muted" id="wiz-tempest-intro" style="font-size:12px">Paste a personal use token — tempestwx.com &rarr;
       Settings &rarr; Data Authorizations.</p>
-    <div class="row">
+    <div class="row" id="wiz-token-row">
       <input id="wiz-token" type="password" placeholder="personal use token">
       <button class="primary" id="btn-wiz-find" style="flex:0 0 auto">Find stations</button>
     </div>
     <div id="wiz-list" style="margin-top:8px"></div>
-    <p class="muted" style="font-size:12px">No token? The desktop app also reads a Tempest hub
+    <p class="muted" id="wiz-token-help" style="font-size:12px">No token? The desktop app also reads a Tempest hub
       directly off the network with none at all.</p>
 
     <div id="wiz-first" class="muted" style="font-size:12px;margin-top:10px"></div>
@@ -997,15 +992,14 @@
     <div id="hero" data-panel="hero">
       <div id="hero-sky"><div class="sky-l"></div><div class="sky-l"></div></div>
       <div id="hero-orb"></div>
-      <div id="hero-clock"><span id="clock-time">--:--:--</span> <span id="clock-date" class="hero-dim"></span></div>
+      <div id="hero-clock"><span id="clock-time">--:--</span> <span id="clock-date" class="hero-dim"></span></div>
       <div class="hero-top">
         <div>
           <div id="hero-place"></div>
         </div>
         <div class="hero-right">
           <div id="hero-sun"></div>
-          <div id="hero-moon" class="hero-dim"></div>
-          <div id="hero-moonset" class="hero-dim"></div>
+          <details class="hero-dim"><summary>Moon details</summary><div id="hero-moon"></div><div id="hero-moonset"></div></details>
           <div><span id="hero-live" class="live">● --</span> <span id="hero-batt" class="hero-dim"></span></div>
         </div>
       </div>
@@ -1020,7 +1014,8 @@
         </div>
       </div>
       <div id="hero-summary"></div>
-      <button id="desk-details" aria-expanded="true" aria-controls="desk-stack">Back to overview <span aria-hidden="true">−</span></button>
+      <button id="desk-details" aria-expanded="true" aria-controls="desk-stack">Less detail −</button>
+      <div class="weather-more"><button type="button" data-view="timeline">Full timeline</button><button type="button" data-view="signals">Local signals</button></div>
     </div>
 
     <div id="ticker" data-panel="ticker"><div id="ticker-track"></div><span id="src-health"></span><button id="ticker-pause">❚❚</button></div>
@@ -1044,10 +1039,9 @@
 
 
     <div id="daycards" data-panel="daycards"></div>
-    <button id="daycards-toggle">Show all 6 days</button>
     <section id="desk-outlook" aria-labelledby="outlook-title">
       <div class="outlook-heading"><div><h2 id="outlook-title">Your outlook</h2><p>The next 48 hours, at a glance.</p></div>
-        <label for="outlook-metric">Show <select id="outlook-metric"><option value="temp">Temperature</option><option value="rain">Rain chance</option><option value="wind">Wind</option></select></label>
+        <label for="outlook-metric">Show <select id="outlook-metric"><option value="rain" selected>Rain chance</option><option value="temp">Temperature</option><option value="wind">Wind</option></select></label>
       </div>
         <div id="c48" data-panel="c48">
           <div id="c48-summary"></div>
@@ -1127,12 +1121,12 @@
       <div class="gauge" data-panel="g-rain" data-metric="rain"><h3>Rain (Today)</h3><div id="g-rain"></div></div>
       <div class="gauge" data-panel="g-ltg" data-metric="strikes"><h3>Lightning</h3><div id="g-ltg"></div></div>
       <div class="gauge" data-panel="g-wind" data-metric="windAvg"><h3>Wind</h3><div id="g-wind"></div></div>
-      <div class="gauge" data-panel="g-wbgt"><h3 title="Estimated from temperature, humidity and solar — not a measured WBGT">WBGT</h3><div id="g-wbgt"></div></div>
-      <div class="gauge" data-panel="g-uv" data-metric="uv"><h3>UV Index</h3><div id="g-uv"></div></div>
-      <div class="gauge" data-panel="g-wet"><h3>Wet Bulb</h3><div id="g-wet"></div></div>
-      <div class="gauge" data-panel="g-press" data-metric="press"><h3>Pressure</h3><div id="g-press"></div></div>
+      <div class="gauge" data-panel="g-wbgt" data-metric="wbgt"><h3 title="Estimated from temperature, humidity and solar — not a measured WBGT">WBGT</h3><div id="g-wbgt"></div></div>
       <div class="gauge" data-panel="g-hum" data-metric="rh"><h3>Humidity</h3><div id="g-hum"></div></div>
-      <div class="gauge" data-panel="g-dew"><h3>Dew point</h3><div id="g-dew"></div></div>
+      <div class="gauge" data-panel="g-uv" data-metric="uv"><h3>UV Index</h3><div id="g-uv"></div></div>
+      <div class="gauge" data-panel="g-press" data-metric="press"><h3>Pressure</h3><div id="g-press"></div></div>
+      <div class="gauge" data-panel="g-dew" data-metric="dew"><h3>Dew point</h3><div id="g-dew"></div></div>
+      <div class="gauge" data-panel="g-wet" data-metric="wet"><h3>Wet Bulb</h3><div id="g-wet"></div></div>
     </div>
 
 
@@ -1142,6 +1136,7 @@
   <!-- ponytail: Radar is the existing weathermap app in an iframe (radar loop, satellite,
        lightning, SPC, alerts already work there). Inline it into map.js only if the two need shared state. -->
   <section class="page" id="timeline" aria-labelledby="timeline-title">
+    <button type="button" data-view="desk">← Weather</button>
     <div class="timeline-heading"><p class="desk-eyebrow">PLAN YOUR DAY</p><h2 id="timeline-title">Your weather timeline</h2><p>What’s passed, what’s happening, and what comes next.</p></div>
     <div id="timeline-range" class="muted"></div>
     <div id="timeline-axis" aria-hidden="true"><span class="observed"></span><span class="forecast"></span></div>
@@ -1154,38 +1149,22 @@
     </div>
     <div id="timeline-list" aria-live="polite"></div>
   </section>
-  <section class="page" id="lab" aria-label="Storm watch">
-    <div class="watch-heading"><h2>Storm watch</h2><span id="watch-location">Home station</span><span id="watch-updated">Waiting for weather data</span></div>
-    <div class="watch-grid">
-      <div class="watch-map-column">
-        <div class="watch-map"><iframe id="lab-frame" title="Interactive HookEcho weather radar" allow="fullscreen"></iframe></div>
-        <div class="watch-card watch-strip" aria-label="Weather summary">
-          <div><small>Wind</small><strong id="watch-summary-wind">—</strong></div>
-          <div><small>Rain today</small><strong id="watch-summary-rain">—</strong></div>
-          <div><small>Pressure · sea level</small><strong id="watch-summary-pressure">—</strong></div>
-        </div>
-      </div>
-      <aside class="watch-rail" aria-label="Local weather">
-        <div class="watch-card">
-          <h3 id="watch-station">Home station</h3>
-          <div class="watch-current"><span id="watch-icon"></span><strong id="watch-temp">—</strong><div><b id="watch-condition">Waiting for data</b><span id="watch-feels">Feels like —</span></div></div>
-          <p id="watch-range">High — · Low —</p>
-          <div class="watch-observations">
-            <div class="watch-wind"><small>Wind</small><div class="watch-compass"><span id="watch-direction">—</span><strong id="watch-wind">—</strong><span id="watch-wind-unit"></span><i id="watch-needle" hidden></i></div><span id="watch-gust">Gusts —</span></div>
-            <div class="watch-stat"><small>Dew point</small><strong id="watch-dew">—</strong></div>
-            <div class="watch-stat"><small>Humidity</small><strong id="watch-humidity">—</strong></div>
-            <div class="watch-stat"><small>Pressure</small><strong id="watch-pressure">—</strong></div>
-            <div class="watch-stat"><small>Rain today</small><strong id="watch-rain">—</strong></div>
-            <div class="watch-stat watch-uv"><small>UV index</small><strong id="watch-uv">—</strong></div>
-          </div>
-        </div>
-        <div id="watch-alerts" aria-label="Weather alerts"><div class="watch-card watch-muted">Waiting for weather alerts</div></div>
-        <div class="watch-card"><h3>Next 6 hours</h3><div id="watch-hours" class="watch-hours"><p class="watch-muted">Hourly forecast unavailable</p></div></div>
-        <div class="watch-card"><h3>Lightning <small>Last 3 hours</small></h3><p id="watch-lightning">Lightning data unavailable</p><div class="watch-source">Station readings and forecast data</div></div>
-      </aside>
+  <section class="page" id="lab" aria-label="Radar">
+    <div class="radar-heading"><h2>Radar</h2><span>HookEcho live radar</span></div>
+    <div class="watch-map"><iframe id="lab-frame" title="Interactive HookEcho weather radar" allow="fullscreen"></iframe></div>
+    <div class="radar-banner" id="radar-banner" role="status" aria-live="polite">
+      <strong id="radar-banner-badge">RADAR</strong>
+      <div class="radar-banner-window"><span id="radar-banner-text">Checking for weather warnings…</span></div>
+      <button type="button" id="radar-banner-details" hidden>Details ↗</button>
     </div>
   </section>
+  <dialog id="radar-alert-dialog" aria-labelledby="radar-alert-title">
+    <h2 id="radar-alert-title">Weather warnings</h2>
+    <div id="radar-alert-list"></div>
+    <form method="dialog"><button type="submit">Close</button></form>
+  </dialog>
   <section class="page" id="signals">
+    <button type="button" data-view="desk">← Weather</button>
     <div class="grid" id="signals-grid">
       <div class="signals-intro"><p class="desk-eyebrow">CLOSER TO HOME</p><h2>Local signals</h2><span>Your nearby conditions, outdoor outlook, and personal alerts.</span></div>
       <div class="signal-overview">
@@ -1241,14 +1220,16 @@
     </div>
   </section>
   <section class="page" id="data">
-    <div class="data-heading"><p class="desk-eyebrow">THE BIGGER PICTURE</p><h2>Your weather, over time</h2><p>Explore station trends, compare forecasts, and look back through your archive.</p><div id="data-history-status" role="status"></div></div>
+    <div class="data-heading"><p class="desk-eyebrow">YOUR HISTORY</p><h2 id="history-title">Your week at a glance</h2><p>Four familiar measurements. Select one for a closer look.</p><div id="data-history-status" role="status"></div></div>
+    <div class="history-controls"><label for="history-filter">Measurement</label><select id="history-filter"><option value="all">All measurements</option><option value="data-temperature">Temperature</option><option value="data-rain">Rain</option><option value="data-wind">Wind</option><option value="data-pressure">Pressure</option><option value="data-records-7-days">Records</option></select><label for="history-range">Range</label><select id="history-range"><option value="168">Last 7 days</option><option value="24">Last 24 hours</option></select></div>
+    <div class="history-summary" id="history-summary"><span>THE SHORT VERSION</span><strong>Connect a station to see your weather history.</strong></div>
     <div class="grid" id="data-grid">
-      <div class="card" data-panel="data-temperature"><h2 id="board-temp">Temperature</h2><canvas id="c-temp" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
-      <div class="card" data-panel="data-rain"><h2 id="board-rain">Rain</h2><canvas id="c-rain" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
-      <div class="card" data-panel="data-wind"><h2 id="board-wind">Wind</h2><canvas id="c-wind" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
+      <div class="card" data-panel="data-temperature"><h2 id="board-temp">Temperature</h2><button class="snapshot-open" type="button" data-history-select="data-temperature" aria-label="Explore temperature history">↗</button><strong class="snapshot-value" id="snapshot-temp">—</strong><p class="snapshot-caption" id="snapshot-temp-note">Station history unavailable</p><canvas id="c-temp" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
+      <div class="card" data-panel="data-rain"><h2 id="board-rain">Rain</h2><button class="snapshot-open" type="button" data-history-select="data-rain" aria-label="Explore rain history">↗</button><strong class="snapshot-value" id="snapshot-rain">—</strong><p class="snapshot-caption" id="snapshot-rain-note">Station history unavailable</p><canvas id="c-rain" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
+      <div class="card" data-panel="data-wind"><h2 id="board-wind">Wind</h2><button class="snapshot-open" type="button" data-history-select="data-wind" aria-label="Explore wind history">↗</button><strong class="snapshot-value" id="snapshot-wind">—</strong><p class="snapshot-caption" id="snapshot-wind-note">Station history unavailable</p><canvas id="c-wind" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
       <div class="card" data-panel="data-wind-rose"><h2 id="board-rose">Wind rose</h2><canvas id="c-rose" class="chart"></canvas></div>
-      <div class="card" data-panel="data-pressure"><h2 id="board-press">Pressure</h2><canvas id="c-press" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
-      <div class="card" data-panel="data-records-7-days"><h2>Records · 7 days</h2><div id="extremes" class="kv-rows"></div></div>
+      <div class="card" data-panel="data-pressure"><h2 id="board-press">Pressure</h2><button class="snapshot-open" type="button" data-history-select="data-pressure" aria-label="Explore pressure history">↗</button><strong class="snapshot-value" id="snapshot-press">—</strong><p class="snapshot-caption" id="snapshot-press-note">Station history unavailable</p><canvas id="c-press" class="chart"></canvas><p class="chart-pending">Waiting for station history</p></div>
+      <div class="card" data-panel="data-records-7-days"><h2 id="board-records">Records · 7 days</h2><div id="extremes" class="kv-rows"></div></div>
       <details class="card" data-panel="data-model-comparison" style="grid-column: span 2"><summary><h2 id="board-models">Model comparison</h2></summary><canvas id="c-models" class="chart"></canvas></details>
       <details class="card" data-panel="data-forecast-accuracy"><summary><h2 id="board-accuracy">Forecast accuracy</h2></summary><canvas id="c-accuracy" class="chart"></canvas></details>
       <details class="card" data-panel="data-nws-vs-tempest"><summary><h2>NWS vs Tempest</h2></summary><div id="official" class="kv-rows"></div></details>
@@ -1356,20 +1337,21 @@
     <label><input id="set-storm-auto" type="checkbox"> Show the radar automatically during warnings</label>
     <h2 style="font-size:13px;margin-top:18px">Appearance</h2>
     <label>Theme</label>
-    <select id="set-theme">
-      <option value="dark">Dark</option>
+    <select id="set-palette">
+      <option value="oled">OLED black (default)</option>
+      <option value="blue">Blue</option>
       <option value="light">Light</option>
-      <option value="auto">Auto — light by day</option>
+      <option value="contrast">High contrast</option>
+      <option value="ember">Orange &amp; red</option>
+      <optgroup label="More themes">
+        <option value="auto">Auto — light by day</option>
+        <option value="solarized">Solarized</option>
+        <option value="solarized-light">Solarized light</option>
+        <option value="contrast-light">High contrast light</option>
+        <option value="eink">E-ink</option>
+      </optgroup>
     </select>
     <label>Accent colour</label><input id="set-accent" type="color" value="#4fb8ff">
-    <label>Palette</label>
-    <select id="set-palette">
-      <option value="">Default</option>
-      <option value="oled">OLED black</option>
-      <option value="solarized">Solarized</option>
-      <option value="contrast">High contrast</option>
-      <option value="eink">E-ink (flat, no shadows)</option>
-    </select>
     <label>Text size</label>
     <select id="set-font">
       <option value="0.85">Small</option>
@@ -1473,6 +1455,7 @@
       <button id="btn-diag">Diagnostics</button>
       <button id="btn-close">Close</button>
     </div>
+    <div id="layout-controls" hidden>
     <div class="row">
       <button id="btn-layout-reset">Reset panel layout</button>
       <!-- Phone-only: on anything wider the grips are always there, so the button would toggle
@@ -1510,6 +1493,7 @@
       <label><input type="checkbox" data-tab="signals"> Local Signals</label>
       <label><input type="checkbox" data-tab="data"> Data</label>
     </div>
+    </div>
     <h2 style="font-size:13px;margin-top:18px">Timeline</h2>
     <p class="muted" style="font-size:12px">Events stay here. Official warnings and explicit alert rules are the only things that notify.</p>
     <label>Precipitation chance (%)</label><input id="set-tl-precip" type="number" min="0" max="100">
@@ -1525,7 +1509,7 @@
       <label><input type="checkbox" data-tl-cat="change"> Rapid changes</label><label><input type="checkbox" data-tl-cat="alert"> Official alerts</label>
     </div>
     <h2 style="font-size:13px;margin-top:18px">Places</h2>
-    <div class="row" style="margin-top:6px">
+    <div class="row" id="place-controls" style="margin-top:6px">
       <input id="place-q" placeholder="search a city…">
       <button id="btn-place-search" style="flex:0 0 auto">Find</button>
     </div>
@@ -1706,6 +1690,6 @@
   </aside>
 </main>
 
-<script type="module" src="js/boot.js"></script>
+<script type="module" src="js/boot.js?v=themes-20260923a"></script>
 </body>
 </html>

@@ -12,11 +12,62 @@ const DAY = 86400;
 const I = api.OBS;
 
 let history = [];
+let historyHours = 168;
+
+function filterBoards() {
+  const value = $('history-filter')?.value || 'all';
+  $('data-grid').classList.toggle('filtered', value !== 'all');
+  document.querySelectorAll('#data-grid > [data-panel]').forEach((card) => {
+    card.hidden = value !== 'all' && card.dataset.panel !== value;
+  });
+  document.querySelectorAll('.snapshot-open').forEach((button) => {
+    const selected = value === button.dataset.historySelect;
+    button.textContent = selected ? 'Show all' : '↗';
+    button.setAttribute('aria-label', selected ? 'Show all measurements' : `Explore ${button.closest('[data-panel]').querySelector('h2').textContent.toLowerCase()} history`);
+  });
+}
+
+document.addEventListener('change', (event) => {
+  if (event.target.id === 'history-filter') { filterBoards(); redrawVisibleCharts(); }
+  if (event.target.id === 'history-range') {
+    historyHours = Number(event.target.value);
+    $('history-title').textContent = historyHours === 24 ? 'Your day at a glance' : 'Your week at a glance';
+    refreshBoards();
+  }
+});
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('.snapshot-open');
+  if (!button) return;
+  $('history-filter').value = $('history-filter').value === button.dataset.historySelect ? 'all' : button.dataset.historySelect;
+  filterBoards();
+  redrawVisibleCharts();
+});
+
+function redrawVisibleCharts() {
+  if (!history.length) return;
+  requestAnimationFrame(() => { drawTemp(); drawRain(); drawWind(); drawPressure(); drawRose(); });
+}
 
 const note = (id, msg) => { $(id).innerHTML = `<div class="muted">${msg}</div>`; };
+const values = (idx) => history.map((o) => o[idx]).filter((v) => Number.isFinite(v));
+const snapshot = (name, value, caption) => {
+  $(`snapshot-${name}`).textContent = value;
+  $(`snapshot-${name}-note`).textContent = caption;
+};
+function clearSnapshot() {
+  history = [];
+  for (const name of ['temp', 'rain', 'wind', 'press']) snapshot(name, '—', 'Station history unavailable');
+  for (const id of ['c-temp', 'c-rain', 'c-wind', 'c-press', 'c-rose']) {
+    $(id).removeAttribute('width');
+    $(id).removeAttribute('height');
+  }
+  $('extremes').textContent = 'Station records unavailable';
+  $('history-summary').querySelector('strong').textContent = 'Connect a station to see your weather history.';
+}
 
 export async function refreshBoards() {
   if (!hasSource()) {
+    clearSnapshot();
     note('data-history-status', 'Connect a weather station to explore measured history. Forecast analysis remains available below.');
     drawModels(); drawAccuracy(); drawOfficial(); drawOutlook();
     return;
@@ -24,22 +75,30 @@ export async function refreshBoards() {
   const end = Math.floor(Date.now() / 1000);
   try {
     const j = window.__WD_SRV !== undefined || settings().stationSource
-      ? await api.localObs(7 * 24)
-      : await api.deviceObs(settings().deviceId, end - 7 * DAY, end);
+      ? await api.localObs(historyHours)
+      : await api.deviceObs(settings().deviceId, end - historyHours * 3600, end);
     history = j.obs || [];
   } catch (e) {
+    clearSnapshot();
     note('data-history-status', `History unavailable: ${e.message}`);
     return;
   }
-  if (!history.length) { note('data-history-status', 'No history returned for this device.'); return; }
+  if (!history.length) { clearSnapshot(); note('data-history-status', 'No history returned for this device.'); return; }
 
   $('data-history-status').textContent = '';
+  filterBoards();
   drawTemp();
   drawRain();
   drawWind();
   drawRose();
   drawPressure();
   drawExtremes();
+  const temperatures = values(I.temp);
+  const rainDays = dailyRain();
+  const rain = rainDays.reduce((total, day) => total + day.y, 0);
+  $('history-summary').querySelector('strong').textContent = temperatures.length
+    ? `High ${num(Math.max(...temperatures))}${U.temp()} · ${rainDays.length ? `${num(rain, 2)} ${U.precip()} of rain` : 'rain data unavailable'} in the ${historyHours === 24 ? 'last 24 hours' : 'last 7 days'}.`
+    : `Station history for the ${historyHours === 24 ? 'last 24 hours' : 'last 7 days'}.`;
   drawModels();
   drawAccuracy();
   drawOfficial();
@@ -53,15 +112,18 @@ function drawTemp() {
   // Clicking a point opens the same slide-over the gauges open, windowed on that moment.
   chart($('c-temp'), [{ data: pts(I.temp), color: '#43cfc3' }],
     { digits: 0, onPick: (p) => openDetail('temp', p.x) });
-  $('board-temp').textContent = `7-day air temperature (${U.temp()})`;
+  $('board-temp').textContent = 'Temperature';
+  const t = values(I.temp);
+  snapshot('temp', t.length ? `${num(t.reduce((a, b) => a + b, 0) / t.length)}${U.temp()}` : '—', t.length ? 'average temperature' : 'No temperature readings');
 }
 
 // daily rain totals from the per-minute accumulation column
 function dailyRain() {
   const byDay = new Map();
   for (const o of history) {
+    if (!Number.isFinite(o[I.rain])) continue;
     const k = new Date(o[I.time] * 1000).setHours(0, 0, 0, 0);
-    byDay.set(k, (byDay.get(k) || 0) + (o[I.rain] || 0));
+    byDay.set(k, (byDay.get(k) || 0) + o[I.rain]);
   }
   return [...byDay].sort((a, b) => a[0] - b[0]).map(([x, y]) => ({ x, y }));
 }
@@ -72,16 +134,19 @@ function drawRain() {
   chart($('c-rain'), [{ data: d, type: 'bar', color: '#43cfc3' }],
     { yMin: 0, digits: 2, onPick: (p) => openDetail('rain', p.x + 12 * 3600 * 1000) });
   const total = d.reduce((a, b) => a + b.y, 0);
-  $('board-rain').textContent = `7-day rain — ${num(total, 2)} ${U.precip()} total`;
+  $('board-rain').textContent = 'Rain';
+  snapshot('rain', d.length ? `${num(total, 2)} ${U.precip()}` : '—', d.length ? 'total rainfall' : 'No rain readings');
 }
 
 function drawWind() {
-  const from = Math.floor(Date.now() / 1000) - DAY;
+  const from = Math.floor(Date.now() / 1000) - historyHours * 3600;
   chart($('c-wind'), [
     { data: pts(I.windGust, from), color: '#eea64b', name: 'gust' },
     { data: pts(I.windAvg, from), color: '#43cfc3', name: 'avg' },
   ], { yMin: 0, digits: 0, onPick: (p, name) => openDetail(name === 'avg' ? 'windAvg' : 'windGust', p.x) });
-  $('board-wind').textContent = `24h wind (${U.wind()}) — gust amber, average teal`;
+  $('board-wind').textContent = 'Wind';
+  const gusts = values(I.windGust);
+  snapshot('wind', gusts.length ? `${num(Math.max(...gusts))} ${U.wind()}` : '—', gusts.length ? 'peak gust · average shown in teal' : 'No wind readings');
 }
 
 // Where the wind actually comes from over the week: 16 sectors, petal length = share of samples,
@@ -126,19 +191,22 @@ function drawRose() {
   [['N', 0, -R - 4], ['E', R + 6, 3], ['S', 0, R + 11], ['W', -R - 6, 3]]
     .forEach(([lab, dx, dy]) => c.fillText(lab, cx + dx, cy + dy));
   c.textAlign = 'left';
-  $('board-rose').textContent = `7-day wind rose (${U.wind()}) — petal length is how often, brightness is how fast`;
+  $('board-rose').textContent = `${historyHours === 24 ? '24h' : '7-day'} wind rose (${U.wind()}) — petal length is how often, brightness is how fast`;
 }
 
 function drawPressure() {
-  const from = Math.floor(Date.now() / 1000) - 2 * DAY;
+  const from = Math.floor(Date.now() / 1000) - historyHours * 3600;
   chart($('c-press'), [{ data: pts(I.press, from), color: '#aaffc4' }],
     { digits: 2, onPick: (p) => openDetail('press', p.x) });
   const p = pts(I.press, from);
   const delta = p.length > 1 ? p[p.length - 1].y - p[0].y : 0;
-  $('board-press').textContent = `48h pressure (${U.press()}) — net ${delta >= 0 ? '+' : ''}${num(delta, 2)}`;
+  $('board-press').textContent = 'Pressure';
+  const pressure = values(I.press);
+  snapshot('press', pressure.length ? num(pressure[pressure.length - 1], 2) : '—', pressure.length ? `${U.press()} · ${p.length > 1 ? `change ${delta >= 0 ? '+' : ''}${num(delta, 2)}` : 'latest reading'}` : 'No pressure readings');
 }
 
 function drawExtremes() {
+  $('board-records').textContent = `Records · ${historyHours === 24 ? '24 hours' : '7 days'}`;
   const col = (i) => history.map((o) => o[i]).filter((v) => v != null);
   const t = col(I.temp), g = col(I.windGust);
   const strikes = col(I.strikes).reduce((a, b) => a + b, 0);

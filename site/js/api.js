@@ -368,6 +368,8 @@ export function shapeOm(j, ownTuple = null) {
 export function overlayStation(c, tuple, elevation) {
   const metric = settings().units === 'metric';
   const o = siToDisplay([[...tuple]])[0];
+  if (!Number.isFinite(o[OBS.time]) || Date.now() / 1000 - o[OBS.time] > 600) return c;
+  c._station = true;
   const own = (v) => (v == null ? undefined : v);
   const overlay = {
     air_temperature: own(o[OBS.temp]),
@@ -671,11 +673,15 @@ if (location.search.includes('selftest')) {
   console.assert(om.current_conditions.uv === 3, 'api: current UV comes from the current hour');
 
   // A sensor in the garden beats a model every time — but only where a sensor reported.
-  const own = []; own[OBS.temp] = 20; own[OBS.rh] = 88;
+  const own = []; own[OBS.time] = Math.floor(Date.now() / 1000); own[OBS.temp] = 20; own[OBS.rh] = 88;
   const over = shapeOm({ current: { time: 1000, temperature_2m: 70, relative_humidity_2m: 50, dew_point_2m: 50 },
     hourly: { time: [0, 3600] }, daily: { time: [0] } }, own);
   console.assert(over.current_conditions.relative_humidity === 88, 'api: own humidity wins over the model');
   console.assert(over.current_conditions.dew_point === 50, 'api: the model keeps what no station measures');
+  own[OBS.time] -= 3600;
+  console.assert(shapeOm({ current: { temperature_2m: 70, relative_humidity_2m: 50 },
+    hourly: {}, daily: {} }, own).current_conditions.relative_humidity === 50,
+  'api: an old station report cannot replace a current forecast');
 }
 
 // --- Diagnostics: ping each source, return [{name, ok, detail}] ---

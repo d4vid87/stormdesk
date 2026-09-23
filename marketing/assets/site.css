@@ -27,3 +27,23 @@
 .community-banner h2{font-size:clamp(2rem,4vw,3rem);line-height:1.1;margin:10px 0}
 @media(max-width:680px){.feature-showcase,.feature-showcase article:first-child{display:block}.feature-showcase article{margin-bottom:20px}.tour-bar{font-size:.72rem}.community-banner{padding:24px}.hero-shot video{border-radius:6px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+
+/* The website shares the app's shipped OLED black starting point. */
+:root{--bg:#000;--panel:#070707;--panel2:#111;--text:#fff;--muted:#c3c3c3;--blue:#8ad9ff;--blue2:#4abbe9;--line:#4d4d4d;color-scheme:dark}
+body:before{background:none}
+.site-header,.site-footer{background:#050505f2}
+.nav-links,.menu,.hero-shot,.hero-shot video,.trust-row div,.card,.brand-pill,.feature-showcase article,.community-links a,.hero .eyebrow{background:var(--panel)}
+.card{box-shadow:none}
+.hero{background:radial-gradient(ellipse at 50% 20%,#57b8ee18,transparent 65%)}
+.button{background:#70c9ff;color:#03131d;border-color:#70c9ff;box-shadow:none}
+.button.secondary{background:var(--panel);color:var(--text);border-color:var(--line)}
+.nav-links .button{color:#03131d}
+.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.theme-card{margin:0;overflow:hidden;border:1px solid var(--line);border-radius:16px;background:var(--panel)}
+.theme-card img{display:block;width:100%;aspect-ratio:1.5;object-fit:cover;object-position:left top;border-bottom:1px solid var(--line)}
+.theme-card figcaption{padding:15px 18px;color:var(--muted)}
+.theme-card strong{display:block;color:var(--text);font-size:1.05rem}
+.theme-card:first-child{border-color:var(--blue)}
+.theme-card:first-child strong:after{content:' · default';color:var(--blue);font-size:.82rem}
+@media(max-width:820px){.theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.nav-links{background:#050505f7}}
+@media(max-width:580px){.theme-grid{grid-template-columns:1fr}}

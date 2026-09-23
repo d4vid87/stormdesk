@@ -1,6 +1,6 @@
 import { safeMode } from './compat.js';
 import { testVoice } from './app.js';
-import './storm-watch.js';
+import './storm-watch.js?v=signal-20260923d';
 // Wire the shell: settings drawer, diagnostics, nav, section modules.
 import { settings, saveSettings, sharedSettings, LOCAL_SETTING_KEYS, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
 import * as api from './api.js';
@@ -13,7 +13,7 @@ import { initAlmanac } from './almanac.js';
 import { initRules, renderRules } from './rules.js';
 import { initEnv } from './env.js';
 import { initPlaces, renderPlaces } from './places.js';
-import { initPro } from './pro.js';
+import { initPro } from './pro.js?v=outlook-20260923b';
 import { initLayout, snapshot, restore, hiddenPanels, unhide, panelIds, tabOf, setTab, TABS, NEVER_HIDE } from './layout.js';
 import { initUdp } from './udp.js';
 import { initHome } from './home.js';
@@ -35,7 +35,7 @@ $('btn-voice-test').onclick = () => {
 $('desk-details').addEventListener('click', () => {
   const expanded = $('desk').classList.toggle('desk-expanded');
   $('desk-details').setAttribute('aria-expanded', String(expanded));
-  $('desk-details').textContent = expanded ? 'Back to overview −' : 'More weather details ＋';
+  $('desk-details').textContent = expanded ? 'Less detail −' : 'More weather details ＋';
 });
 
 // ---------- config sync ----------
@@ -86,7 +86,8 @@ async function pullConfig() {
     if (j.settings) saveSettings(sharedSettings(j.settings));
     // One-time migration for an existing household layout; after this, every device owns its
     // presentation and a host pull never rearranges another screen.
-    if (j.layout && localStorage.getItem('wd.layout') == null) restore(j.layout);
+    if (j.layout && localStorage.getItem('wd.layout.before-fixed') == null)
+      localStorage.setItem('wd.layout.before-fixed', JSON.stringify(j.layout));
   } catch {
     // no config server (static host, or app not running) — nothing to sync
   } finally {
@@ -238,14 +239,17 @@ function organizeSettings() {
     if (control.previousElementSibling?.tagName === 'LABEL') panel.append(control.previousElementSibling);
     panel.append(control);
   };
-  ['region-presets', 'set-units', 'set-wind-unit', 'set-clock', 'set-radar-site', 'set-desk-radar',
-    'set-storm-auto', 'set-night-dim', 'set-speak', 'set-brief-time', 'set-web-notif']
+  ['region-presets', 'set-units', 'set-wind-unit', 'set-clock',
+    'set-storm-auto', 'set-speak', 'set-brief-time', 'set-web-notif']
     .forEach((id) => move(id, panels.basics));
-  ['set-theme', 'set-accent', 'set-palette', 'set-font', 'set-density', 'set-hero-summary',
-    'set-big-numbers', 'set-eco', 'set-motion'].forEach((id) => move(id, panels.appearance));
+  ['set-radar-site', 'set-desk-radar', 'btn-diag'].forEach((id) => move(id, panels.advanced));
+  ['set-palette', 'set-accent', 'set-font', 'set-density', 'set-hero-summary',
+    'set-big-numbers', 'set-eco', 'set-motion', 'set-night-dim'].forEach((id) => move(id, panels.appearance));
   for (const [name, ids] of [
+    ['Location', ['place-controls', 'place-results', 'places']],
+    ['Station connection', ['set-source', 'set-token', 'set-station', 'src-push', 'src-nopush', 'src-wll', 'src-awn', 'src-lax']],
     ['Region & units', ['region-presets', 'set-units', 'set-wind-unit', 'set-clock']],
-    ['Radar & display', ['set-radar-site', 'set-desk-radar', 'set-storm-auto', 'set-night-dim']],
+    ['Weather alerts', ['set-storm-auto']],
     ['Sounds & notifications', ['set-speak', 'btn-voice-test', 'voice-engine', 'voice-status', 'set-brief-time', 'set-web-notif']],
   ]) {
     const group = document.createElement('fieldset');
@@ -288,8 +292,8 @@ function fillDrawer() {
   organizeSettings();
   const s = settings();
   $('settings-status').innerHTML = hasSource()
-    ? '<strong>Station configured</strong><small>Manage your connection in Advanced.</small>'
-    : '<strong>Let’s connect your weather</strong><small>Choose your station or location in Advanced.</small>';
+    ? '<strong>Station configured</strong><small>Change your location or connection below.</small>'
+    : '<strong>Weather for your location</strong><small>Connect a station here whenever you are ready.</small>';
   $('set-token').value = s.token;
   $('set-station').value = s.stationId;
   $('set-device').value = s.deviceId;
@@ -316,7 +320,6 @@ function fillDrawer() {
   $('set-tl-aqi').value = tl.aqi;
   document.querySelectorAll('[data-tl-cat]').forEach((c) => { c.checked = tl.categories.includes(c.dataset.tlCat); });
   $('set-storm-auto').checked = !!s.stormAuto;
-  $('set-theme').value = s.theme || 'dark';
   $('set-accent').value = s.accent || '#4fb8ff';
   $('set-font').value = String(s.fontScale || 1);
   $('set-density').value = s.density || 'normal';
@@ -327,7 +330,9 @@ function fillDrawer() {
   $('set-speak').checked = !!s.speakAlerts;
   $('set-brief-time').value = s.briefTime || '';
   $('set-web-notif').checked = !!s.webNotif;
-  $('set-palette').value = s.palette || '';
+  $('set-palette').value = s.palette === 'solarized' && s.theme === 'light' ? 'solarized-light'
+    : s.palette === 'contrast' && s.theme === 'light' ? 'contrast-light'
+    : s.palette || (s.theme === 'light' ? 'light' : s.theme === 'auto' ? 'auto' : 'blue');
   $('set-quiet-start').value = s.quietStart || '';
   $('set-quiet-end').value = s.quietEnd || '';
   $('set-http-port').value = s.httpPort || '';
@@ -630,7 +635,8 @@ $('btn-save').onclick = async () => {
       categories: [...document.querySelectorAll('[data-tl-cat]:checked')].map((c) => c.dataset.tlCat),
     },
     stormAuto: $('set-storm-auto').checked,
-    theme: $('set-theme').value,
+    theme: ['light', 'solarized-light', 'contrast-light'].includes($('set-palette').value) ? 'light'
+      : $('set-palette').value === 'auto' ? 'auto' : 'dark',
     // The picker cannot express "no accent", so the default colour means the default.
     accent: $('set-accent').value === '#4fb8ff' ? '' : $('set-accent').value,
     fontScale: +$('set-font').value || 1,
@@ -642,7 +648,8 @@ $('btn-save').onclick = async () => {
     speakAlerts: $('set-speak').checked,
     briefTime: $('set-brief-time').value,
     webNotif: $('set-web-notif').checked,
-    palette: $('set-palette').value,
+    palette: ['blue', 'light', 'auto'].includes($('set-palette').value) ? ''
+      : $('set-palette').value.replace(/-light$/, ''),
     quietStart: $('set-quiet-start').value,
     quietEnd: $('set-quiet-end').value,
     httpPort: $('set-http-port').value.trim(),
@@ -816,7 +823,7 @@ async function wizardFind() {
 // install needs — no token, no account, and the forecast comes from open-meteo.
 {
   const sel = $('wiz-source');
-  let placeOnly = false;
+  let placeOnly = true;
   sel.innerHTML = $('set-source').innerHTML;
   const target = () => {
     const v = sel.value;
@@ -872,10 +879,10 @@ async function wizardFind() {
   $('btn-wiz-wll').onclick = () => findWll($('wiz-wll-host'), $('wiz-target'));
   $('btn-wiz-place').onclick = find;
   $('wiz-place').onkeydown = (e) => { if (e.key === 'Enter') find(); };
-  const choosePlace = () => { placeOnly = true; $('wiz-place').focus(); $('wiz-target').textContent = 'Search for the place you want to follow.'; };
+  const choosePlace = () => { placeOnly = true; $('wizard').classList.remove('station-mode'); $('wiz-place').focus(); $('wiz-target').textContent = 'Search for the place you want to follow.'; };
   $('btn-wiz-place-mode').onclick = choosePlace;
   $('btn-wiz-demo').onclick = choosePlace;
-  $('btn-wiz-station').onclick = () => { placeOnly = false; sel.focus(); };
+  $('btn-wiz-station').onclick = () => { placeOnly = false; $('wizard').classList.add('station-mode'); sel.focus(); };
   $('btn-wiz-host').onclick = () => { $('wizard').hidden = true; markViewer(); $('pair-code').focus(); };
   target();
 }
@@ -1033,13 +1040,11 @@ $('btn-station-save').onclick = () => {
 // Lock is CSS only: hiding the grips and resize handles takes the whole interaction out of reach,
 // so layout.js needs no notion of it. A tablet mounted on a wall gets brushed past all day.
 function applyLock() {
-  const on = !!settings().layoutLocked;
-  document.body.classList.toggle('layout-locked', on);
-  $('btn-lock').textContent = on ? '🔒' : '🔓';
-  $('btn-lock').title = on ? 'Panels locked — click to unlock' : 'Panels unlocked — click to lock';
+  document.body.classList.add('layout-locked');
+  $('btn-lock').hidden = true;
 }
 
-$('btn-lock').onclick = () => { saveSettings({ layoutLocked: !settings().layoutLocked }); applyLock(); };
+$('btn-lock').onclick = null;
 
 // --- kiosk mode: fullscreen + locked + no chrome + screen held awake, as one switch ---
 function applyKiosk() {
@@ -1069,16 +1074,11 @@ applyKiosk();
 // picked up tomorrow either, which is why it is sessionStorage.
 const editing = () => sessionStorage.getItem('wd.edit') === '1';
 function applyEdit() {
-  document.body.classList.toggle('editing', editing());
-  $('btn-edit').textContent = editing() ? 'Done rearranging' : 'Rearrange panels';
+  sessionStorage.removeItem('wd.edit');
+  document.body.classList.remove('editing');
+  $('btn-edit').hidden = true;
 }
-$('btn-edit').onclick = () => {
-  sessionStorage.setItem('wd.edit', editing() ? '0' : '1');
-  applyEdit();
-  // The grips are in the panels behind the drawer, so leaving it open would hide the thing the
-  // button just turned on.
-  if (editing()) { openDrawer(false); loadDeskRadar(); }
-};
+$('btn-edit').onclick = null;
 applyEdit();
 
 // Shipped starting points. A preset is not a saved layout: it says which panels a screen is for
@@ -1679,6 +1679,7 @@ pulled.then(() => {
 function showWizard() {
 if (!localStorage.getItem('wd.setupComplete') && !hasSource() && !PUBLIC) {
   $('wizard').hidden = false;
+  $('wiz-place').focus();
   // No autofocus on the token field: it put a cursor in a Tempest-only box for people who own
   // an Ambient, and they reported the app as demanding an account they can't have.
   // UDP-only mode: a desktop install with a hub on the LAN has real local data with no token at

@@ -2,32 +2,21 @@
 
 # StormDesk
 
-**Your weather station, made clear.**
+**Your weather, at a glance.** StormDesk opens in OLED black with current conditions, nine fixed gauges, a six-day forecast, and a short “What happens next” summary. The gauges stay in their familiar order on desktop and tablet, so there is no layout to arrange or accidentally disturb.
 
-## Stormdesk Lite prototype
+Choose a location to start. A personal weather station is optional; readings that are unavailable stay visible and clearly labeled. StormDesk supports Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse, and other compatible sources.
 
-Stormdesk Lite is a fast, focused interface for current conditions, forecasts, warnings, and on-demand radar. [Open Stormdesk Lite](https://app.mystormdesk.com/lite/) or read the [design specification](design/stormdesk-lite/SPECIFICATION.md).
+The navigation has three destinations: **Weather**, **Radar**, and **History**. Radar gives HookEcho’s map the screen, with official warnings and emergencies along the bottom. History begins with clear temperature, rain, wind, and pressure snapshots and opens detailed charts on demand.
 
-![Stormdesk Lite desktop overview](docs/stormdesk-lite-desktop.png)
+Choose **Settings → Appearance → Theme** to switch between OLED black, blue, light, high contrast, and orange & red. Each screen remembers its choice. No StormDesk account, subscription, or ads.
 
-[View the interface tour](docs/stormdesk-lite-tour.gif) · [View the mobile warning state](docs/stormdesk-lite-mobile.png)
+[Try StormDesk](https://app.mystormdesk.com/) · [Download](https://github.com/d4vid87/stormdesk/releases/latest) · [Website](https://mystormdesk.com/) · [Get help](https://github.com/d4vid87/stormdesk/issues)
 
-StormDesk brings your current weather, forecast, alerts, radar, and history together on one clean
-screen. Use it on a computer, wall tablet, phone, or another screen in your home.
+![A demo-data tour of StormDesk Weather, Radar, History, and the OLED appearance settings](docs/stormdesk-hero.gif)
 
-It works with Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse, and many other personal
-weather stations. You can also use StormDesk without a weather station.
+The interface images show the current source with labeled demo station data. HookEcho supplies the radar map. Published installers may trail the browser build.
 
-No StormDesk account. No subscription. No ads.
-
-[Download StormDesk](https://github.com/d4vid87/stormdesk/releases/latest) ·
-[Visit the website](https://mystormdesk.com/) ·
-[Get help](https://github.com/d4vid87/stormdesk/issues)
-
-![A tour of the redesigned StormDesk dashboard, timeline, local weather, history and radar](docs/stormdesk-hero.gif)
-
-Interface preview from the current source. Station readings in these images are labeled demo data;
-radar comes from HookEcho. Downloaded releases may precede this redesign.
+Stormdesk Lite remains available as a lighter browser interface for older devices: [open Lite](https://app.mystormdesk.com/lite/) or read its [design specification](design/stormdesk-lite/SPECIFICATION.md).
 
 ## Install StormDesk
 
@@ -110,10 +99,12 @@ download the AppImage and run it with `--browser`.
 
 ## Set it up
 
-1. Open StormDesk.
-2. On the welcome screen, choose your weather-station brand.
-3. Follow the instructions shown for that brand.
-4. StormDesk checks for a real reading and a working forecast before setup finishes.
+1. Open StormDesk and search for your town or postcode.
+2. Choose the matching location to see current conditions and the forecast.
+3. If you have a personal station, connect it under **Settings → Basics → Station connection**.
+
+The nine gauges are preloaded in a fixed arrangement. Station readings appear where available;
+forecast estimates fill the remaining weather information.
 
 Tempest owners need a personal-use token from **tempestwx.com → Settings → Data Authorizations**.
 StormDesk can find the stations connected to that token, so you do not need to hunt for sensor
@@ -122,8 +113,7 @@ numbers.
 Other supported stations send readings directly from your home network. StormDesk shows the exact
 address to enter in your station's app or console.
 
-Don't own a weather station? Choose **Skip — just show me the weather somewhere**, then search for
-your town or postcode.
+Don't own a weather station? Choosing a location is enough to use the forecast dashboard.
 
 ## Use it around your home
 
@@ -135,37 +125,44 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 
 ## What you get
 
-- **Desk** — the weather now, a plain-language summary, the next few days, and the details you care about.
-- **Timeline** — what happened during the past day and what is expected during the next two days.
+- **Weather** — current conditions, nine fixed gauges, the forecast, and what happens next.
 - **Radar** — live HookEcho radar with warnings and playback.
-- **Local Signals** — fast wind updates, nearby sensors, lightning, and recent alerts.
-- **Data** — charts, records, model comparisons, rain totals, and your weather archive.
+- **History** — charts, records, model comparisons, rain totals, and your weather archive.
+- **More weather detail** — the full timeline and local signals remain accessible from Weather.
 - **Alerts** — built-in warnings plus your own rules for wind, rain, heat, cold, and more.
 - **Backup** — one complete backup file for your settings and weather history.
 
-## On Android
+## On smaller screens
 
-<img src="docs/stormdesk-android.gif" alt="StormDesk conditions and rain history recorded on an Android phone" width="320">
+The same Weather and Radar pages adapt to phone-sized screens. The desktop and tablet gauge arrangement remains fixed; on a phone the gauges keep their order and flow down the page.
 
-Recorded on a Samsung Galaxy S24 Ultra. [Watch both phone demos](https://hookecho.io/#android).
+<img src="docs/stormdesk-dashboard-mobile.png" alt="Weather on a phone-sized screen" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Radar on a phone-sized screen" width="280">
 
 ## Screenshots
 
-![StormDesk showing current conditions and the local forecast](docs/stormdesk-dashboard.png)
+| Weather | Radar | History |
+| --- | --- | --- |
+| ![OLED black Weather with nine fixed gauges](docs/stormdesk-dashboard.png) | ![Focused HookEcho radar and warning banner](docs/stormdesk-radar.png) | ![History snapshot cards](docs/stormdesk-data.png) |
 
-| Storm watch | Weather timeline |
-| --- | --- |
-| ![Radar and local weather](docs/stormdesk-radar.png) | ![Grouped weather events](docs/stormdesk-timeline.png) |
+![Six-day forecast and rain chance outlook](docs/stormdesk-outlook.png)
 
-| Local signals | Weather history |
+<details><summary>Explore all five themes</summary>
+
+| OLED black (default) | Blue | Light |
+| --- | --- | --- |
+| ![OLED black](docs/stormdesk-theme-oled.png) | ![Blue](docs/stormdesk-theme-blue.png) | ![Light](docs/stormdesk-theme-light.png) |
+
+| High contrast | Orange & red |
 | --- | --- |
-| ![Local outlook and notification controls](docs/stormdesk-signals.png) | ![Station history charts](docs/stormdesk-data.png) |
+| ![High contrast](docs/stormdesk-theme-contrast.png) | ![Orange and red](docs/stormdesk-theme-ember.png) |
+
+</details>
 
 <details><summary>Settings and phone layouts</summary>
 
-![Grouped settings](docs/stormdesk-settings.png)
+![Appearance settings with the theme chooser](docs/stormdesk-settings.png)
 
-<img src="docs/stormdesk-dashboard-mobile.png" alt="StormDesk overview on a phone" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Storm watch on a phone" width="280">
+<img src="docs/stormdesk-dashboard-mobile.png" alt="Weather on a phone" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Radar on a phone" width="280">
 
 </details>
 
@@ -186,7 +183,7 @@ Brand-by-brand instructions are in the
 
 ## Need help?
 
-Open **Settings → Diagnostics** or the **Health Center**. StormDesk checks your station, forecast,
+Open **Settings → Advanced → Diagnostics** or the **Health Center**. StormDesk checks your station, forecast,
 alerts, radar, saved history, and other connections. **Copy support report** creates a safe report
 you can paste into a GitHub issue without including passwords, tokens, or your location.
 

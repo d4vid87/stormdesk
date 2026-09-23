@@ -1,0 +1,66 @@
+/* One palette of shared surfaces across Weather, Radar, History, and Settings. */
+html[data-theme="dark"]:not([data-palette]):is(:root) {
+  --bg:#091522; --panel:#102235; --panel2:#193149; --line:#34546c;
+  --text:#f3f8fc; --muted:#b4cada; --accent:#70c9ff;
+  --good:#65ddba; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme="light"]:not([data-palette]):is(:root) {
+  --bg:#edf3f8; --panel:#fff; --panel2:#e0ebf4; --line:#adbfce;
+  --text:#172b3d; --muted:#465d70; --accent:#086aa8;
+  --good:#146e51; --warn:#855000; --bad:#a83332;
+  color-scheme:light;
+}
+html[data-theme][data-palette="oled"]:is(:root) {
+  --bg:#000; --panel:#050505; --panel2:#101010; --line:#555;
+  --text:#fff; --muted:#c4c4c4; --accent:#8ad9ff;
+  --good:#81e4b0; --warn:#ffd376; --bad:#ff9494;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="contrast"]:is(:root) {
+  --bg:#000; --panel:#000; --panel2:#101010; --line:#fff;
+  --text:#fff; --muted:#fff; --accent:#61d8ff;
+  --good:#89ffad; --warn:#ffdf69; --bad:#ff9a91;
+  color-scheme:dark;
+}
+html[data-theme="light"][data-palette="contrast"]:is(:root) {
+  --bg:#fff; --panel:#fff; --panel2:#ececec; --line:#000;
+  --text:#000; --muted:#222; --accent:#0058a8;
+  --good:#005b35; --warn:#754300; --bad:#a01e1e;
+  color-scheme:light;
+}
+html[data-theme][data-palette="ember"]:is(:root) {
+  --bg:#1b0d0b; --panel:#2b1714; --panel2:#40231c; --line:#875342;
+  --text:#fff1e9; --muted:#e2b6a0; --accent:#ff9a58;
+  --good:#ffc47c; --warn:#ffd071; --bad:#ff746d;
+  color-scheme:dark;
+}
+html[data-palette="solarized"], html[data-palette="eink"] { color-scheme:dark; }
+html[data-palette="solarized"][data-theme="light"], html[data-palette="eink"] { color-scheme:light; }
+
+/* The legacy page styles contain fixed green panels; these surfaces follow the selected theme. */
+html body > header,
+html #drawer,
+html #detail,
+html #shortcuts { background:var(--panel); color:var(--text); border-color:var(--line); }
+html #drawer :is(input,select,button),
+html #detail :is(input,select,button) { color:var(--text); border-color:var(--line); }
+html #desk #gauges > .gauge { background:var(--panel); }
+html #desk #hero { background:var(--panel); }
+html #desk #daycards > .daycard:first-child { background:var(--panel2); }
+html #hero-live { background:var(--panel2); color:var(--muted); border:1px solid var(--line); }
+html #hero-live.on { color:var(--good); }
+html #data #data-grid > .card,
+html #signals #signals-grid > .card { border-color:var(--line); color:var(--text); }
+html #data #data-grid h2 { color:var(--text); }
+html #lab .radar-heading,
+html #lab .radar-banner { background:var(--panel); color:var(--text); border-color:var(--line); }
+html #lab .radar-banner:not(.has-warnings) strong { background:var(--panel2); color:var(--text); }
+html #desk #hero-alerts[data-state="active"] { background:color-mix(in srgb,var(--warn) 11%,var(--panel)); }
+html body > header .tab.active { background:color-mix(in srgb,var(--accent) 25%,var(--panel)); color:var(--text); }
+html :is(a,button,select,input,summary):focus-visible { outline:3px solid var(--accent); outline-offset:3px; }
+html #drawer .row button.primary { background:var(--accent); color:var(--bg); }
+
+html[data-palette="contrast"] :is(#desk #hero,#desk #gauges > .gauge,#desk #daycards,#data #data-grid > .card,#drawer,#detail) {
+  border-width:2px;
+}

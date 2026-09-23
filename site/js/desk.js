@@ -69,17 +69,6 @@ export function renderHeroAlerts(feats, status = '') {
   text.textContent = status || (feats == null ? 'Waiting for weather alerts' : sorted.length
     ? sorted.map((f) => f.properties?.event || 'Weather alert').join(' · ') : 'No active watches, warnings or advisories');
   heading.append(title, text);
-  const counts = document.createElement('div');
-  counts.className = 'alert-counts';
-  for (const [label, word] of [['Warnings', 'warning'], ['Watches', 'watch'], ['Advisories', 'advisory']]) {
-    const count = sorted.filter((f) => new RegExp(`\\b${word}\\b`, 'i').test(f.properties?.event || '')).length;
-    const pill = document.createElement('span');
-    pill.className = `alert-count ${word}`;
-    const number = document.createElement('b');
-    number.textContent = status || feats == null ? '—' : String(count);
-    pill.append(`${label} `, number);
-    counts.append(pill);
-  }
   const link = document.createElement('button');
   link.type = 'button';
   link.textContent = 'View alerts →';
@@ -92,7 +81,8 @@ export function renderHeroAlerts(feats, status = '') {
     alerts?.setAttribute('tabindex', '-1');
     alerts?.focus({ preventScroll: true });
   };
-  box.append(heading, counts, link);
+  link.hidden = !sorted.length;
+  box.append(heading, link);
 }
 
 export async function refreshDesk() {
@@ -117,7 +107,8 @@ export async function refreshDesk() {
     notify({ title: 'Forecast stale — showing cached copy', body: res.err.message });
   }
   latestForecast = fc;
-  fc._provenance = `${fresh ? '' : 'Cached · '}${hasSource() && !settings().activePlace ? 'Station' : 'Forecast'}`;
+  fc._provenance = `${fresh ? '' : 'Cached · '}${(fc.current_conditions._station || (hasSource() && !settings().stationSource)) && !settings().activePlace
+    ? 'Station where available · forecast otherwise' : 'Forecast estimates · no station connected'}`;
   renderCurrent(fc.current_conditions);
   renderTenDay(fc.forecast.daily);
   if (fresh) stamp('tenday', 300);
@@ -176,6 +167,7 @@ export async function refreshAlerts() {
     const unsupported = /^404\b/.test(error.message);
     const message = unsupported ? 'NWS alerts are available in the United States only' : 'Alert feed unavailable · check official sources';
     renderHeroAlerts(null, message);
+    window.dispatchEvent(new CustomEvent('wd:alerts-error', { detail: message }));
     $('alerts').textContent = unsupported ? `${message}. Worldwide forecasts remain available.`
       : 'Alert feed unavailable. Check official sources for current watches, warnings and advisories.';
     throw error;
@@ -266,12 +258,12 @@ if (location.search.includes('selftest')) {
   renderHeroAlerts([{ properties: { event: 'Heat Advisory', severity: 'Moderate' } },
     { properties: { event: 'Tornado Warning', severity: 'Extreme' } },
     { properties: { event: 'Flood Watch', severity: 'Moderate' } }]);
-  console.assert([...$('hero-alerts').querySelectorAll('.alert-count b')].every(el => el.textContent === '1'), 'desk: counts official alert categories');
+  console.assert($('hero-alerts').textContent.includes('Tornado Warning'), 'desk: active alert is named');
   console.assert($('hero-alerts').dataset.severity === 'Extreme', 'desk: strongest alert sets banner severity');
   renderHeroAlerts([{ properties: { event: '<img src=x onerror=alert(1)> Advisory' } }]);
   console.assert(!$('hero-alerts').querySelector('img'), 'desk: banner treats feed text as text');
   renderHeroAlerts(null, 'Alert feed unavailable');
-  console.assert($('hero-alerts').textContent.includes('unavailable') && $('hero-alerts').querySelector('b').textContent === '—', 'desk: failed feed never reports zero alerts');
+  console.assert($('hero-alerts').textContent.includes('unavailable') && !$('hero-alerts').textContent.includes('No active'), 'desk: failed feed never reports clear');
   renderHeroAlerts([]);
   console.assert(!$('hero-alerts').hidden && $('hero-alerts').dataset.state === 'clear', 'desk: clear banner remains visible');
 }
