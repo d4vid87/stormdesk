@@ -41,10 +41,16 @@ for motion in full lite off; do
     log="$DIR/$motion-$size.log"
     dom="$DIR/$motion-$size.html"
     # A wedged headless Chrome would otherwise hang the whole job until the runner's timeout.
-    timeout 120 "$CHROME" --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
-      --window-size="$size" --virtual-time-budget=15000 \
-      --enable-logging=stderr --screenshot="$OUT/$motion-${size/,/x}.png" \
-      --dump-dom "$url" >"$dom" 2>"$log" || true
+    # Hosted runners occasionally hang before Chrome writes either output. Retry only that
+    # browser-launch failure; a real assertion or unfinished app boot still fails below.
+    for attempt in 1 2; do
+      if timeout 120 "$CHROME" --headless=new --disable-gpu --disable-dev-shm-usage \
+        --no-sandbox --hide-scrollbars --user-data-dir="$DIR/profile-$motion-${size/,/x}-$attempt" \
+        --window-size="$size" --virtual-time-budget=15000 \
+        --enable-logging=stderr --screenshot="$OUT/$motion-${size/,/x}.png" \
+        --dump-dom "$url" >"$dom" 2>"$log"; then break; fi
+      [ "$attempt" = 1 ] && echo "Retrying Chrome capture for $motion $size"
+    done
 
     if grep -q 'Assertion failed' "$log"; then
       echo "FAIL $motion $size — assertion:"; grep 'Assertion failed' "$log" | sort -u; fail=1
