@@ -666,6 +666,7 @@ async function hydrateStation() {
 // station: a console pointed at the wrong address looks identical until the dashboard is empty.
 // Wait for one real number instead, and say what it was.
 async function firstReading(fetcher) {
+  $('wizard-progress').hidden = false;
   const out = $('wiz-first');
   out.className = 'muted';
   out.textContent = 'waiting for the first reading…';
@@ -683,7 +684,7 @@ async function firstReading(fetcher) {
           await api.betterForecast();
           $('wiz-step-forecast').textContent = 'done ✓'; $('wiz-step-forecast').className = 'ok';
           localStorage.setItem('wd.setupComplete', '1');
-          setTimeout(() => { $('wizard').hidden = true; }, 1500);
+          setTimeout(() => { closeWizard(); }, 1500);
         } catch {
           $('wiz-step-forecast').textContent = 'needs attention'; $('wiz-step-forecast').className = 'fail';
           out.textContent += ' · forecast/location could not be verified yet';
@@ -713,9 +714,12 @@ async function wizardFind() {
   try {
     const list = (await api.stations()).stations || [];
     if (!list.length) throw new Error('That token works but reaches no stations.');
-    $('wiz-list').innerHTML = list
-      .map((st, i) => `<button class="place-hit" data-wiz="${i}">${st.name} · ${st.location_item?.[0]?.name || st.station_id}</button>`)
-      .join('');
+    $('wiz-list').replaceChildren(...list.map((st, i) => {
+      const button = document.createElement('button');
+      button.className = 'place-hit'; button.dataset.wiz = i;
+      button.textContent = `${st.name} · ${st.location_item?.[0]?.name || st.station_id}`;
+      return button;
+    }));
     $('wiz-list').querySelectorAll('[data-wiz]').forEach((b) => {
       b.onclick = async () => {
         const st = list[+b.dataset.wiz];
@@ -730,7 +734,7 @@ async function wizardFind() {
       };
     });
   } catch (e) {
-    $('wiz-list').innerHTML = `<div class="fail">${e.message}</div>`;
+    $('wiz-list').textContent = e.message;
   }
 }
 
@@ -740,9 +744,14 @@ async function wizardFind() {
   const sel = $('wiz-source');
   let placeOnly = true;
   sel.innerHTML = $('set-source').innerHTML;
+  sel.options[0].textContent = 'Tempest';
   const target = () => {
     const v = sel.value;
-    $('wiz-wll').hidden = v !== 'wll';
+    $('wiz-station-fields').hidden = placeOnly;
+    $('wiz-tempest-fields').hidden = placeOnly || !!v;
+    $('wiz-location-fields').hidden = !placeOnly && !v;
+    $('wiz-wll').hidden = placeOnly || v !== 'wll';
+    $('wiz-target').hidden = placeOnly;
     $('wiz-target').textContent = ['ecowitt', 'ambient', 'wu', 'rtl433'].includes(v)
       ? `Point the console at ${ingestUrl()}`
       : v ? 'Fill in the address or keys under ⚙ Settings once this is closed.' : '';
@@ -754,9 +763,13 @@ async function wizardFind() {
     $('wiz-place-list').innerHTML = '<div class="muted">looking…</div>';
     try {
       const hits = (await api.geocode(q)).features || [];
-      $('wiz-place-list').innerHTML = hits
-        .map((h, i) => `<button class="place-hit" data-hit="${i}">${api.placeLabel(h.properties)}</button>`)
-        .join('') || '<div class="muted">no matches</div>';
+      $('wiz-place-list').replaceChildren(...hits.map((h, i) => {
+        const button = document.createElement('button');
+        button.className = 'place-hit'; button.dataset.hit = i;
+        button.textContent = api.placeLabel(h.properties);
+        return button;
+      }));
+      if (!hits.length) $('wiz-place-list').textContent = 'No matches. Try a nearby town or postcode.';
       // The wizard box scrolls; results land below the fold and read as "the button did nothing".
       $('wiz-place-list').scrollIntoView({ block: 'nearest' });
       $('wiz-place-list').querySelectorAll('[data-hit]').forEach((b) => {
@@ -766,20 +779,26 @@ async function wizardFind() {
           saveSettings({
             stationSource: placeOnly ? '' : (sel.value || 'ecowitt'), lat, lon,
             stationName: h.properties.city || h.properties.name || q,
-            ...($('wiz-wll-host').value.trim() ? { wllHost: $('wiz-wll-host').value.trim() } : {}),
+            ...(!placeOnly && sel.value === 'wll' && $('wiz-wll-host').value.trim() ? { wllHost: $('wiz-wll-host').value.trim() } : {}),
           });
           if (placeOnly) {
-            localStorage.setItem('wd.setupComplete', '1');
+            $('wizard-progress').hidden = false;
+            $('wiz-first').textContent = 'Loading your local forecast…';
             $('wiz-step-source').textContent = 'done ✓';
             $('wiz-step-reading').textContent = 'not required';
             $('wiz-step-forecast').textContent = 'checking…';
             api.betterForecast().then(() => {
+              localStorage.setItem('wd.setupComplete', '1');
               $('wiz-step-forecast').textContent = 'done ✓';
-              setTimeout(() => { $('wizard').hidden = true; }, 800);
-            }).catch(() => { $('wiz-step-forecast').textContent = 'needs attention'; });
+              $('wiz-first').textContent = 'Your weather is ready.';
+              setTimeout(() => { closeWizard(); }, 800);
+            }).catch(() => {
+              $('wiz-step-forecast').textContent = 'needs attention';
+              $('wiz-first').textContent = 'Your location is saved, but the forecast could not load. Choose the location again to retry, or continue without setup.';
+            });
           }
           fillDrawer();
-          firstReading(async () => (await api.localObs(1)).obs?.at(-1)?.[api.OBS.temp]);
+          if (!placeOnly) firstReading(async () => (await api.localObs(1)).obs?.at(-1)?.[api.OBS.temp]);
           refreshAll();
           for (const el of ['tenday', 'alerts', 'story', 'agree-verdict', 'changes', 'verify']) {
             const node = $(el);
@@ -788,17 +807,29 @@ async function wizardFind() {
         };
       });
     } catch (e) {
-      $('wiz-place-list').innerHTML = `<div class="fail">${e.message}</div>`;
+      $('wiz-place-list').textContent = e.message;
     }
   };
   $('btn-wiz-wll').onclick = () => findWll($('wiz-wll-host'), $('wiz-target'));
   $('btn-wiz-place').onclick = find;
   $('wiz-place').onkeydown = (e) => { if (e.key === 'Enter') find(); };
-  const choosePlace = () => { placeOnly = true; $('wizard').classList.remove('station-mode'); $('wiz-place').focus(); $('wiz-target').textContent = 'Search for the place you want to follow.'; };
-  $('btn-wiz-place-mode').onclick = choosePlace;
-  $('btn-wiz-demo').onclick = choosePlace;
-  $('btn-wiz-station').onclick = () => { placeOnly = false; $('wizard').classList.add('station-mode'); sel.focus(); };
-  $('btn-wiz-host').onclick = () => { $('wizard').hidden = true; markViewer(); $('pair-code').focus(); };
+  const choose = (station) => {
+    placeOnly = !station;
+    $('wizard-choices').hidden = true;
+    $('wizard-setup').hidden = false;
+    $('wiz-setup-title').textContent = station ? 'Bring your weather station' : 'Where’s home?';
+    target();
+    $(station ? 'wiz-source' : 'wiz-place').focus();
+  };
+  $('btn-wiz-place-mode').onclick = () => choose(false);
+  $('btn-wiz-demo').onclick = () => choose(false);
+  $('btn-wiz-station').onclick = () => choose(true);
+  $('btn-wiz-back').onclick = () => {
+    $('wizard-setup').hidden = true;
+    $('wizard-choices').hidden = false;
+    $(placeOnly ? 'btn-wiz-place-mode' : 'btn-wiz-station').focus();
+  };
+  $('btn-wiz-host').onclick = () => { closeWizard(); markViewer(); $('pair-host').focus(); };
   target();
 }
 
@@ -849,7 +880,12 @@ $('btn-ha-test').onclick = async () => {
 
 $('btn-wiz-find').onclick = () => wizardFind();
 $('wiz-token').onkeydown = (e) => { if (e.key === 'Enter') wizardFind(); };
-$('btn-wiz-close').onclick = () => { $('wizard').hidden = true; };
+function closeWizard() {
+  $('wizard').close();
+  $('wizard').hidden = true;
+}
+$('btn-wiz-close').onclick = closeWizard;
+$('wizard').addEventListener('cancel', (event) => { event.preventDefault(); closeWizard(); });
 
 // --- what's new ---
 //
@@ -881,6 +917,20 @@ if (location.search.includes('selftest')) {
   openDrawer(true);
   console.assert(!$('drawer').inert && [...document.querySelectorAll('main > :not(#drawer)')].every((node) => node.inert), 'settings: dialog stays interactive while its background is inert');
   openDrawer(false);
+  const priorSettings = JSON.stringify(settings());
+  $('btn-wiz-place-mode').click();
+  console.assert(!$('wizard-setup').hidden && $('wizard-choices').hidden && $('wiz-station-fields').hidden, 'welcome: location card opens only location setup');
+  $('btn-wiz-back').click();
+  console.assert(!$('wizard-choices').hidden && $('wizard-setup').hidden, 'welcome: back restores all three cards');
+  $('btn-wiz-station').click();
+  console.assert(!$('wiz-station-fields').hidden && !$('wiz-tempest-fields').hidden && $('wiz-location-fields').hidden, 'welcome: Tempest shows its token instead of unrelated brand fields');
+  $('wiz-source').value = 'wll'; $('wiz-source').dispatchEvent(new Event('change'));
+  console.assert(!$('wiz-wll').hidden && !$('wiz-location-fields').hidden && $('wiz-tempest-fields').hidden, 'welcome: Davis shows its address and location without Tempest credentials');
+  $('btn-wiz-demo').click();
+  console.assert($('wiz-wll').hidden && $('wiz-tempest-fields').hidden && !$('wiz-location-fields').hidden, 'welcome: switching to location hides station-only inputs');
+  $('wiz-source').value = ''; $('wiz-source').dispatchEvent(new Event('change'));
+  $('btn-wiz-back').click();
+  console.assert(JSON.stringify(settings()) === priorSettings, 'welcome: navigating setup never saves settings');
 }
 if (shouldRegisterSW()) {
   const updatingShell = !!navigator.serviceWorker.controller;
@@ -1598,7 +1648,8 @@ pulled.then(() => {
 function showWizard() {
 if (!localStorage.getItem('wd.setupComplete') && !hasSource() && !PUBLIC) {
   $('wizard').hidden = false;
-  $('wiz-place').focus();
+  $('wizard').showModal();
+  $('wizard-title').focus();
   // No autofocus on the token field: it put a cursor in a Tempest-only box for people who own
   // an Ambient, and they reported the app as demanding an account they can't have.
   // UDP-only mode: a desktop install with a hub on the LAN has real local data with no token at

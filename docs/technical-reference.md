@@ -26,7 +26,7 @@ The top metric order is **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humid
 
 The right column presents local signals and official alert information alongside sunrise, sunset, and moon details. Device health uses the station and hub information actually available from the connected source; missing telemetry is not presented as a healthy device. Alert coverage follows the official source for the saved location.
 
-Choose a location first to open Weather. A station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
+The welcome screen offers three setup cards: **Find my weather** (town or postcode), **Bring my station** (brand-specific connection), and **Join my home** (connect to an existing Stormdesk host). Choose a location first to open Weather; a station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
 
 Settings now opens to a searchable home with six category cards: Everyday, Appearance, Alerts & sound, My station, Radar, and More tools. Specialist controls expand on demand. Save changes applies form edits; location selection, speech enablement and action buttons apply immediately.
 

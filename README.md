@@ -172,7 +172,11 @@ Classic themes, including light, high contrast, and e-ink options, remain availa
 
 </details>
 
-<details><summary>Settings and phone layouts</summary>
+<details><summary>Welcome, Settings and phone layouts</summary>
+
+![Cards welcome with three clear setup paths](docs/stormdesk-welcome.png)
+
+Start with **Find my weather**, **Bring my station**, or **Join my home**. Location search is the recommended first step; station credentials and connection controls appear only when needed.
 
 ![Settings home with six clear categories](docs/stormdesk-settings.png)
 

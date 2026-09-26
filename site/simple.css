@@ -72,8 +72,6 @@
 #radar-alert-dialog .radar-alert-meta { color:var(--muted); font-size:12px; }
 #radar-alert-dialog button { min-height:42px; padding:8px 18px; border:1px solid var(--line); border-radius:9px; background:var(--panel2); color:var(--text); cursor:pointer; }
 #detail-chart[hidden] { display:none !important; }
-#wizard:not(.station-mode) :is(#wiz-station-intro,#wiz-source,#wiz-wll,#wiz-target,#wiz-tempest-title,#wiz-tempest-intro,#wiz-token-row,#wiz-list,#wiz-token-help,#wiz-first,#btn-wiz-demo) { display:none !important; }
-#wizard .wizard-box { max-width:560px; }
 @media (max-width:1100px) {
   #data #data-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #desk #desk-stack { grid-template-columns:1fr; }

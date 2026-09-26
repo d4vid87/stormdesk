@@ -71,13 +71,6 @@
   body.big-numbers .now-temp { font-size: 88px; }
   body.big-numbers .kv-rows { font-size: 16px; }
   /* Night dim: one overlay, no repaint of anything underneath. */
-  #wizard { position: fixed; inset: 0; z-index: 1001; background: #000a;
-    display: flex; align-items: center; justify-content: center; padding: 16px; }
-  #wizard[hidden] { display: none; }
-  .wizard-box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 20px; width: min(520px, 100%); max-height: 90vh; overflow: auto; }
-  .wizard-box input { width: 100%; padding: 8px; background: var(--bg); color: var(--text);
-    border: 1px solid var(--line); border-radius: 8px; font: inherit; }
   #shortcuts {
     position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px;
@@ -899,6 +892,7 @@
 <link rel="stylesheet" href="simple.css">
 <link rel="stylesheet" href="themes.css?v=dark-collection-20260926">
 <link rel="stylesheet" href="observatory.css?v=20260926">
+<link rel="stylesheet" href="welcome.css?v=cards-20260926">
 </head>
 <body>
 <header>
@@ -929,50 +923,62 @@
 
 <main>
   <div id="notif-stack"></div>
-<div id="wizard" hidden>
+<dialog id="wizard" aria-labelledby="wizard-title" hidden>
   <div class="wizard-box">
-    <img src="stormdesk-icon-512.png?v=20260907" alt="" loading="lazy" style="display:block;width:180px;max-width:60%;margin:0 auto 10px">
-    <h2 style="margin-top:0;text-align:center">Welcome to StormDesk</h2>
-    <p class="muted" style="text-align:center">Find your town or postcode to see your weather. You can connect a station later in Settings.</p>
-    <div class="row" id="wizard-choices"><button id="btn-wiz-place-mode">Choose a location</button><button id="btn-wiz-station">Connect a station</button><button id="btn-wiz-host">Connect to a StormDesk host</button></div>
-    <div id="wizard-progress" class="kv-rows" aria-label="Setup progress" hidden>
-      <div><span>1 · Choose a station</span><span id="wiz-step-source">current</span></div>
-      <div><span>2 · Receive a reading</span><span id="wiz-step-reading">waiting</span></div>
-      <div><span>3 · Verify forecast</span><span id="wiz-step-forecast">waiting</span></div>
+    <div class="wizard-heading">
+      <img src="stormdesk-icon-512.png?v=20260907" alt="Stormdesk logo" width="86" height="86">
+      <h2 id="wizard-title" tabindex="-1">Welcome to StormDesk</h2>
+      <p class="muted">Find your town or postcode to see your weather.<br> You can connect a station later in Settings.</p>
     </div>
-    <p class="muted" id="wiz-station-intro" style="font-size:13px">Pick the brand of station in the garden. Every brand
-      except Tempest needs no token and no account — the readings come from your own sensors, the
-      forecast from open-meteo.</p>
-    <select id="wiz-source"></select>
-    <div class="row" style="margin-top:8px">
-      <input id="wiz-place" placeholder="town or postcode">
-      <button id="btn-wiz-place" style="flex:0 0 auto">Find</button>
+    <div id="wizard-choices">
+      <button class="wizard-card featured" id="btn-wiz-place-mode">
+        <span class="wizard-card-top"><span class="wizard-card-icon" aria-hidden="true">⌕</span><span class="wizard-badge">START HERE</span></span>
+        <strong>Find my weather</strong><span>Start with a town or postcode.<br> No hardware needed.</span>
+        <span class="wizard-card-action">Choose a location <span aria-hidden="true">→</span></span>
+      </button>
+      <button class="wizard-card" id="btn-wiz-station">
+        <span class="wizard-card-icon" aria-hidden="true">⌁</span><span class="wizard-card-tag">HAVE A WEATHER STATION?</span>
+        <strong>Bring my station</strong><span>Connect Tempest or another<br> supported weather station.</span>
+        <span class="wizard-card-action">Choose a station <span aria-hidden="true">→</span></span>
+      </button>
+      <button class="wizard-card" id="btn-wiz-host">
+        <span class="wizard-card-icon" aria-hidden="true">▣</span><span class="wizard-card-tag">ALREADY USING STORMDESK?</span>
+        <strong>Join my home</strong><span>Connect this screen to your<br> existing Stormdesk host.</span>
+        <span class="wizard-card-action">Connect to a host <span aria-hidden="true">→</span></span>
+      </button>
     </div>
-    <div id="wiz-place-list" style="margin-top:8px"></div>
-    <div id="wiz-wll" class="row" style="margin-top:8px" hidden>
-      <input id="wiz-wll-host" placeholder="192.168.1.50">
-      <button id="btn-wiz-wll" style="flex:0 0 auto">Find console</button>
-    </div>
-    <p id="wiz-target" class="muted" style="font-size:12px"></p>
-
-    <h3 id="wiz-tempest-title" style="font-size:13px;margin:16px 0 4px">Tempest owners</h3>
-    <p class="muted" id="wiz-tempest-intro" style="font-size:12px">Paste a personal use token — tempestwx.com &rarr;
-      Settings &rarr; Data Authorizations.</p>
-    <div class="row" id="wiz-token-row">
-      <input id="wiz-token" type="password" placeholder="personal use token">
-      <button class="primary" id="btn-wiz-find" style="flex:0 0 auto">Find stations</button>
-    </div>
-    <div id="wiz-list" style="margin-top:8px"></div>
-    <p class="muted" id="wiz-token-help" style="font-size:12px">No token? The desktop app also reads a Tempest hub
-      directly off the network with none at all.</p>
-
-    <div id="wiz-first" class="muted" style="font-size:12px;margin-top:10px"></div>
-    <div class="row" style="margin-top:10px">
-      <button id="btn-wiz-demo">Weather for a place</button>
-      <button id="btn-wiz-close" style="flex:0 0 auto">Close</button>
-    </div>
+    <section id="wizard-setup" hidden aria-labelledby="wiz-setup-title">
+      <button class="wizard-back" id="btn-wiz-back">← All setup options</button>
+      <h3 id="wiz-setup-title">Where’s home?</h3>
+      <div id="wiz-station-fields" hidden>
+        <label for="wiz-source">Weather station</label><select id="wiz-source"></select>
+        <p class="muted" id="wiz-station-intro">Choose your station brand to see its connection steps.</p>
+      </div>
+      <div id="wiz-location-fields">
+        <label for="wiz-place">Your town or postcode</label>
+        <div class="wizard-search"><input id="wiz-place" placeholder="e.g. Fort Worth or 76102" autocomplete="off"><button class="primary" id="btn-wiz-place">Find weather →</button></div>
+        <div id="wiz-place-list" aria-live="polite"></div>
+      </div>
+      <div id="wiz-wll" hidden><label for="wiz-wll-host">WeatherLink Live address</label><div class="wizard-search"><input id="wiz-wll-host" placeholder="192.168.1.50"><button id="btn-wiz-wll">Find console</button></div></div>
+      <p id="wiz-target" class="muted"></p>
+      <div id="wiz-tempest-fields" hidden>
+        <label for="wiz-token">Tempest personal use token</label>
+        <p class="muted">Create a token at tempestwx.com → Settings → Data Authorizations.</p>
+        <div class="wizard-search"><input id="wiz-token" type="password" placeholder="Paste your token" autocomplete="off"><button class="primary" id="btn-wiz-find">Find stations →</button></div>
+        <div id="wiz-list" aria-live="polite"></div>
+        <p class="muted">No token? The desktop app can read a Tempest hub on the same network.</p>
+        <button id="btn-wiz-demo">Use a location first →</button>
+      </div>
+      <div id="wizard-progress" class="kv-rows" aria-label="Setup progress" aria-live="polite" hidden>
+        <div><span>Location / station</span><span id="wiz-step-source">current</span></div>
+        <div><span>Station reading</span><span id="wiz-step-reading">waiting</span></div>
+        <div><span>Local forecast</span><span id="wiz-step-forecast">waiting</span></div>
+      </div>
+      <p id="wiz-first" class="muted" role="status"></p>
+    </section>
+    <button class="wizard-dismiss" id="btn-wiz-close">Explore without setup →</button>
   </div>
-</div>
+</dialog>
 
 <div id="shortcuts" hidden>
   <h2 style="margin-top:0">Keyboard</h2>
@@ -1705,6 +1711,6 @@
   </aside>
 </main>
 
-<script type="module" src="js/boot.js?v=settings-home-20260926"></script>
+<script type="module" src="js/boot.js?v=welcome-cards-20260926"></script>
 </body>
 </html>
