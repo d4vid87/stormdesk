@@ -5,7 +5,7 @@ Serve the app with `python3 -m http.server 8094 --directory site`, then run
 Playwright and Chromium installed. The script uses CI sample readings in an isolated
 browser and labels its station **DEMO DATA**. HookEcho supplies the radar map.
 
-The capture refreshes OLED Weather, Radar, History, Settings, mobile screens, and all five
+The capture refreshes Graphite Silver Weather, Radar, History, Settings, mobile screens, and all ten dark palettes plus classic
 theme screenshots in `docs/`; animation frames go to ignored `shots/marketing/`.
 Encode the GitHub hero and website tour from those frames:
 
@@ -16,3 +16,5 @@ ffmpeg -y -framerate 2 -i shots/marketing/frame-%03d.png -vf 'scale=1280:-2:flag
 ```
 
 Review the screenshots before publishing. They can show the source interface ahead of a packaged release.
+
+The current browser captures also use `serve-design-preview.py` for isolated, labeled sample data and a recorded HookEcho map. Settings captures include the six-card home, Appearance page, and phone home. The tour includes the new settings views.

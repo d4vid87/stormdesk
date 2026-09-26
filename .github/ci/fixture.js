@@ -45,7 +45,24 @@ const fc = {
 };
 
 addEventListener('load', () => {
-  console.assert(document.querySelector('#settings-basics #btn-voice-test') && document.querySelector('#settings-basics #voice-status'), 'Voice test and status stay beside the speech setting');
+  console.assert(document.querySelector('#settings-alerts #btn-voice-test') && document.querySelector('#settings-alerts #voice-status'), 'Voice test and status stay beside the speech setting');
+  const cards = [...document.querySelectorAll('[data-settings-category]')];
+  console.assert(cards.length === 6, 'Settings home has six categories');
+  const retained = document.getElementById('set-units');
+  const retainedValue = retained.value;
+  cards.forEach(card => {
+    card.click();
+    console.assert(!document.getElementById(`settings-${card.dataset.settingsCategory}`).hidden, 'Each card opens its category');
+    document.getElementById('settings-back').click();
+  });
+  console.assert(retained === document.getElementById('set-units') && retained.value === retainedValue, 'Category navigation preserves original controls and unsaved values');
+  for(const [category,ids] of Object.entries({everyday:['place-q','set-units','set-clock'],appearance:['set-palette','set-font','set-motion'],alerts:['set-speak','set-quiet-start','rule-list'],station:['set-source','set-token','set-device','set-elev','health-center'],radar:['set-desk-radar','set-radar-site'],tools:['set-retention','btn-backup','set-mqtt-url','set-legacy-lan','btn-diag']})) {
+    console.assert(ids.every(id => document.querySelector(`#settings-${category} #${id}`)), `Settings controls assigned: ${category}`);
+  }
+  const settingsSearch = document.getElementById('settings-search');
+  settingsSearch.value = 'backup'; settingsSearch.dispatchEvent(new Event('input'));
+  console.assert(cards.filter(card => !card.hidden).length === 1 && !document.querySelector('[data-settings-category="tools"]').hidden, 'Search finds tools by nested controls');
+  document.getElementById('drawer').dispatchEvent(new Event('settings:home'));
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
   const pressureCard = document.querySelector('[data-panel="g-press"]');

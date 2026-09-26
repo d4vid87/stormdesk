@@ -45,7 +45,7 @@ the setting shows **Natural male voice · local** when ready. The ordinary syste
 on installations without the voice pack. If an installed voice pack fails, the app reports the error
 instead of silently changing back to the robotic voice.
 
-Spoken watches and warnings: open **Settings → Basics → Sounds & notifications**, enable **Read warnings and watches aloud**,
+Spoken watches and warnings: open **Settings → Alerts & sound → Warnings & voice**, enable **Read warnings and watches aloud**,
 then press **Enable / Test voice**. Keep the dashboard open. The status below the button explains
 blocked playback or missing voices; the test does not send push notifications.
 
@@ -101,7 +101,7 @@ download the AppImage and run it with `--browser`.
 
 1. Open StormDesk and search for your town or postcode.
 2. Choose the matching location to see current conditions and the forecast.
-3. If you have a personal station, connect it under **Settings → Basics → Station connection**.
+3. If you have a personal station, connect it under **Settings → My station**.
 
 The top metrics stay in this order: **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity**. Station readings appear where available; forecast estimates and unavailable measurements are labeled. The forecast list shows up to ten days, depending on what the provider supplies.
 
@@ -174,7 +174,13 @@ Classic themes, including light, high contrast, and e-ink options, remain availa
 
 <details><summary>Settings and phone layouts</summary>
 
-![Appearance settings with the theme chooser](docs/stormdesk-settings.png)
+![Settings home with six clear categories](docs/stormdesk-settings.png)
+
+Settings opens to six searchable cards: **Everyday, Appearance, Alerts & sound, My station, Radar, and More tools**. Open a card for focused controls; use **Save changes** to apply form edits. Calibration, reporting, integrations and backups remain available in expandable groups.
+
+![Appearance settings](docs/stormdesk-settings-appearance.png)
+
+![Settings home on a phone](docs/stormdesk-settings-mobile.png)
 
 <img src="docs/stormdesk-dashboard-mobile.png" alt="Weather on a phone" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Radar on a phone" width="280">
 
@@ -197,7 +203,7 @@ Brand-by-brand instructions are in the
 
 ## Need help?
 
-Open **Settings → Advanced → Diagnostics** or the **Health Center**. StormDesk checks your station, forecast,
+Open **Settings → More tools → Troubleshooting → Diagnostics** or the **Health Center**. StormDesk checks your station, forecast,
 alerts, radar, saved history, and other connections. **Copy support report** creates a safe report
 you can paste into a GitHub issue without including passwords, tokens, or your location.
 

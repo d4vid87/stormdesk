@@ -28,23 +28,25 @@ The right column presents local signals and official alert information alongside
 
 Choose a location first to open Weather. A station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
 
+Settings now opens to a searchable home with six category cards: Everyday, Appearance, Alerts & sound, My station, Radar, and More tools. Specialist controls expand on demand. Save changes applies form edits; location selection, speech enablement and action buttons apply immediately.
+
 Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [theme screenshots](../README.md#screenshots).
 
 These screenshots and layout notes describe the current web/source UI. The latest packaged release remains **4.4.0**; an existing downloaded installer may show the earlier interface until a new package is published.
 
-The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Advanced → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
+The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Radar → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 
 The embedded map can be expensive on older WebKit devices. Motion and eco settings reduce activity, and a still preview may appear when the live viewer would overload the screen. The latest NEXRAD frame is normally several minutes behind conditions outside because each volume scan and its delivery take time.
 
 ## Quiet hours and speech
 
-`Settings → Quiet hours` silences the chime and every push channel between two times — Severe and
+`Settings → Alerts & sound → Quiet hours` silences the chime and every push channel between two times — Severe and
 Extreme warnings still come through, because that is what the setting is for. On a kiosk, **Read
 severe alerts aloud** speaks them. On the desktop, an alert raised while the window is hidden
 becomes a real OS notification.
 
 **Tap the hero icon** and the dashboard reads the day out: what it is doing now, the high and low,
-the 24-hour story and whether anything is out. `Settings → Spoken briefing at` schedules the same
+the 24-hour story and whether anything is out. `Settings → Alerts & sound → Warnings & voice → Spoken briefing at` schedules the same
 thing once a day at a fixed time. Browsers refuse to speak before a page has been touched, so a
 briefing on a tablet nobody has touched since boot waits for the first tap.
 
@@ -58,7 +60,7 @@ always shows the address a tablet should open.
 
 ## Alert rules and push
 
-Settings → **Alert rules** builds thresholds on live readings: a metric (temperature, dew point,
+Settings → **Alerts & sound → Custom alert rules** builds thresholds on live readings: a metric (temperature, dew point,
 gust, wind, humidity, rain rate, UV, 3h lightning count, 3h pressure change, the change in
 temperature / pressure / humidity over the last hour, and four straight off the forecast — the low
 over the next 18 hours, the rain chance over the next six, the peak gust over the next day and
@@ -140,7 +142,7 @@ desktop app can take a report from most other consumer stations, convert it once
 drive the whole dashboard from it. Everything downstream (archive, charts, CSV export, MQTT, alert
 rules, CWOP) works the same, and the forecast comes from open-meteo instead of WeatherFlow.
 
-Pick your brand under Settings → **Another brand of station**, and set the station's latitude and
+Pick your brand under Settings → **My station → Station connection**, and set the station's latitude and
 longitude (the first-run wizard's "Not a Tempest?" section does both at once).
 
 **Ecowitt — Wittboy, GW1100 / GW1200 / GW2000 / GW3000.** WSView Plus → your gateway → *Customized*
@@ -210,7 +212,7 @@ StormDesk publishes your station to Home Assistant over MQTT, evaluates your ale
 server-side, and reads Home Assistant entities back onto the dashboard. **Full guide:
 [Home Assistant guide](homeassistant.md).** The short version:
 
-**Publishing.** Settings → **Home Assistant** → point *MQTT broker* at `mqtt://host:1883`
+**Publishing.** Settings → **More tools → Home Assistant & MQTT** → point *MQTT broker* at `mqtt://host:1883`
 (`mqtts://` for TLS) and press **Test both** — it connects for real and waits for the broker to
 acknowledge a message, because a broker that rejects your password accepts the TCP connection
 first. Home Assistant then discovers one device with fifteen sensors under it, plus `feels_like`,
@@ -386,7 +388,7 @@ history runs out. A station that has been up for years gets years of records on 
 and the almanac says how much it has and whether it is still fetching. The walk is resumable — kill
 the app halfway and it picks up from where it stopped.
 
-`Settings → Keep history for` sets how far back the archive goes: forever, which is the default,
+`Settings → More tools → Data & backups → Keep history for` sets how far back the archive goes: forever, which is the default,
 or 1, 2, 5 or 10 years. Anything older is deleted an hour after you save, a week at a time so an
 incoming reading never has to wait for it. There is no undo and most stations have no cloud to
 restore from, so it asks once before shortening the window. The file itself does not shrink — the
@@ -415,7 +417,7 @@ updater have to be reinstalled once from the releases page; settings and history
 
 **Re-uploading to Weather Underground or PWSWeather.** Most consoles hold one upload address, so
 pointing yours at StormDesk takes it off whichever network it was on. Put the station ID and key
-for either service under `Settings → This computer` and the app re-sends each reading once a
+for either service under `Settings → More tools → Server & weather network reporting` and the app re-sends each reading once a
 minute.
 
 **Panels.** Weather gauges are permanently visible in their fixed order. Select a gauge to open its explanation and recent trend.

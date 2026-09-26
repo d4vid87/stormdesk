@@ -307,3 +307,48 @@ main { overflow:clip; min-height:0; }
 #desk-outlook #desk-grid details > summary { display:flex; align-items:center; justify-content:space-between; padding:14px 0; min-height:48px; }
 #desk-outlook #desk-grid details > summary h2 { margin:0; }
 #desk-outlook .timeline-strip .tl-event { padding-top:10px; padding-bottom:10px; }
+
+/* Settings home: six task cards, then one focused page of the existing controls. */
+#drawer { width:100%; border-left:0; padding:28px max(24px,calc((100vw - 1100px)/2)) 0; }
+#drawer > h2 { border-bottom:1px solid var(--line); padding:0 50px 22px 0; margin:0 0 34px; font-size:23px; }
+#drawer .settings-heading { display:flex; align-items:center; justify-content:space-between; gap:32px; margin-bottom:28px; }
+#drawer .settings-eyebrow { color:var(--muted); font-size:10px; letter-spacing:1.5px; }
+#drawer #settings-page-title { font-family:inherit; color:var(--text); font-size:36px; line-height:1.2; font-weight:600; letter-spacing:-1px; margin:12px 0 10px; }
+#drawer #settings-description { color:var(--muted); font-size:13px; margin:0; }
+#drawer .settings-search { width:270px; max-width:100%; margin:0; font-size:11px; }
+#drawer .settings-search input { margin-top:8px; }
+#drawer .settings-status { padding:22px 24px; background:var(--panel); border-radius:9px; }
+#drawer .settings-cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; padding-bottom:30px; }
+#drawer .settings-card { display:flex; flex-direction:column; align-items:flex-start; position:relative; text-align:left; padding:24px; border-radius:10px; background:var(--bg); min-height:200px; }
+#drawer .settings-card:hover { background:var(--panel); border-color:var(--accent); }
+#drawer .settings-card-icon { font:28px Arial,sans-serif; color:var(--accent); margin-bottom:22px; }
+#drawer .settings-card-arrow { position:absolute; top:24px; right:24px; color:var(--muted); }
+#drawer .settings-card strong { font-size:17px; font-weight:600; margin-bottom:6px; }
+#drawer .settings-card > span:not(.settings-card-icon):not(.settings-card-arrow) { color:var(--muted); font-size:12px; }
+#drawer .settings-card small { border-top:1px solid var(--line); padding-top:16px; margin-top:22px; width:100%; font-size:11px; color:var(--muted); }
+#drawer #settings-back { background:transparent; border:0; color:var(--accent); padding-left:0; margin-bottom:20px; }
+#drawer .settings-panel { max-width:780px; padding-bottom:24px; }
+#drawer .settings-group { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:20px 24px; margin:0 0 18px; }
+#drawer details.settings-group > summary { color:var(--text); font-size:14px; cursor:pointer; padding:4px 0; }
+#drawer details.settings-group[open] > summary { margin-bottom:20px; }
+#drawer .settings-group p { line-height:1.7; }
+#drawer .settings-panel .row > input, #drawer .settings-panel .row > select { flex:1 1 140px; min-width:0; }
+#drawer #drawer-actions { grid-template-columns:1fr auto auto; align-items:center; gap:12px; padding:18px 0 calc(18px + env(safe-area-inset-bottom)); }
+#drawer .settings-save-note { color:var(--muted); font-size:11px; max-width:480px; margin:0; }
+#drawer [hidden], #drawer .settings-card[hidden] { display:none!important; }
+#drawer summary:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+@media(max-width:720px) {
+  #drawer { padding:20px 18px 0; }
+  #drawer > h2 { margin-bottom:26px; }
+  #drawer .settings-heading { display:block; }
+  #drawer #settings-page-title { font-size:30px; }
+  #drawer .settings-search { width:100%; margin-top:22px; }
+  #drawer .settings-cards { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+  #drawer .settings-card { padding:18px; min-height:200px; }
+  #drawer .settings-card strong { font-size:15px; }
+  #drawer .settings-card small { font-size:10px; }
+  #drawer .settings-card-arrow { top:18px; right:18px; }
+  #drawer .settings-group { padding:16px; }
+  #drawer #drawer-actions { grid-template-columns:1fr 1fr; }
+  #drawer .settings-save-note { grid-column:1/-1; font-size:10px; }
+}

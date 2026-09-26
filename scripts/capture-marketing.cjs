@@ -15,7 +15,7 @@ const { chromium } = require('playwright');
   const obs = Array.from({length:336},(_,i)=>[now-(335-i)*1800,1,2+Math.sin(i/9),4+Math.abs(Math.sin(i/11))*3,180+Math.sin(i/13)*40,3,1012+Math.sin(i/16)*2,22+Math.sin(i/8)*4,60+Math.sin(i/8)*12,20000,3,350,i%50===0?0.4:0,0,0,0,2.71,1,3]);
   const b=await chromium.launch({executablePath:process.env.CHROME||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
   const context=await b.newContext({viewport:{width:1440,height:960},deviceScaleFactor:1});
-  await context.addInitScript(()=>{if(!localStorage.getItem('wd.settings'))localStorage.setItem('wd.settings',JSON.stringify({token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'North Texas · DEMO DATA',units:'imperial',theme:'dark',palette:'oled',lat:32.75,lon:-97.33,deskRadar:false,nightDim:false,kioskCycleSec:0,eco:'off',nearbyRadius:0,notif:{enabled:false},motion:'lite'}));});
+  await context.addInitScript(()=>{if(!localStorage.getItem('wd.settings'))localStorage.setItem('wd.settings',JSON.stringify({token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'North Texas · DEMO DATA',units:'imperial',theme:'dark',palette:'graphite',lat:32.75,lon:-97.33,deskRadar:true,nightDim:false,kioskCycleSec:0,eco:'off',nearbyRadius:0,notif:{enabled:false},motion:'lite'}));});
   await context.routeWebSocket('wss://ws.weatherflow.com/**',ws=>ws.onMessage(()=>ws.send(JSON.stringify({type:'rapid_wind',ob:[now,3.2,190]}))));
   await context.route('**/*',async route=>{
     const u=new URL(route.request().url());
@@ -40,7 +40,7 @@ const { chromium } = require('playwright');
   for (const file of fs.readdirSync('shots/marketing')) {
     if (/^frame-\d{3}\.png$/.test(file)) fs.unlinkSync(`shots/marketing/${file}`);
   }
-  for (const [name, palette] of [['oled','oled'],['blue',''],['light',''],['contrast','contrast'],['ember','ember']]) {
+  for (const [name, palette] of [...['graphite','violet','carbon','abyss','spruce','oxblood','copper','indigo','petrol','espresso'].map(name=>[name,name]),['oled','oled'],['blue',''],['light',''],['contrast','contrast'],['ember','ember']]) {
     await p.evaluate(({palette,name}) => {
       const s=JSON.parse(localStorage.getItem('wd.settings'));
       s.palette=palette; s.theme=name==='light'?'light':'dark';
@@ -52,7 +52,7 @@ const { chromium } = require('playwright');
   }
   await p.evaluate(() => {
     const s=JSON.parse(localStorage.getItem('wd.settings'));
-    s.palette='oled';s.theme='dark';localStorage.setItem('wd.settings',JSON.stringify(s));
+    s.palette='graphite';s.theme='dark';localStorage.setItem('wd.settings',JSON.stringify(s));
   });
   await p.reload();await p.waitForTimeout(1200);
   await p.screenshot({path:'docs/stormdesk-dashboard.png'});
@@ -73,9 +73,10 @@ const { chromium } = require('playwright');
   await p.screenshot({path:'docs/stormdesk-data.png'});await frames();
   await p.locator('.tab[data-section="desk"]').click();
   await p.locator('#btn-settings').click();
-  await p.locator('[data-settings-tab="appearance"]').click();
   await p.waitForTimeout(350);
   await p.screenshot({path:'docs/stormdesk-settings.png'});await frames(3);
+  await p.locator('[data-settings-category="appearance"]').click();
+  await p.screenshot({path:'docs/stormdesk-settings-appearance.png'});await frames(3);
   await p.locator('.settings-close').click();
   await p.setViewportSize({width:390,height:844});
   for(const [tab,name] of [['desk','dashboard'],['lab','radar']]) {
@@ -83,5 +84,7 @@ const { chromium } = require('playwright');
     await p.waitForTimeout(tab==='lab'?3000:1200);
     await p.screenshot({path:`docs/stormdesk-${name}-mobile.png`});
   }
+  await p.locator('#btn-settings').click();
+  await p.screenshot({path:'docs/stormdesk-settings-mobile.png'});
   await b.close();
 })();

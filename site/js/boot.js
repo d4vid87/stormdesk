@@ -1,3 +1,4 @@
+import { organizeSettings, updateSettingsHome } from './settings-home.js';
 import { safeMode } from './compat.js';
 import { testVoice } from './app.js';
 import './storm-watch.js?v=signal-20260923d';
@@ -185,6 +186,7 @@ export const canIngest = (env = window) => !(env.__TAURI__ && env.__WD_SRV === u
 // of showing them the address instead.
 function showSourceFields() {
   const v = $('set-source').value;
+  if ($('settings-tempest')) $('settings-tempest').hidden = !!v;
   const push = ['ecowitt', 'ambient', 'wu', 'rtl433'].includes(v);
   $('src-push').hidden = !push;
   $('src-wll').hidden = v !== 'wll';
@@ -203,97 +205,9 @@ function elevMetres() {
   return settings().units === 'metric' ? v : v * 0.3048;
 }
 
-function organizeSettings() {
-  const drawer = $('drawer');
-  if (!drawer || $('settings-tabs')) return;
-  const title = drawer.querySelector(':scope > h2');
-  const actions = $('drawer-actions');
-  const existing = [...drawer.children].filter((el) => el !== title && el !== actions);
-  const intro = document.createElement('p');
-  intro.className = 'settings-intro';
-  intro.textContent = 'Make StormDesk feel right for you.';
-  const close = document.createElement('button');
-  close.className = 'settings-close'; close.type = 'button'; close.textContent = '×';
-  close.setAttribute('aria-label', 'Close settings');
-  close.onclick = () => $('btn-close').click();
-  title.append(close);
-  const tabs = document.createElement('div');
-  tabs.id = 'settings-tabs'; tabs.className = 'settings-tabs'; tabs.setAttribute('role', 'tablist');
-  tabs.innerHTML = '<button role="tab" data-settings-tab="basics" class="active">Basics</button>'
-    + '<button role="tab" data-settings-tab="appearance">Appearance</button>'
-    + '<button role="tab" data-settings-tab="advanced">Advanced</button>';
-  const status = document.createElement('div');
-  status.id = 'settings-status'; status.className = 'settings-status';
-  const panels = Object.fromEntries(['basics', 'appearance', 'advanced'].map((name) => {
-    const panel = document.createElement('section');
-    panel.id = `settings-${name}`; panel.className = 'settings-panel';
-    panel.setAttribute('role', 'tabpanel'); panel.hidden = name !== 'basics';
-    return [name, panel];
-  }));
-  panels.advanced.append(...existing);
-  title.after(intro, tabs, status, panels.basics, panels.appearance, panels.advanced);
-  const move = (id, panel) => {
-    const control = $(id); if (!control) return;
-    const wrapped = control.closest('label');
-    if (wrapped && drawer.contains(wrapped)) { panel.append(wrapped); return; }
-    if (control.previousElementSibling?.tagName === 'LABEL') panel.append(control.previousElementSibling);
-    panel.append(control);
-  };
-  ['region-presets', 'set-units', 'set-wind-unit', 'set-clock',
-    'set-storm-auto', 'set-speak', 'set-brief-time', 'set-web-notif']
-    .forEach((id) => move(id, panels.basics));
-  ['set-radar-site', 'set-desk-radar', 'btn-diag'].forEach((id) => move(id, panels.advanced));
-  ['set-palette', 'set-accent', 'set-font', 'set-density', 'set-hero-summary',
-    'set-big-numbers', 'set-eco', 'set-motion', 'set-night-dim'].forEach((id) => move(id, panels.appearance));
-  for (const [name, ids] of [
-    ['Location', ['place-controls', 'place-results', 'places']],
-    ['Station connection', ['set-source', 'set-token', 'set-station', 'src-push', 'src-nopush', 'src-wll', 'src-awn', 'src-lax']],
-    ['Region & units', ['region-presets', 'set-units', 'set-wind-unit', 'set-clock']],
-    ['Weather alerts', ['set-storm-auto']],
-    ['Sounds & notifications', ['set-speak', 'btn-voice-test', 'voice-engine', 'voice-status', 'set-brief-time', 'set-web-notif']],
-  ]) {
-    const group = document.createElement('fieldset');
-    const legend = document.createElement('legend'); legend.textContent = name;
-    group.append(legend); panels.basics.append(group);
-    ids.forEach(id => move(id, group));
-  }
-  drawer.querySelectorAll('label').forEach(label => {
-    const control = label.nextElementSibling;
-    if (!label.querySelector('input, select') && control?.matches('input[id], select[id], textarea[id]')) label.htmlFor = control.id;
-  });
-  tabs.querySelectorAll('button').forEach(button => {
-    const name = button.dataset.settingsTab;
-    button.id = `settings-tab-${name}`;
-    button.setAttribute('aria-controls', panels[name].id);
-    button.setAttribute('aria-selected', String(name === 'basics'));
-    button.tabIndex = name === 'basics' ? 0 : -1;
-    panels[name].setAttribute('aria-labelledby', button.id);
-  });
-  tabs.addEventListener('keydown', event => {
-    const buttons = [...tabs.querySelectorAll('button')];
-    const index = buttons.indexOf(document.activeElement);
-    if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-      : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
-    buttons[next].click(); buttons[next].focus();
-  });
-  tabs.onclick = (event) => {
-    const name = event.target.dataset.settingsTab; if (!name) return;
-    Object.entries(panels).forEach(([key, panel]) => { panel.hidden = key !== name; });
-    tabs.querySelectorAll('button').forEach((button) => {
-      const on = button.dataset.settingsTab === name;
-      button.classList.toggle('active', on); button.setAttribute('aria-selected', String(on)); button.tabIndex = on ? 0 : -1;
-    });
-  };
-}
-
 function fillDrawer() {
   organizeSettings();
   const s = settings();
-  $('settings-status').innerHTML = hasSource()
-    ? '<strong>Station configured</strong><small>Change your location or connection below.</small>'
-    : '<strong>Weather for your location</strong><small>Connect a station here whenever you are ready.</small>';
   $('set-token').value = s.token;
   $('set-station').value = s.stationId;
   $('set-device').value = s.deviceId;
@@ -354,6 +268,7 @@ function fillDrawer() {
   $('set-lax-pass').value = s.lacrossePass || '';
   $('set-ingest-key').value = s.ingestKey || '';
   showSourceFields();
+  updateSettingsHome(s, hasSource());
   $('set-ntfy-topic').value = s.ntfyTopic || '';
   $('set-ntfy-url').value = s.ntfyUrl || '';
   $('set-webhook').value = s.webhookUrl || '';
@@ -564,7 +479,7 @@ document.addEventListener('keydown', (e) => {
   const drawer = $('drawer');
   if (e.key === 'Escape' && drawer.classList.contains('open')) openDrawer(false);
   if (e.key === 'Tab' && drawer.classList.contains('open')) {
-    const focusable = [...drawer.querySelectorAll('button,input,select,textarea,a[href]')]
+    const focusable = [...drawer.querySelectorAll('button,input,select,textarea,summary,a[href]')]
       .filter((x) => !x.disabled && !x.hidden && x.offsetParent !== null);
     const first = focusable[0], last = focusable.at(-1);
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
@@ -1711,7 +1626,7 @@ if (location.search.includes('selftest')) {
     console.assert(menuStyle.top === 'auto' && menuStyle.bottom !== 'auto', 'phone overflow opens upward');
     console.assert(getComputedStyle(document.querySelector('header')).zIndex !== 'auto', 'phone header overlays content');
   }
-  console.assert($('settings-basics')?.children.length > 0, 'settings: basics populated');
+  console.assert($('settings-everyday')?.children.length > 0, 'settings: everyday populated');
   console.assert($('settings-appearance')?.children.length > 0, 'settings: appearance populated');
   const beforePreset = snapshot();
   openDrawer(true); applyPreset('Kitchen portrait');
