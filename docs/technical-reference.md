@@ -18,7 +18,7 @@ If StormDesk is useful to you, please [give the project a star](https://github.c
 
 ## The three destinations
 
-- **Weather** uses the Observatory layout: seven top metrics, compact current conditions and a forecast list on the left, HookEcho radar in the center, and local signals, alerts, astronomy, and device health on the right. The list shows up to ten forecast days; providers may supply fewer. A live local clock and a banner for nearby official warnings and emergencies sit in the header. **More weather details & analysis** retains the timeline, additional charts, and advanced tools.
+- **Weather** uses the Observatory layout: seven top metrics, compact current conditions and a forecast list on the left, HookEcho radar in the center (enabled by default for new screens; saved on/off choices are preserved), and local signals, alerts, astronomy, and device health on the right. The list shows up to ten forecast days; providers may supply fewer. A live local clock and a banner for nearby official warnings and emergencies sit in the header. **More weather details & analysis** retains the timeline, additional charts, and advanced tools.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 

@@ -31,8 +31,7 @@ const DEFAULTS = {
   // '' = whichever radar site is nearest the station. The camera itself lives in `wd.radar`,
   // written once a second by the embedded viewer — not here, where it would re-init the app.
   radarSite: '',
-  // The inline viewer on the Desk. Heaviest thing the page loads, and on Linux it shares one
-  // WebKit process with the whole Desk — see FIRST_RUN below.
+  // Show HookEcho in the Weather workspace by default; each screen can turn it off.
   deskRadar: true,
   // Bring the radar back on screen by itself when NWS has something serious out.
   stormAuto: true,
@@ -103,11 +102,9 @@ const DEFAULTS = {
   legacyLanAccess: false,
 };
 
-// A fresh install starts with the Desk radar off: it is megabytes of wasm in the same WebKit
-// process as everything else, and on a weak Linux box loading it is what made the app look hung.
-// Turn it on in Settings. An install that already has settings keeps the radar it has been showing.
+// New installations use the defaults; existing screens keep their saved choices.
 const FIRST_RUN = localStorage.getItem('wd.settings') == null;
-let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'graphite' : '', deskRadar: !FIRST_RUN });
+let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'graphite' : '' });
 
 // Presentation belongs to the screen in front of the user; station and alert behavior belongs
 // to the household host. Existing installs already have these values locally, so this is also
