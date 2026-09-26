@@ -13,7 +13,7 @@ export function initObservatory() {
   desk.insertBefore(head, stack);
   const grid = document.createElement('div');
   grid.id = 'observatory-grid';
-  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar"><div class="observatory-radar-heading"><span>LOCAL RADAR · HOOKECHO</span><h2>See what’s moving.</h2><button type="button" data-view="lab">Open live radar ↗</button></div><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
+  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar" aria-label="Local HookEcho radar"><div class="observatory-radar-heading"><span>LOCAL RADAR · HOOKECHO</span></div><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
   stack.prepend(grid);
   const left = $('observatory-left');
   left.append($('hero'));
@@ -52,10 +52,6 @@ export function initObservatory() {
   label.className = 'observatory-current-label';
   label.textContent = 'CURRENT CONDITIONS';
   $('hero').prepend(label);
-  desk.addEventListener('click', e => {
-    const view = e.target.closest('[data-view]')?.dataset.view;
-    if (view === 'lab') document.querySelector('.tab[data-section="lab"]').click();
-  });
   const dialog = document.createElement('dialog');
   dialog.id = 'forecast-dialog';
   dialog.setAttribute('aria-labelledby', 'forecast-dialog-title');

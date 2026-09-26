@@ -67,8 +67,6 @@ html header .tab { border-radius:8px; font-size:13px; }
 #desk #observatory-radar { position:relative; overflow:hidden; min-height:650px; border:1px solid var(--line); border-radius:8px; background:#091821; }
 #desk .observatory-radar-heading { position:absolute; left:18px; top:18px; z-index:3; color:#f3f7fa; pointer-events:none; text-shadow:0 1px 6px #000; }
 #desk .observatory-radar-heading > span { font-size:9px; letter-spacing:1.2px; }
-#desk .observatory-radar-heading h2 { font:25px var(--num); margin:10px 0; }
-#desk .observatory-radar-heading button { pointer-events:auto; min-height:32px; font-size:11px; background:#eef3f5; color:#102235; }
 #desk #desk-radar { position:absolute; inset:0; width:100%; height:100%; min-height:0; max-height:none; border:0; border-radius:0; }
 #desk #desk-radar[hidden] { display:none!important; }
 #desk #desk-radar-frame,#desk #desk-radar-still { width:100%; height:100%; object-fit:cover; }
@@ -121,7 +119,6 @@ html header .tab { border-radius:8px; font-size:13px; }
 #desk #daycards > .daycard { background:transparent; box-shadow:none; }
 #desk #daycards > .daycard:hover { background:var(--panel2); }
 #desk #observatory-radar #desk-radar-still { object-fit:cover; max-width:none; }
-#desk .observatory-radar-heading button { border-radius:6px; border:0; padding:9px 12px; }
 #desk #desk-radar:not([hidden]) ~ .observatory-radar-off { display:none; }
 #desk #observatory-radar:has(#desk-radar:not([hidden])) .observatory-radar-off { display:none; }
 #desk #desk-radar-frame, #desk #observatory-radar #desk-radar-still { position:absolute; inset:0; width:100%; height:100%; }
