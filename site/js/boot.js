@@ -968,7 +968,11 @@ if (location.search.includes('selftest')) {
   openDrawer(false);
 }
 if (shouldRegisterSW()) {
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
+  const updatingShell = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updatingShell) location.reload();
+  }, { once: true });
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-observatory-20260926`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about

@@ -29,7 +29,9 @@ self.addEventListener('fetch', (e) => {
     const hit = await caches.match(req);
     if (cacheFirst && hit) return hit;
     try {
-      const res = await fetch(req);
+      // Revalidate the HTTP cache too: a fresh browser cache entry can otherwise
+      // keep old modules alive even though this worker is network-first.
+      const res = await fetch(req, { cache: 'no-cache' });
       if (res.ok) (await caches.open(CACHE)).put(req, res.clone());
       return res;
     } catch (err) {
