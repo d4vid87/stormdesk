@@ -321,16 +321,16 @@ function setArc(el, lo, hi) {
   el.setAttribute('stroke-dashoffset', `${(-start * ARC_C).toFixed(1)}`);
 }
 
-// Six shells, built once. Rebuilding them every render threw away the panel grips (see the
+// Up to ten forecast rows, built once. Rebuilding them every render threw away the panel grips (see the
 // initLayout() call in renderPro), restarted every icon animation, and made the numbers
 // un-tweenable.
 function renderDays(fc) {
-  const days = fc.forecast.daily.slice(0, 6);
+  const days = fc.forecast.daily.slice(0, 10);
   const labels = ['Today', 'Tomorrow'];
   const wrap = $('daycards');
   const built = wrap.children.length !== days.length;
   if (built) {
-    wrap.innerHTML = days.map((_, i) => `<div class="daycard" data-panel="day-${i}">
+    wrap.innerHTML = days.map((_, i) => `<button type="button" class="daycard" data-panel="day-${i}">
       <div class="dc-head"><span class="dc-name"></span><span class="dc-date"></span></div>
       <div class="dc-body">
         ${tempArc()}
@@ -341,7 +341,7 @@ function renderDays(fc) {
           <div class="dc-pop"></div>
         </div>
       </div>
-    </div>`).join('');
+    </button>`).join('');
   }
   days.forEach((d, i) => {
     const card = wrap.children[i];

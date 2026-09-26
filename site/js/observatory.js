@@ -1,0 +1,92 @@
+// Reuse the live cards and their listeners; only their placement changes.
+import { settings, num, U, deg2compass, msToWind } from './app.js';
+const $ = id => document.getElementById(id);
+export function initObservatory() {
+  if ($('observatory-grid')) return;
+  const desk = $('desk'), stack = $('desk-stack');
+  const head = document.createElement('div');
+  head.id = 'observatory-heading';
+  head.innerHTML = '<div class="observatory-place"></div><div class="observatory-clock"><span>LOCAL TIME</span></div>';
+  head.firstElementChild.append($('hero-place'), $('clock-date'));
+  head.lastElementChild.append($('hero-clock'));
+  head.append($('hero-alerts'));
+  desk.insertBefore(head, stack);
+  const grid = document.createElement('div');
+  grid.id = 'observatory-grid';
+  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar"><div class="observatory-radar-heading"><span>LOCAL RADAR · HOOKECHO</span><h2>See what’s moving.</h2><button type="button" data-view="lab">Open live radar ↗</button></div><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
+  stack.prepend(grid);
+  const left = $('observatory-left');
+  left.append($('hero'));
+  const forecast = document.createElement('section');
+  forecast.id = 'observatory-forecast';
+  forecast.innerHTML = '<h2>10-day forecast</h2><p class="observatory-note" id="forecast-coverage">Waiting for forecast</p>';
+  forecast.append($('daycards'));
+  left.append(forecast);
+  $('observatory-radar').append($('desk-radar'));
+  const signals = $('observatory-signals');
+  const alerts = document.querySelector('[data-panel="alerts"]');
+  alerts.open = true;
+  signals.insertBefore(alerts, $('observatory-local'));
+  for (const id of ['severe','winter','tropical','aqi','sky','health']) signals.append(document.querySelector(`[data-panel="${id}"]`));
+  const sky = $('sky').parentElement;
+  sky.querySelector('h2').textContent = 'Astronomy';
+  const moon = document.createElement('div');
+  moon.className = 'observatory-moon';
+  moon.append($('hero-moon'), $('hero-moonset'));
+  sky.append(moon);
+  const health = $('health').parentElement;
+  health.querySelector('h2').textContent = 'Device health';
+  const state = document.createElement('div');
+  state.className = 'observatory-note';
+  state.append($('hero-live'), $('hero-batt'));
+  health.insertBefore(state, $('health'));
+  // Keep advanced tools reachable without occupying the main weather workspace.
+  const extra = document.createElement('details');
+  extra.id = 'observatory-more';
+  extra.innerHTML = '<summary>More weather details &amp; analysis</summary><div class="observatory-extra-readings"></div>';
+  for (const id of ['g-dew','g-wet']) extra.lastElementChild.append(document.querySelector(`[data-panel="${id}"]`));
+  extra.append($('desk-outlook'), $('ticker'), $('ha-panel'));
+  stack.append(extra);
+  desk.insertBefore($('gauges'), stack);
+  const label = document.createElement('span');
+  label.className = 'observatory-current-label';
+  label.textContent = 'CURRENT CONDITIONS';
+  $('hero').prepend(label);
+  desk.addEventListener('click', e => {
+    const view = e.target.closest('[data-view]')?.dataset.view;
+    if (view === 'lab') document.querySelector('.tab[data-section="lab"]').click();
+  });
+  const dialog = document.createElement('dialog');
+  dialog.id = 'forecast-dialog';
+  dialog.setAttribute('aria-labelledby', 'forecast-dialog-title');
+  dialog.innerHTML = '<h2 id="forecast-dialog-title"></h2><p></p><form method="dialog"><button>Close</button></form>';
+  document.body.append(dialog);
+  $('daycards').addEventListener('click', e => {
+    const card = e.target.closest('.daycard');
+    if (!card) return;
+    dialog.querySelector('h2').textContent = `${card.querySelector('.dc-name').textContent} · ${card.querySelector('.dc-date').textContent}`;
+    dialog.querySelector('p').textContent = `${card.querySelector('.dc-cond').textContent}. High / low: ${card.querySelector('.dc-temp').textContent}. Rain chance: ${card.querySelector('.dc-pop').textContent}.`;
+    dialog.showModal();
+  });
+  const render = e => {
+    const fc = e.detail, c = fc?.current_conditions;
+    if (!c) return;
+    if (fc.forecast) $('forecast-coverage').textContent = `${Math.min(10, fc.forecast?.daily?.length || 0)} days available · select a day for details`;
+    const strikes = c.lightning_strike_count_last_3hr;
+    const rows = [
+      ['ϟ Lightning', strikes == null ? 'Reading unavailable' : strikes === 0 ? `No strikes · ${fc.local ? 'last report' : 'last 3h'}` : `${num(strikes)} strikes · ${fc.local ? 'last report' : 'last 3h'}`],
+      ['↗ Wind', c.wind_avg == null ? 'Reading unavailable' : `${num(c.wind_avg)} ${U.wind()} ${c.wind_direction == null ? '' : deg2compass(c.wind_direction)} · gusts ${num(c.wind_gust)}`],
+    ];
+    $('observatory-local').replaceChildren(...rows.map(([name,value])=>{
+      const row=document.createElement('div'),a=document.createElement('span'),b=document.createElement('span');
+      a.textContent=name;b.textContent=value;row.append(a,b);return row;
+    }));
+    $('hero-place').textContent = settings().stationName || 'Your location';
+  };
+  window.addEventListener('wd:forecast', render);
+  window.addEventListener('wd:current', render);
+  window.addEventListener('wd:ws-obs', e => {
+    const o = e.detail;
+    render({detail:{local:true,current_conditions:{wind_avg:msToWind(o[2]),wind_gust:msToWind(o[3]),wind_direction:o[4],lightning_strike_count_last_3hr:o[15]}}});
+  });
+}

@@ -64,3 +64,55 @@ html #drawer .row button.primary { background:var(--accent); color:var(--bg); }
 html[data-palette="contrast"] :is(#desk #hero,#desk #gauges > .gauge,#desk #daycards,#data #data-grid > .card,#drawer,#detail) {
   border-width:2px;
 }
+
+/* Observatory dark collection. Graphite Silver is the fresh-install default. */
+html[data-theme][data-palette="graphite"]:is(:root) {
+  --bg:#121416; --panel:#23272b; --text:#f2f4f5; --muted:#b1b8bf; --accent:#d9e1e8; --line:#41484e; --panel2:#363e45;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="violet"]:is(:root) {
+  --bg:#13121e; --panel:#201e31; --text:#eeecfb; --muted:#b6aecb; --accent:#b8a4fc; --line:#3f3856; --panel2:#39334f;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="carbon"]:is(:root) {
+  --bg:#101210; --panel:#1b201a; --text:#f0f4e9; --muted:#aebaa5; --accent:#c5ed87; --line:#374231; --panel2:#303e24;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="abyss"]:is(:root) {
+  --bg:#081923; --panel:#102b39; --text:#e8f5fc; --muted:#a0becc; --accent:#6edcf4; --line:#294b5c; --panel2:#1d4254;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="spruce"]:is(:root) {
+  --bg:#0c1c18; --panel:#173128; --text:#edf6ee; --muted:#a9c6b5; --accent:#8edbb3; --line:#365343; --panel2:#294b3b;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="oxblood"]:is(:root) {
+  --bg:#201016; --panel:#351f2a; --text:#fff0f3; --muted:#cfabb8; --accent:#f3a6c3; --line:#5a3848; --panel2:#4b2c3b;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="copper"]:is(:root) {
+  --bg:#211812; --panel:#34271f; --text:#fff2e5; --muted:#cdb49f; --accent:#f1ac7b; --line:#564436; --panel2:#493529;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="indigo"]:is(:root) {
+  --bg:#10142b; --panel:#20294a; --text:#eef1ff; --muted:#aebadc; --accent:#9cb6ff; --line:#3e4d78; --panel2:#303e68;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="petrol"]:is(:root) {
+  --bg:#0b2022; --panel:#17383a; --text:#ecf6ec; --muted:#abc7c2; --accent:#e2e98a; --line:#365758; --panel2:#304c45;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}
+html[data-theme][data-palette="espresso"]:is(:root) {
+  --bg:#1c1710; --panel:#30291e; --text:#fbf4e4; --muted:#c9bba1; --accent:#e5c67d; --line:#514734; --panel2:#443923;
+  --good:#a7d6bd; --warn:#ffc66d; --bad:#ff8e87;
+  color-scheme:dark;
+}

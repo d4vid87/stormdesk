@@ -59,6 +59,9 @@ for motion in full lite off; do
       echo "FAIL $motion $size — boot never finished (module error?):"
       grep -iE 'error|SyntaxError' "$log" | head -5; fail=1
     fi
+    if ! grep -q 'data-fixture="ok"' "$dom"; then
+      echo "FAIL $motion $size — fixture checks did not finish"; fail=1
+    fi
     # Animated icons are the whole point of Full and the whole cost of Lite.
     want=$([ "$motion" = full ] && echo icons/anim/ || echo icons/static/)
     grep -q "$want" "$dom" || { echo "FAIL $motion $size — expected $want in the DOM"; fail=1; }

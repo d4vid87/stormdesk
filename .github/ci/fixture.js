@@ -48,25 +48,19 @@ addEventListener('load', () => {
   console.assert(document.querySelector('#settings-basics #btn-voice-test') && document.querySelector('#settings-basics #voice-status'), 'Voice test and status stay beside the speech setting');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
-  const details = document.getElementById('desk-details');
   const pressureCard = document.querySelector('[data-panel="g-press"]');
-  console.assert(getComputedStyle(pressureCard).display !== 'none', 'Midnight shows pressure in the six-gauge overview');
+  console.assert(getComputedStyle(pressureCard).display !== 'none', 'Observatory shows pressure in the seven-reading rail');
   const gauges = [...document.querySelectorAll('#gauges > .gauge')].filter(el => getComputedStyle(el).display !== 'none');
-  console.assert(gauges.length === 6, 'Midnight overview has exactly six gauges');
+  console.assert(gauges.length === 7, 'Observatory overview has exactly seven readings');
   console.assert(document.querySelector('#g-wet svg') && document.querySelector('#g-ltg svg'), 'Wet bulb and lightning have instrument faces');
-  console.assert(document.getElementById('hero-alerts').parentElement.id === 'desk', 'Alert banner precedes the whole dashboard');
-  console.assert(/\d+:\d{2}:\d{2}/.test(document.getElementById('clock-time').textContent), 'Bold clock includes seconds');
-  details.click();
-  console.assert(details.getAttribute('aria-expanded') === 'true' && getComputedStyle(pressureCard).display !== 'none', 'Desk expands secondary readings');
-  details.click();
-  console.assert(details.getAttribute('aria-expanded') === 'false', 'Desk returns to overview');
-  const watch = (id) => document.getElementById(`watch-${id}`);
-  console.assert(watch('temp').textContent === '72°F', 'Storm watch temperature and units');
-  console.assert(watch('hours').children.length === 6, 'Storm watch next six hours');
-  console.assert(watch('lightning').textContent === 'No strikes detected', 'Storm watch reported zero strikes');
+  console.assert(document.getElementById('hero-alerts').parentElement.id === 'observatory-heading', 'Alert banner sits beside the clock');
+  console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');
+  console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'All ten available days render');
+  document.querySelector('#daycards > .daycard').click();
+  console.assert(document.getElementById('forecast-dialog').open, 'Forecast day opens accessible details');
+  document.getElementById('forecast-dialog').close();
+  console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety cards stay outside collapsed analysis');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
-  console.assert(watch('temp').textContent === '--°F', 'Storm watch missing temperature');
-  console.assert(watch('lightning').textContent === 'Lightning data unavailable', 'Storm watch missing lightning');
   console.assert(document.querySelector('#g-ltg').textContent.includes('unavailable'), 'Missing lightning is unavailable, not no strikes');
   console.assert(document.querySelector('#g-wet').dataset.unavailable === 'true', 'Missing wet bulb hides its needle');
   console.assert(document.querySelector('#g-rain').dataset.unavailable === 'true', 'Missing rain is not dry');
@@ -74,10 +68,7 @@ addEventListener('load', () => {
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [{ properties: {
     event: '<b>Test advisory</b>', severity: 'Severe', description: '<img src=x onerror=alert(1)>',
   } }] }));
-  console.assert(watch('alerts').querySelector('h3').textContent === '<b>Test advisory</b>' && !watch('alerts').querySelector('img'), 'Storm watch treats alert text as text');
-  console.assert(!!watch('alerts').querySelector('.severe details'), 'Storm watch severe alert details');
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [] }));
-  console.assert(watch('alerts').textContent === 'No active weather alerts', 'Storm watch clears expired alerts');
   // api.OBS order: time, temp, rh, press, ... — index by name off the module the page already
   // loaded rather than hard-coding a shape that moves.
   import('./js/api.js').then(({ OBS }) => {
@@ -86,5 +77,7 @@ addEventListener('load', () => {
     o[OBS.windAvg] = 3.2; o[OBS.windGust] = 6.5; o[OBS.windDir] = 190;
     o[OBS.uv] = 4; o[OBS.solar] = 520; o[OBS.dayRain] = 3; o[OBS.battery] = 2.71;
     dispatchEvent(new CustomEvent('wd:ws-obs', { detail: o }));
+    console.assert(document.getElementById('observatory-local').textContent.includes('gusts'), 'Local signals refresh with station observations');
+    document.documentElement.dataset.fixture = 'ok';
   });
 });

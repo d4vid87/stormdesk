@@ -12,21 +12,25 @@ If StormDesk is useful to you, please [give the project a star](https://github.c
 
 ![StormDesk Weather, Radar, History, and Appearance with labeled demo data](stormdesk-hero.gif)
 
-![The default OLED black Weather page with nine fixed gauges](stormdesk-dashboard.png)
+![The Graphite Silver Observatory dashboard with forecast, HookEcho radar, and local context](stormdesk-dashboard.png)
 
 ![StormDesk Radar using HookEcho with live reflectivity and an official warning banner](stormdesk-radar.png)
 
 ## The three destinations
 
-- **Weather** opens with current conditions, alerts, nine fixed gauges, all six forecast days, a 48-hour rain chance outlook, and a short “What happens next” summary. Timeline and Local Signals remain available from this page when deeper context helps.
+- **Weather** uses the Observatory layout: seven top metrics, compact current conditions and a forecast list on the left, HookEcho radar in the center, and local signals, alerts, astronomy, and device health on the right. The list shows up to ten forecast days; providers may supply fewer. A live local clock and a banner for nearby official warnings and emergencies sit in the header. **More weather details & analysis** retains the timeline, additional charts, and advanced tools.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 
-The gauge order is Rain, Lightning, Wind; WBGT, Humidity, UV; Pressure, Dew Point, Wet Bulb. Layout editing is retired. Existing installations retain their saved layout data, but the visible arrangement is fixed and scales with the screen width.
+The top metric order is **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity**. Layout editing is retired. Existing installations retain their saved settings and layout data; the visible arrangement adapts to the screen width. Additional measurements remain available in weather details and History.
+
+The right column presents local signals and official alert information alongside sunrise, sunset, and moon details. Device health uses the station and hub information actually available from the connected source; missing telemetry is not presented as a healthy device. Alert coverage follows the official source for the saved location.
 
 Choose a location first to open Weather. A station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
 
-Settings → Appearance → Theme offers OLED black (the new-install default), blue, light, high contrast, and orange & red. Solarized and e-ink remain available in the extended list. Each screen keeps its own appearance choice.
+Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [theme screenshots](../README.md#screenshots).
+
+These screenshots and layout notes describe the current web/source UI. The latest packaged release remains **4.4.0**; an existing downloaded installer may show the earlier interface until a new package is published.
 
 The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Advanced → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 
@@ -47,7 +51,7 @@ briefing on a tablet nobody has touched since boot waits for the first tap.
 `Settings → Dim the screen overnight` fades a wall panel down over the hour after sunset and back
 up over the hour before sunrise, using the station's own sun times.
 
-The nine Weather gauges cannot be moved, resized, or hidden. Appearance changes their colors without changing their order.
+The seven top Weather metrics keep their order. Appearance changes their colors without changing the layout.
 
 `Settings → LAN dashboard port` moves the server off 8088 (restart to apply); the window title
 always shows the address a tablet should open.
@@ -105,7 +109,7 @@ reload during an outage still renders something.
 
 ## Fixed gauge arrangement
 
-The Weather gauges are loaded automatically and stay in their protected order across mouse, touch, keyboard, reload, and restart. Earlier saved layouts remain in storage for existing installations, but no longer change the visible gauge arrangement. Desktop and tablet widths scale the same nine gauges without a separate editing mode.
+The seven top Weather metrics load automatically in the same order across mouse, touch, keyboard, reload, and restart. Earlier saved layouts remain in storage for existing installations, but no longer change the visible arrangement. Desktop, tablet, and phone layouts adapt without a separate editing mode. Additional charts and tools remain under **More weather details & analysis**.
 
 ## Tests
 

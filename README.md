@@ -2,19 +2,19 @@
 
 # StormDesk
 
-**Your weather, at a glance.** StormDesk opens in OLED black with current conditions, nine fixed gauges, a six-day forecast, and a short “What happens next” summary. The gauges stay in their familiar order on desktop and tablet, so there is no layout to arrange or accidentally disturb.
+**Your weather, at a glance.** StormDesk’s Observatory dashboard opens in Graphite Silver, with a compact current-conditions card, a forecast list showing up to ten days, and HookEcho radar at the center. Local signals, alerts, astronomy, and device health share the right column. A live clock and nearby official warnings sit above the weather.
 
 Choose a location to start. A personal weather station is optional; readings that are unavailable stay visible and clearly labeled. StormDesk supports Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse, and other compatible sources.
 
 The navigation has three destinations: **Weather**, **Radar**, and **History**. Radar gives HookEcho’s map the screen, with official warnings and emergencies along the bottom. History begins with clear temperature, rain, wind, and pressure snapshots and opens detailed charts on demand.
 
-Choose **Settings → Appearance → Theme** to switch between OLED black, blue, light, high contrast, and orange & red. Each screen remembers its choice. No StormDesk account, subscription, or ads.
+New installs open in **Graphite Silver**. Choose **Settings → Appearance → Theme** for all ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, and existing saved choices are preserved. Each screen remembers its choice. No StormDesk account, subscription, or ads.
 
 [Try StormDesk](https://app.mystormdesk.com/) · [Download](https://github.com/d4vid87/stormdesk/releases/latest) · [Website](https://mystormdesk.com/) · [Get help](https://github.com/d4vid87/stormdesk/issues)
 
-![A demo-data tour of StormDesk Weather, Radar, History, and the OLED appearance settings](docs/stormdesk-hero.gif)
+![A demo-data tour of StormDesk’s Observatory dashboard, HookEcho radar, History, and theme settings](docs/stormdesk-hero.gif)
 
-The interface images show the current source with labeled demo station data. HookEcho supplies the radar map. Published installers may trail the browser build.
+The interface images show the current web/source design with labeled demo station data. HookEcho supplies the radar map. The latest packaged release is **4.4.0**; these interface changes do not imply a new installer release. Downloaded binaries may show the earlier design until a new package is published.
 
 Stormdesk Lite remains available as a lighter browser interface for older devices: [open Lite](https://app.mystormdesk.com/lite/) or read its [design specification](design/stormdesk-lite/SPECIFICATION.md).
 
@@ -103,8 +103,7 @@ download the AppImage and run it with `--browser`.
 2. Choose the matching location to see current conditions and the forecast.
 3. If you have a personal station, connect it under **Settings → Basics → Station connection**.
 
-The nine gauges are preloaded in a fixed arrangement. Station readings appear where available;
-forecast estimates fill the remaining weather information.
+The top metrics stay in this order: **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity**. Station readings appear where available; forecast estimates and unavailable measurements are labeled. The forecast list shows up to ten days, depending on what the provider supplies.
 
 Tempest owners need a personal-use token from **tempestwx.com → Settings → Data Authorizations**.
 StormDesk can find the stations connected to that token, so you do not need to hunt for sensor
@@ -125,16 +124,17 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 
 ## What you get
 
-- **Weather** — current conditions, nine fixed gauges, the forecast, and what happens next.
+- **Weather** — seven top metrics, compact current conditions, up to ten forecast days, and central HookEcho radar.
+- **Local context** — nearby official alerts, local signals, sunrise and sunset, moon details, and device health when the source provides it.
 - **Radar** — live HookEcho radar with warnings and playback.
 - **History** — charts, records, model comparisons, rain totals, and your weather archive.
-- **More weather detail** — the full timeline and local signals remain accessible from Weather.
+- **More weather details & analysis** — additional charts, the timeline, and advanced weather tools remain accessible from Weather.
 - **Alerts** — built-in warnings plus your own rules for wind, rain, heat, cold, and more.
 - **Backup** — one complete backup file for your settings and weather history.
 
 ## On smaller screens
 
-The same Weather and Radar pages adapt to phone-sized screens. The desktop and tablet gauge arrangement remains fixed; on a phone the gauges keep their order and flow down the page.
+The same Weather and Radar pages adapt to phone-sized screens. The top metrics keep their order while the forecast, radar, and local context stack to fit the display.
 
 <img src="docs/stormdesk-dashboard-mobile.png" alt="Weather on a phone-sized screen" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Radar on a phone-sized screen" width="280">
 
@@ -142,19 +142,33 @@ The same Weather and Radar pages adapt to phone-sized screens. The desktop and t
 
 | Weather | Radar | History |
 | --- | --- | --- |
-| ![OLED black Weather with nine fixed gauges](docs/stormdesk-dashboard.png) | ![Focused HookEcho radar and warning banner](docs/stormdesk-radar.png) | ![History snapshot cards](docs/stormdesk-data.png) |
+| ![Graphite Silver Observatory dashboard with seven metrics, forecast, radar, and local context](docs/stormdesk-dashboard.png) | ![Focused HookEcho radar and warning banner](docs/stormdesk-radar.png) | ![History snapshot cards](docs/stormdesk-data.png) |
 
-![Six-day forecast and rain chance outlook](docs/stormdesk-outlook.png)
+![Expanded weather details and forecast analysis](docs/stormdesk-outlook.png)
 
-<details><summary>Explore all five themes</summary>
+<details><summary>Explore all ten dark themes</summary>
 
-| OLED black (default) | Blue | Light |
-| --- | --- | --- |
-| ![OLED black](docs/stormdesk-theme-oled.png) | ![Blue](docs/stormdesk-theme-blue.png) | ![Light](docs/stormdesk-theme-light.png) |
-
-| High contrast | Orange & red |
+| Graphite Silver (default) | Midnight Violet |
 | --- | --- |
-| ![High contrast](docs/stormdesk-theme-contrast.png) | ![Orange and red](docs/stormdesk-theme-ember.png) |
+| ![Graphite Silver](docs/stormdesk-theme-graphite.png) | ![Midnight Violet](docs/stormdesk-theme-violet.png) |
+
+| Carbon Lime | Ocean Abyss |
+| --- | --- |
+| ![Carbon Lime](docs/stormdesk-theme-carbon.png) | ![Ocean Abyss](docs/stormdesk-theme-abyss.png) |
+
+| Night Spruce | Oxblood Rose |
+| --- | --- |
+| ![Night Spruce](docs/stormdesk-theme-spruce.png) | ![Oxblood Rose](docs/stormdesk-theme-oxblood.png) |
+
+| Burnished Copper | Electric Indigo |
+| --- | --- |
+| ![Burnished Copper](docs/stormdesk-theme-copper.png) | ![Electric Indigo](docs/stormdesk-theme-indigo.png) |
+
+| Petrol Citron | Espresso Gold |
+| --- | --- |
+| ![Petrol Citron](docs/stormdesk-theme-petrol.png) | ![Espresso Gold](docs/stormdesk-theme-espresso.png) |
+
+Classic themes, including light, high contrast, and e-ink options, remain available in Settings. Saved theme choices survive the update.
 
 </details>
 

@@ -77,8 +77,8 @@ const DEFAULTS = {
   // Browser notifications, secure origins only. Off until asked for: the permission prompt is
   // rude unprompted, and the desktop app already raises real ones through Tauri.
   webNotif: false,
-  // New installations start with OLED black; saved palettes remain intact.
-  palette: 'oled',
+  // New installations start with Graphite Silver; saved palettes remain intact.
+  palette: 'graphite',
   // The LAN server's port. Empty means 8088. Desktop only, and a restart applies it.
   httpPort: '',
   // CWOP callsign to report to (empty = off). Not a secret: callsigns are public and the
@@ -107,7 +107,7 @@ const DEFAULTS = {
 // process as everything else, and on a weak Linux box loading it is what made the app look hung.
 // Turn it on in Settings. An install that already has settings keeps the radar it has been showing.
 const FIRST_RUN = localStorage.getItem('wd.settings') == null;
-let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'oled' : '', deskRadar: !FIRST_RUN });
+let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'graphite' : '', deskRadar: !FIRST_RUN });
 
 // Presentation belongs to the screen in front of the user; station and alert behavior belongs
 // to the household host. Existing installs already have these values locally, so this is also

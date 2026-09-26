@@ -25,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: node marketing/tests/carbon-preview.mjs
+      - run: node marketing/tests/color-studio.mjs
+      - run: node scripts/check-themes.mjs
       - run: node scripts/check-browser-compat.mjs
       - run: node scripts/check-stormdesk-lite.mjs
       - run: node scripts/check-lite-readings.mjs

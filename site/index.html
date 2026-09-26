@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#0b0f14">
+<meta name="theme-color" content="#121416">
 <!-- Installable from a phone's browser. sw.js caches the shell only, and only on a secure
      origin — see shouldRegisterSW() in js/boot.js. The weather itself is never cached there;
      desk.js keeps the last good forecast and obs and marks them stale. -->
@@ -32,8 +32,8 @@
   @font-face { font-family: 'Barlow SC'; font-style: normal; font-weight: 600; font-display: swap;
     src: url(fonts/barlow-semi-condensed-600.woff2) format('woff2'); }
   :root {
-    --bg: #000; --panel: #010503; --panel2: #06100a; --line: #174c2d;
-    --text: #e6ffed; --muted: #80a98c; --accent: #39ff88; --warn: #d8ff4f; --bad: #ff4d5a; --good: #39ff88;
+    --bg: #121416; --panel: #23272b; --panel2: #363e45; --line: #41484e;
+    --text: #f2f4f5; --muted: #b1b8bf; --accent: #d9e1e8; --warn: #ffc66d; --bad: #ff8e87; --good: #a7d6bd;
     --gap: 12px;
     /* Condensed and tabular: a broadcast number counts up without the line shuffling sideways. */
     --num: 'Barlow SC', system-ui, sans-serif;
@@ -897,12 +897,13 @@
 <link rel="stylesheet" href="desk-overview.css">
 <link rel="stylesheet" href="midnight.css">
 <link rel="stylesheet" href="simple.css">
-<link rel="stylesheet" href="themes.css">
+<link rel="stylesheet" href="themes.css?v=dark-collection-20260926">
+<link rel="stylesheet" href="observatory.css?v=20260926">
 </head>
 <body>
 <header>
   <img id="brand" src="stormdesk-icon-512.png?v=20260907" alt="StormDesk">
-  <h1>STORMDESK</h1>
+  <h1>Stormdesk</h1>
   <nav>
     <button class="tab" data-section="desk">Weather</button>
     <button class="tab" data-section="lab">Radar</button>
@@ -1338,11 +1339,25 @@
     <h2 style="font-size:13px;margin-top:18px">Appearance</h2>
     <label>Theme</label>
     <select id="set-palette">
-      <option value="oled">OLED black (default)</option>
-      <option value="blue">Blue</option>
-      <option value="light">Light</option>
-      <option value="contrast">High contrast</option>
-      <option value="ember">Orange &amp; red</option>
+      <optgroup label="Dark themes">
+        <option value="graphite">Graphite Silver (default)</option>
+        <option value="violet">Midnight Violet</option>
+        <option value="carbon">Carbon Lime</option>
+        <option value="abyss">Ocean Abyss</option>
+        <option value="spruce">Night Spruce</option>
+        <option value="oxblood">Oxblood Rose</option>
+        <option value="copper">Burnished Copper</option>
+        <option value="indigo">Electric Indigo</option>
+        <option value="petrol">Petrol Citron</option>
+        <option value="espresso">Espresso Gold</option>
+      </optgroup>
+      <optgroup label="Classic themes">
+        <option value="oled">OLED black</option>
+        <option value="blue">Blue</option>
+        <option value="light">Light</option>
+        <option value="contrast">High contrast</option>
+        <option value="ember">Orange &amp; red</option>
+      </optgroup>
       <optgroup label="More themes">
         <option value="auto">Auto — light by day</option>
         <option value="solarized">Solarized</option>
@@ -1690,6 +1705,6 @@
   </aside>
 </main>
 
-<script type="module" src="js/boot.js?v=themes-20260923a"></script>
+<script type="module" src="js/boot.js?v=dark-collection-20260926"></script>
 </body>
 </html>

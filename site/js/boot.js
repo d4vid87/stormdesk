@@ -13,7 +13,7 @@ import { initAlmanac } from './almanac.js';
 import { initRules, renderRules } from './rules.js';
 import { initEnv } from './env.js';
 import { initPlaces, renderPlaces } from './places.js';
-import { initPro } from './pro.js?v=outlook-20260923b';
+import { initPro } from './pro.js?v=observatory-20260926';
 import { initLayout, snapshot, restore, hiddenPanels, unhide, panelIds, tabOf, setTab, TABS, NEVER_HIDE } from './layout.js';
 import { initUdp } from './udp.js';
 import { initHome } from './home.js';
@@ -1512,8 +1512,8 @@ function showStill(panel) {
   if (safeMode()) $('desk-radar-caption').textContent = 'Radar snapshot · 5 min · tap to enlarge';
   panel.classList.add('loaded');
   const refresh = () => { img.src = stillUrl(); };
-  img.onerror = () => panel.classList.add('unreachable');
-  img.onload = () => panel.classList.remove('unreachable');
+  img.onerror = () => { panel.classList.add('unreachable'); $('desk-radar-caption').textContent = 'Radar snapshot unavailable · retrying in 5 minutes'; };
+  img.onload = () => { panel.classList.remove('unreachable'); $('desk-radar-caption').textContent = 'Still image · 5 min · tap for the live map'; };
   img.onclick = () => document.querySelector('.tab[data-section="lab"]')?.click();
   refresh();
   every('radar-still', 300, refresh);
@@ -1624,7 +1624,7 @@ initNav();
 // A dashboard on a desk gets a keyboard, and the tabs are the only thing anyone reaches for.
 // Never while typing: the token field is one keystroke from being a tab switch otherwise.
 document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.ctrlKey || e.altKey || e.metaKey || document.querySelector('dialog[open]')) return;
   // The detail slide-over owns Escape while it is open, or one press closed it and left kiosk.
   if (e.key === 'Escape' && document.getElementById('detail')?.classList.contains('open')) return;
   const el = document.activeElement;

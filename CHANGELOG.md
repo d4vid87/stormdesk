@@ -8,6 +8,15 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+### Added
+- Ten Observatory dark palettes in Appearance, including Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold.
+
+### Changed
+- Observatory dashboard: compact current conditions, up to ten forecast days, central HookEcho radar, and seven readings in the approved order.
+- Local signals, astronomy, and device health share one rail; a local clock sits beside official alerts. Forecast rows open accessible details, and advanced weather tools remain available.
+- Refreshed website and GitHub documentation, screenshots, ten-theme gallery, hero GIF, and video tour.
+- New installs default to Graphite Silver. Existing theme selections and classic palettes remain available.
+
 ## [4.4.0] - 2026-09-23
 
 ### Changed
