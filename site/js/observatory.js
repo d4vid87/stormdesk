@@ -14,7 +14,7 @@ export function initObservatory() {
   desk.insertBefore(head, stack);
   const grid = document.createElement('div');
   grid.id = 'observatory-grid';
-  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar" aria-label="Local HookEcho radar"><div class="observatory-radar-heading"><span>LOCAL RADAR · HOOKECHO</span></div><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
+  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar" aria-label="Local HookEcho radar"><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
   stack.prepend(grid);
   const left = $('observatory-left');
   left.append($('hero'));
