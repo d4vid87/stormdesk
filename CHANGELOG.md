@@ -8,6 +8,11 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.5.1] - 2026-09-27
+
+### Fixed
+- Let the Linux AppImage start as a normal, tileable window on Omarchy/Hyprland, so it can share the screen with another app. Keep KWin’s first-frame maximization workaround.
+
 ## [4.5.0] - 2026-09-27
 
 ### Added

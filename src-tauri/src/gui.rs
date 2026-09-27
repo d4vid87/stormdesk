@@ -258,11 +258,9 @@ pub fn run() {
                 win = win
                     .title(format!("StormDesk — tablet: http://{}:{}", crate::server::lan_ip(), port))
                     .inner_size(1280.0, 800.0)
-                    // Start maximized on Linux: KWin maximizes a restored window after mapping
-                    // it, and GTK can miss that configure entirely — the webview then paints at
-                    // the startup size in the corner of a full-screen window, with no way for
-                    // the process to notice. Owning the state from the first frame sidesteps it.
-                    .maximized(cfg!(target_os = "linux"))
+                    // KWin needs maximization from the first frame so GTK sizes the webview.
+                    // Hyprland/Omarchy tiles normal windows; maximizing prevents side-by-side use.
+                    .maximized(cfg!(target_os = "linux") && !is_hyprland_session())
                     // the window isn't same-origin with the LAN server, so it needs the port told to it
                     .initialization_script(format!(
                         "window.__WD_UDP='http://localhost:{port}/udp';window.__WD_SRV='http://localhost:{port}';{};addEventListener('DOMContentLoaded',()=>window.__TAURI__?.core?.invoke('frontend_ready'));",
@@ -293,9 +291,30 @@ pub fn run() {
         .expect("error running StormDesk");
 }
 
+fn is_hyprland_session() -> bool {
+    std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some()
+        || ["XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP"]
+            .iter()
+            .filter_map(|key| std::env::var(key).ok())
+            .any(|desktop| is_hyprland_desktop(&desktop))
+}
+
+fn is_hyprland_desktop(desktop: &str) -> bool {
+    desktop.split(':').any(|part| {
+        part.eq_ignore_ascii_case("hyprland") || part.eq_ignore_ascii_case("omarchy")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tiling_desktop_names_disable_startup_maximize() {
+        assert!(is_hyprland_desktop("Hyprland"));
+        assert!(is_hyprland_desktop("omarchy:Hyprland"));
+        assert!(!is_hyprland_desktop("KDE"));
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
