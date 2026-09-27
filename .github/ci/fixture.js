@@ -78,11 +78,17 @@ addEventListener('load', () => {
   console.assert(document.getElementById('hero-alerts').parentElement.id === 'observatory-heading', 'Alert banner sits beside the clock');
   console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');
   console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'All ten available days render');
+  const firstDay = document.querySelector('#daycards > .daycard');
+  console.assert(firstDay.querySelector('.dc-temp b').textContent === '78°' && firstDay.querySelector('.dc-temp span').textContent === '58°', 'Clear list separates high and low without a slash');
+  console.assert(firstDay.querySelector('.dc-pop').textContent === '0%', 'Clear list keeps rain chance uncluttered and preserves zero');
+  console.assert(getComputedStyle(firstDay.querySelector('.dc-date')).display !== 'none' && document.querySelectorAll('.forecast-columns > span').length === 5, 'Clear list shows dates and labeled columns');
+  console.assert(firstDay.getAttribute('aria-label').includes('high 78') || firstDay.getAttribute('aria-label').includes('High 78'), 'Forecast row describes its readings for screen readers');
   document.querySelector('#daycards > .daycard').click();
   console.assert(document.getElementById('forecast-dialog').open, 'Forecast day opens accessible details');
   document.getElementById('forecast-dialog').close();
   console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety cards stay outside collapsed analysis');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
+  console.assert(document.querySelector('#daycards .dc-pop').textContent === '—', 'Unavailable rain chance is not zero');
   console.assert(document.querySelector('#g-ltg').textContent.includes('unavailable'), 'Missing lightning is unavailable, not no strikes');
   console.assert(document.querySelector('#g-wet').dataset.unavailable === 'true', 'Missing wet bulb hides its needle');
   console.assert(document.querySelector('#g-rain').dataset.unavailable === 'true', 'Missing rain is not dry');
@@ -94,13 +100,32 @@ addEventListener('load', () => {
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [] }));
   // api.OBS order: time, temp, rh, press, ... — index by name off the module the page already
   // loaded rather than hard-coding a shape that moves.
-  import('./js/api.js').then(({ OBS }) => {
+  import('./js/api.js').then(async ({ OBS }) => {
     const o = [];
     o[OBS.time] = now; o[OBS.temp] = 22.4; o[OBS.rh] = 68; o[OBS.press] = 993.1;
     o[OBS.windAvg] = 3.2; o[OBS.windGust] = 6.5; o[OBS.windDir] = 190;
     o[OBS.uv] = 4; o[OBS.solar] = 520; o[OBS.dayRain] = 3; o[OBS.battery] = 2.71;
     dispatchEvent(new CustomEvent('wd:ws-obs', { detail: o }));
     console.assert(document.getElementById('observatory-local').textContent.includes('gusts'), 'Local signals refresh with station observations');
+    const settle = () => new Promise(resolve => requestAnimationFrame(resolve));
+    await settle();
+    console.assert(document.querySelectorAll('.status-tile').length === 3, 'Status cards show air quality, moon and sunset');
+    for (const kind of ['aqi','sky','health']) {
+      document.querySelector(`[data-signal-detail="${kind}"]`).click();
+      console.assert(document.getElementById('signal-details').open && !document.querySelector(`#signal-details [data-panel="${kind}"]`).hidden, `Status detail opens original live source: ${kind}`);
+      document.getElementById('signal-details').close();
+    }
+    const aqi = document.getElementById('aqi-val'), oldAqi = aqi.textContent;
+    aqi.textContent = '--'; await settle();
+    console.assert(document.getElementById('status-aqi-label').textContent === 'Reading unavailable', 'Missing AQI never shows Good');
+    aqi.textContent = oldAqi;
+    dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77}})); await settle();
+    console.assert(document.querySelector('.status-device').dataset.state === 'unknown', 'Unknown sensor status is not reporting');
+    dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77,sensor_status:0}})); await settle();
+    console.assert(document.querySelector('.status-device').dataset.state === 'reporting', 'Reported healthy sensors update the device card');
+    dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.2,sensor_status:0}})); await settle();
+    console.assert(document.querySelector('.status-device').dataset.state === 'attention', 'Low battery stays visible on the device card');
+    dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77,sensor_status:0}})); await settle();
     document.documentElement.dataset.fixture = 'ok';
   });
 });

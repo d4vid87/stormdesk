@@ -1,4 +1,5 @@
 // Reuse the live cards and their listeners; only their placement changes.
+import { initStatusCards } from './status-cards.js';
 import { settings, num, U, deg2compass, msToWind } from './app.js';
 const $ = id => document.getElementById(id);
 export function initObservatory() {
@@ -19,7 +20,7 @@ export function initObservatory() {
   left.append($('hero'));
   const forecast = document.createElement('section');
   forecast.id = 'observatory-forecast';
-  forecast.innerHTML = '<h2>10-day forecast</h2><p class="observatory-note" id="forecast-coverage">Waiting for forecast</p>';
+  forecast.innerHTML = '<div class="forecast-heading"><h2>10-day forecast</h2><span id="forecast-unit"></span></div><p class="observatory-note" id="forecast-coverage">Waiting for forecast</p><div class="forecast-columns" aria-hidden="true"><span>DAY</span><span></span><span>HIGH</span><span>LOW</span><span>RAIN</span></div>';
   forecast.append($('daycards'));
   left.append(forecast);
   $('observatory-radar').append($('desk-radar'));
@@ -40,6 +41,7 @@ export function initObservatory() {
   state.className = 'observatory-note';
   state.append($('hero-live'), $('hero-batt'));
   health.insertBefore(state, $('health'));
+  initStatusCards(signals);
   // Retain render targets for shared modules without exposing the retired dashboard section.
   const extra = document.createElement('div');
   extra.hidden = true;
@@ -59,13 +61,17 @@ export function initObservatory() {
     const card = e.target.closest('.daycard');
     if (!card) return;
     dialog.querySelector('h2').textContent = `${card.querySelector('.dc-name').textContent} · ${card.querySelector('.dc-date').textContent}`;
-    dialog.querySelector('p').textContent = `${card.querySelector('.dc-cond').textContent}. High / low: ${card.querySelector('.dc-temp').textContent}. Rain chance: ${card.querySelector('.dc-pop').textContent}.`;
+    dialog.querySelector('p').textContent = `${card.querySelector('.dc-cond').textContent}. High: ${card.querySelector('.dc-temp b').textContent}. Low: ${card.querySelector('.dc-temp span').textContent}. Rain chance: ${card.querySelector('.dc-pop').textContent}.${card.dataset.precipAmount ? ` Expected precipitation: ${card.dataset.precipAmount}.` : ''}`;
     dialog.showModal();
   });
   const render = e => {
     const fc = e.detail, c = fc?.current_conditions;
     if (!c) return;
-    if (fc.forecast) $('forecast-coverage').textContent = `${Math.min(10, fc.forecast?.daily?.length || 0)} days available · select a day for details`;
+    if (fc.forecast) {
+      const count = Math.min(10, fc.forecast.daily?.length || 0);
+      $('forecast-coverage').textContent = count === 10 ? 'Select a day for details' : count ? `${count} days available · select for details` : 'Forecast unavailable';
+      $('forecast-unit').textContent = U.temp();
+    }
     const strikes = c.lightning_strike_count_last_3hr;
     const rows = [
       ['ϟ Lightning', strikes == null ? 'Reading unavailable' : strikes === 0 ? `No strikes · ${fc.local ? 'last report' : 'last 3h'}` : `${num(strikes)} strikes · ${fc.local ? 'last report' : 'last 3h'}`],

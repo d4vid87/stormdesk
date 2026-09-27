@@ -334,8 +334,8 @@ function renderHealth(st) {
   if (st?.uptime != null) rows.push(['Uptime', `${num(st.uptime / 86400, 1)} days`]);
   // Sensor faults are a Tempest hub's status word. Without one there is nothing to report on,
   // and an "all reporting" row derived from a default zero would be a reassurance nobody earned.
-  if (st) {
-    const bad = faults(st.sensor_status || 0);
+  if (Number.isFinite(st?.sensor_status)) {
+    const bad = faults(st.sensor_status);
     rows.push(['Sensors', bad.length ? `<span class="fail">${bad.join(', ')}</span>` : '<span class="ok">all reporting</span>']);
   }
   if (lastObsAt) {

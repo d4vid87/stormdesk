@@ -327,7 +327,7 @@ function setArc(el, lo, hi) {
 // un-tweenable.
 function renderDays(fc) {
   const days = fc.forecast.daily.slice(0, 10);
-  const labels = ['Today', 'Tomorrow'];
+  const labels = ['Today'];
   const wrap = $('daycards');
   const built = wrap.children.length !== days.length;
   if (built) {
@@ -354,10 +354,11 @@ function renderDays(fc) {
     setArc(card.querySelector('[data-arc]'), d.air_temp_low, d.air_temp_high);
     setWx(card.querySelector('.dc-icon'), d.icon, 30);
     tweenNumber(card.querySelector('.dc-temp b'), d.air_temp_high, (v) => `${num(v)}°`);
-    tweenNumber(card.querySelector('.dc-temp span'), d.air_temp_low, (v) => `/${num(v)}°`);
+    tweenNumber(card.querySelector('.dc-temp span'), d.air_temp_low, (v) => `${num(v)}°`);
     setText(card.querySelector('.dc-cond'), d.conditions || '');
-    setText(card.querySelector('.dc-pop'),
-      `${num(d.precip_probability)}%${amount != null ? ` · ${num(amount, 2)} ${U.precip()}` : ''}`);
+    setText(card.querySelector('.dc-pop'), Number.isFinite(d.precip_probability) ? `${num(d.precip_probability)}%` : '—');
+    card.dataset.precipAmount = Number.isFinite(amount) ? `${num(amount, 2)} ${U.precip()}` : '';
+    card.setAttribute('aria-label', `${card.querySelector('.dc-name').textContent}, ${card.querySelector('.dc-date').textContent}. ${d.conditions || 'Conditions unavailable'}. High ${num(d.air_temp_high)}${U.temp()}, low ${num(d.air_temp_low)}${U.temp()}. Rain chance ${Number.isFinite(d.precip_probability) ? `${num(d.precip_probability)}%` : 'unavailable'}.`);
   });
   return built;
 }

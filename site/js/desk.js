@@ -183,11 +183,15 @@ export async function refreshAlerts() {
   $('alerts').innerHTML = feats.length
     ? feats.map((f) => {
         const p = f.properties;
-        return `<div class="alert sev-${(p.severity || '').toLowerCase()}">
-          <div class="alert-head">${p.event} <span>${p.severity}</span></div>
-          <div class="alert-time">until ${new Date(p.ends || p.expires).toLocaleString()}</div>
-          <details><summary>details</summary><p>${(p.description || '').replace(/</g, '&lt;')}</p></details>
-        </div>`;
+        const esc = value => String(value || '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+        const severity = ['Extreme','Severe','Moderate','Minor'].includes(p.severity) ? p.severity : '';
+        const expires = new Date(p.ends || p.expires);
+        const time = Number.isFinite(expires.getTime()) ? `Until ${expires.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}` : 'Expiration unavailable';
+        return `<details class="alert sev-${severity.toLowerCase()}"><summary>
+          <span class="alert-head">${esc(p.event || 'Weather alert')}</span>
+          <span class="alert-time">${esc(time)}</span></summary>
+          <p>${esc(p.description)}</p>${p.instruction ? `<p>${esc(p.instruction)}</p>` : ''}
+        </details>`;
       }).join('')
     : '<div class="muted">No active alerts</div>';
   stamp('alerts', 300);

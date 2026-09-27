@@ -14,7 +14,7 @@ import { initAlmanac } from './almanac.js';
 import { initRules, renderRules } from './rules.js';
 import { initEnv } from './env.js';
 import { initPlaces, renderPlaces } from './places.js';
-import { initPro } from './pro.js?v=observatory-20260926';
+import { initPro } from './pro.js?v=clear-list-20260926';
 import { initLayout, snapshot, restore, hiddenPanels, unhide, panelIds, tabOf, setTab, TABS, NEVER_HIDE } from './layout.js';
 import { initUdp } from './udp.js';
 import { initHome } from './home.js';
