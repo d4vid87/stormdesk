@@ -44,7 +44,7 @@ export function initObservatory() {
   const extra = document.createElement('details');
   extra.id = 'observatory-more';
   extra.innerHTML = '<summary>More weather details &amp; analysis</summary><div class="observatory-extra-readings"></div>';
-  for (const id of ['g-dew','g-wet']) extra.lastElementChild.append(document.querySelector(`[data-panel="${id}"]`));
+  extra.lastElementChild.append(document.querySelector('[data-panel="g-wet"]'));
   extra.append($('desk-outlook'), $('ticker'), $('ha-panel'));
   stack.append(extra);
   desk.insertBefore($('gauges'), stack);

@@ -7,7 +7,7 @@ if (old && localStorage.getItem('wd.layout.before-fixed') == null)
 
 export const NEVER_HIDE = ['severe', 'winter', 'tropical', 'alerts'];
 export const TABS = { desk: 'desk-grid', data: 'data-grid', signals: 'signals-grid' };
-const ORDER = ['g-rain', 'g-ltg', 'g-wind', 'g-wbgt', 'g-uv', 'g-press', 'g-hum'];
+const ORDER = ['g-rain', 'g-ltg', 'g-wind', 'g-wbgt', 'g-uv', 'g-press', 'g-hum', 'g-dew'];
 export const DEFAULT = Object.fromEntries(ORDER.map((id, order) => [id, { order }]));
 
 export const panelIds = () => [...document.querySelectorAll('[data-panel]')].map((el) => el.dataset.panel);
@@ -52,6 +52,6 @@ export function initLayout() {
 if (location.search.includes('selftest')) {
   initLayout();
   console.assert([...document.querySelectorAll('#gauges > .gauge')].map((g) => g.dataset.panel).join() === ORDER.join(),
-    'fixed layout: seven gauges keep their intended order');
+    'fixed layout: eight gauges keep their intended order');
   console.assert(!document.querySelector('#gauges .grip, #gauges .rz'), 'fixed layout: no drag or resize controls');
 }

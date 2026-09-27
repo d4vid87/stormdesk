@@ -66,9 +66,11 @@ addEventListener('load', () => {
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
   const pressureCard = document.querySelector('[data-panel="g-press"]');
-  console.assert(getComputedStyle(pressureCard).display !== 'none', 'Observatory shows pressure in the seven-reading rail');
+  console.assert(getComputedStyle(pressureCard).display !== 'none', 'Observatory shows pressure in the eight-reading rail');
   const gauges = [...document.querySelectorAll('#gauges > .gauge')].filter(el => getComputedStyle(el).display !== 'none');
-  console.assert(gauges.length === 7, 'Observatory overview has exactly seven readings');
+  console.assert(gauges.length === 8, 'Observatory overview has exactly eight readings');
+  console.assert(gauges.at(-2).dataset.panel === 'g-hum' && gauges.at(-1).dataset.panel === 'g-dew', 'Dew point follows humidity in the readings rail');
+  console.assert(document.querySelector('#g-dew .ginner b').textContent === '61°', 'Dew point retains the live forecast value');
   console.assert(document.querySelector('#g-wet svg') && document.querySelector('#g-ltg svg'), 'Wet bulb and lightning have instrument faces');
   console.assert(document.getElementById('hero-alerts').parentElement.id === 'observatory-heading', 'Alert banner sits beside the clock');
   console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');

@@ -6,7 +6,7 @@ html body > header .tab { width:auto; }
 html body > header #station-name { display:none; }
 html body > header #btn-settings { flex:none; }
 html body > header .header-overflow-menu { top:calc(100% + 8px); bottom:auto; right:0; left:auto; }
-/* Observatory: seven readings above a compact forecast, HookEcho, and local context. */
+/* Observatory: eight readings above a compact forecast, HookEcho, and local context. */
 html body > header { min-height:78px; height:auto; padding:16px 30px; background:var(--bg); border-bottom:1px solid var(--line); box-shadow:none; gap:16px; }
 html header #brand { width:44px; height:44px; border-radius:7px; box-shadow:none; }
 html header h1 { color:var(--text); font:600 25px var(--num); text-transform:none; letter-spacing:.2px; }
@@ -28,7 +28,7 @@ html header .tab { border-radius:8px; font-size:13px; }
 #desk #hero-alerts .alert-summary { display:block; font-size:12px; margin-top:4px; }
 #desk #hero-alerts button { white-space:nowrap; font-size:10px; }
 #desk #desk-stack { display:block; max-width:none; }
-#desk #gauges { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:0; margin:0 0 12px; padding:18px 8px; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+#desk #gauges { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:0; margin:0 0 12px; padding:18px 8px; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
 #desk #gauges > .gauge { display:block!important; min-height:0; padding:0 17px; border:0; border-right:1px solid var(--line); border-radius:0; background:none; }
 #desk #gauges > .gauge:last-child { border:0; }
 #desk #gauges h3 { font-size:10px; margin:0 0 12px; color:var(--muted); }
