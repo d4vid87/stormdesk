@@ -12,6 +12,7 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 - Ten Observatory dark palettes in Appearance, including Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold.
 
 ### Changed
+- Weather uses Field instruments: eight distinct live gauge faces, with Dew Point after Humidity. Missing data stays visibly unavailable; the layout adapts to four columns on tablets and two on phones.
 - First-run welcome uses three clear setup cards: Find my weather, Bring my station, and Join my home. Setup fields appear only after choosing a path; location-only setup no longer waits for station readings.
 - Settings home replaces Basics / Appearance / Advanced with six searchable category cards. Existing preferences and controls are preserved; specialist tools expand on demand.
 - Observatory dashboard: compact current conditions, up to ten forecast days, central HookEcho radar, and seven readings in the approved order.

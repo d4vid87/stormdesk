@@ -4,6 +4,7 @@ import * as api from './api.js';
 import { settings, coords, U, num, timeStr, deg2compass, every, msToWind, windToMs, stormMode } from './app.js';
 import { forecast as deskForecast, severeAlerts } from './desk.js';
 import * as icon from './icons.js';
+import { fieldInstrument } from './field-instruments.js';
 import { initLayout } from './layout.js';
 import { normalToday } from './almanac.js';
 import { setScene } from './fx.js';
@@ -397,13 +398,17 @@ function gauge(id, spec) {
   const box = $(id);
   if (!box) return;
   const faceKey = `${spec.face}|${spec.min}|${spec.max}`;
-  box.dataset.unavailable = String(!Number.isFinite(spec.value));
+  box.dataset.unavailable = String(!(spec.available ?? Number.isFinite(spec.value)));
   if (box.dataset.face !== faceKey) {
     box.dataset.face = faceKey;
     box.innerHTML = '<div class="gwrap"><span aria-hidden="true">' + FACE[spec.face](spec) + '</span>'
       + '<div class="ginner"><b></b><small></small><span></span></div></div>';
   }
-  icon.update(box.querySelector('svg'), spec);
+  const instrument = fieldInstrument(id, spec, settings().units === 'metric');
+  if (instrument) {
+    const face = box.querySelector('.gwrap > span');
+    if (face._instrument !== instrument) { face.innerHTML = instrument; face._instrument = instrument; }
+  } else icon.update(box.querySelector('svg'), spec);
   const b = box.querySelector('.ginner > b');
   if (typeof spec.value === 'number' && Number.isFinite(spec.value)) {
     tweenNumber(b, spec.value, spec.fmt || ((v) => num(v)));
@@ -509,7 +514,8 @@ function renderLightning(c = {}) {
   const distance = c.lightning_strike_last_distance ?? hit?.[I.strikeDist];
   const max = settings().units === 'metric' ? 50 : 30;
   gauge('g-ltg', { face: 'dial', min: 0, max, frac: distance / max,
-    value: count === 0 ? null : distance,
+    value: count === 0 ? null : distance, count,
+    available: Number.isFinite(count) || Number.isFinite(distance),
     text: count === 0 ? 'None' : '--', fmt: (x) => `${num(x)} ${U.dist()}`,
     unit: count === 0 ? 'No strikes reported' : 'Last strike distance',
     sub: count == null ? 'Lightning data unavailable' : `${num(count)} strikes · last 3h` });
@@ -666,11 +672,11 @@ function renderLocal(o) {
   renderLightning();
 
   const dpC = dewPointC(o[I.temp], o[I.rh]);
-  if (dpC != null) {
+  {
     const dp = t(dpC);
     gauge('g-dew', {
       face: 'droplet', frac: dp / (metric ? 30 : 85),
-      value: dp, fmt: (x) => `${num(x)}°`, sub: 'dew point',
+      value: dp, fmt: (x) => `${num(x)}°`, sub: dp == null ? 'Reading unavailable' : 'dew point',
     });
   }
 

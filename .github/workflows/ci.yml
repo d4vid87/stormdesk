@@ -29,6 +29,7 @@ jobs:
       - run: node marketing/tests/color-studio.mjs
       - run: node scripts/check-shell-cache.mjs
       - run: node scripts/check-themes.mjs
+      - run: node scripts/check-field-instruments.mjs
       - run: node scripts/check-browser-compat.mjs
       - run: node scripts/check-stormdesk-lite.mjs
       - run: node scripts/check-lite-readings.mjs

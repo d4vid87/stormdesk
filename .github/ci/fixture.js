@@ -71,6 +71,9 @@ addEventListener('load', () => {
   console.assert(gauges.length === 8, 'Observatory overview has exactly eight readings');
   console.assert(gauges.at(-2).dataset.panel === 'g-hum' && gauges.at(-1).dataset.panel === 'g-dew', 'Dew point follows humidity in the readings rail');
   console.assert(document.querySelector('#g-dew .ginner b').textContent === '61°', 'Dew point retains the live forecast value');
+  console.assert(gauges.every(el => el.querySelector('svg.field-instrument')), 'All eight readings use field instruments');
+  console.assert(gauges.every(el => getComputedStyle(el.querySelector('.gwrap > span')).display !== 'none'), 'Instrument faces are visible');
+  console.assert(document.getElementById('g-ltg').dataset.unavailable === 'false', 'Zero reported strikes is known data');
   console.assert(document.querySelector('#g-wet svg') && document.querySelector('#g-ltg svg'), 'Wet bulb and lightning have instrument faces');
   console.assert(document.getElementById('hero-alerts').parentElement.id === 'observatory-heading', 'Alert banner sits beside the clock');
   console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');
@@ -83,6 +86,7 @@ addEventListener('load', () => {
   console.assert(document.querySelector('#g-ltg').textContent.includes('unavailable'), 'Missing lightning is unavailable, not no strikes');
   console.assert(document.querySelector('#g-wet').dataset.unavailable === 'true', 'Missing wet bulb hides its needle');
   console.assert(document.querySelector('#g-rain').dataset.unavailable === 'true', 'Missing rain is not dry');
+  console.assert(!document.querySelector('#g-rain .fi-fill, #g-dew .fi-needle, #g-wbgt .fi-fill'), 'Unavailable values have no filled instrument indicators');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [{ properties: {
     event: '<b>Test advisory</b>', severity: 'Severe', description: '<img src=x onerror=alert(1)>',
