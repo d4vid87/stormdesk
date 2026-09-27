@@ -8,6 +8,8 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-09-27
+
 ### Added
 - Ten Observatory dark palettes in Appearance, including Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold.
 
@@ -15,10 +17,11 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 - Weather uses Field instruments: eight distinct live gauge faces, with Dew Point after Humidity. Missing data stays visibly unavailable; the layout adapts to four columns on tablets and two on phones.
 - First-run welcome uses three clear setup cards: Find my weather, Bring my station, and Join my home. Setup fields appear only after choosing a path; location-only setup no longer waits for station readings.
 - Settings home replaces Basics / Appearance / Advanced with six searchable category cards. Existing preferences and controls are preserved; specialist tools expand on demand.
-- Observatory dashboard: compact current conditions, up to ten forecast days, central HookEcho radar, and seven readings in the approved order.
+- Observatory dashboard: compact current conditions, ten-day forecast, central HookEcho radar, and eight readings in the approved order.
 - Local signals, astronomy, and device health share one rail; a local clock sits beside official alerts. Forecast rows open accessible details, and advanced weather tools remain available.
 - Refreshed website and GitHub documentation, screenshots, ten-theme gallery, hero GIF, and video tour.
 - New installs default to Graphite Silver. Existing theme selections and classic palettes remain available.
+- Removed the extra radar heading and header overflow menu; simplified the local signals rail and forecast rows.
 
 ## [4.4.0] - 2026-09-23
 
@@ -732,7 +735,8 @@ tablet on the LAN — vanilla JS, no build step, no framework, no chart library.
 - Radar from [Hook Echo-WX](https://github.com/d4vid87/hookecho)
 - MIT license
 
-[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.4.0...HEAD
+[Unreleased]: https://github.com/d4vid87/stormdesk/compare/v4.5.0...HEAD
+[4.5.0]: https://github.com/d4vid87/stormdesk/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/d4vid87/stormdesk/compare/v4.3.4...v4.4.0
 [4.3.4]: https://github.com/d4vid87/stormdesk/compare/v4.3.3...v4.3.4
 [4.3.2]: https://github.com/d4vid87/stormdesk/compare/v4.3.1...v4.3.2

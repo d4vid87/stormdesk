@@ -14,7 +14,7 @@ New installs open in **Graphite Silver**. Choose **Settings → Appearance → T
 
 ![A demo-data tour of StormDesk’s Observatory dashboard, HookEcho radar, History, and theme settings](docs/stormdesk-hero.gif)
 
-The interface images show the current web/source design with labeled demo station data. HookEcho supplies the radar map. The latest packaged release is **4.4.0**; these interface changes do not imply a new installer release. Downloaded binaries may show the earlier design until a new package is published.
+The interface images show the current design with labeled demo station data. HookEcho supplies the radar map. The latest packaged release is **4.5.0**.
 
 Stormdesk Lite remains available as a lighter browser interface for older devices: [open Lite](https://app.mystormdesk.com/lite/) or read its [design specification](design/stormdesk-lite/SPECIFICATION.md).
 
