@@ -88,11 +88,6 @@ html header .tab { border-radius:8px; font-size:13px; }
 #desk #hero-moonset { color:var(--muted); font-size:9px; }
 #desk #hero-live { display:block; background:none; border:0; padding:0; font-size:9px; }
 #desk #hero-batt { font-size:10px; }
-#desk #observatory-more { margin-top:18px; padding:16px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
-#desk #observatory-more > summary { cursor:pointer; font-size:12px; color:var(--muted); }
-#desk .observatory-extra-readings { display:flex; gap:24px; }
-#desk .observatory-extra-readings .gauge { max-width:240px; flex:1; }
-#desk #desk-outlook { margin:16px 0; }
 @media(max-width:1100px){#desk #observatory-grid{grid-template-columns:225px minmax(0,1fr)}#desk #observatory-signals{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}#desk #observatory-signals>h2{grid-column:1/-1}#desk #gauges>.gauge{padding:0 9px}#desk #gauges .ginner b{font-size:25px}#desk #observatory-heading{flex-wrap:wrap}#desk #hero-alerts{flex-basis:100%}}
 @media(max-width:700px){html body>header{padding:12px 16px;gap:10px;flex-wrap:wrap}html header h1{display:block;font-size:22px}html header nav{order:3;width:100%;margin:0;justify-content:space-between}html header #brand{width:38px;height:38px}#desk.active{padding:20px 16px}#desk #observatory-heading{gap:16px}#desk #observatory-heading .observatory-place{flex:1;min-width:0}#desk #observatory-clock{padding-left:12px}#desk #clock-time{font-size:28px}#desk #gauges{grid-template-columns:repeat(3,minmax(0,1fr));padding:18px 8px;gap:24px 0}#desk #gauges>.gauge{border:0;padding:0 10px}#desk #observatory-grid{display:flex;flex-direction:column}#desk #observatory-radar{min-height:420px}#desk #observatory-signals{display:block}#desk #observatory-signals>.card{margin-top:12px}#desk #daycards>.daycard{grid-template-columns:80px 1fr}#desk #daycards .dc-mid{grid-template-columns:35px 1fr 45px}#desk #daycards .dc-temp b{font-size:18px}#desk #hero-alerts{gap:8px}#desk #hero-alerts button{font-size:10px;padding:7px}#desk #clock-date{font-size:10px}}
 

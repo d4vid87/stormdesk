@@ -40,12 +40,10 @@ export function initObservatory() {
   state.className = 'observatory-note';
   state.append($('hero-live'), $('hero-batt'));
   health.insertBefore(state, $('health'));
-  // Keep advanced tools reachable without occupying the main weather workspace.
-  const extra = document.createElement('details');
-  extra.id = 'observatory-more';
-  extra.innerHTML = '<summary>More weather details &amp; analysis</summary><div class="observatory-extra-readings"></div>';
-  extra.lastElementChild.append(document.querySelector('[data-panel="g-wet"]'));
-  extra.append($('desk-outlook'), $('ticker'), $('ha-panel'));
+  // Retain render targets for shared modules without exposing the retired dashboard section.
+  const extra = document.createElement('div');
+  extra.hidden = true;
+  extra.append(document.querySelector('[data-panel="g-wet"]'), $('desk-outlook'), $('ticker'), $('ha-panel'));
   stack.append(extra);
   desk.insertBefore($('gauges'), stack);
   const label = document.createElement('span');
