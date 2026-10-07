@@ -1,5 +1,7 @@
-import { settings, saveSettings, coords, U, msToWind, deg2compass, num, timeStr, dayStr, expires } from '../js/app.js';
+import { settings, saveSettings, coords, U, msToWind, windToMs, deg2compass, num, timeStr, dayStr, expires } from '../js/app.js';
 import * as api from '../js/api.js?v=station-fields1';
+import { safeMode } from '../js/compat.js';
+import { historyContext, rememberHistory } from './history-cache.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -11,6 +13,17 @@ let observationError = '';
 let forecastError = false;
 let observationKey = '';
 const stationKey = () => JSON.stringify([settings().stationId, settings().stationSource, settings().units, settings().windUnit]);
+function recordHistory(reading, source) {
+  if (!reading) return;
+  const metric = settings().units === 'metric';
+  const convert = (value, factor, offset = 0) => value == null ? null : (value - offset) * factor;
+  rememberHistory(historyContext(settings(), coords()), {
+    time: reading.time || Math.floor(Date.now() / 1000), source,
+    tempC: convert(reading.air_temperature, metric ? 1 : 5 / 9, metric ? 0 : 32),
+    windMs: windToMs(reading.wind_avg),
+    rainMm: convert(reading.precip_accum_local_day, metric ? 1 : 25.4),
+  });
+}
 const configured = () => !!(settings().stationSource || (settings().token && settings().stationId));
 function browsePlace(lat, lon, name) {
   saveSettings({ places: [...(settings().places || []).filter(p => p.id !== 'lite-browse'), { id: 'lite-browse', lat, lon, name }], activePlace: 'lite-browse' });
@@ -194,7 +207,11 @@ async function refreshObservation() {
     }
     if (key !== stationKey()) return;
     observationError = '';
-    if (reading) { observation = reading; try { localStorage.setItem('wd.liteObservation', JSON.stringify({ key, reading })); } catch {} }
+    if (reading) {
+      observation = reading;
+      if (!settings().activePlace) recordHistory(reading, 'station');
+      try { localStorage.setItem('wd.liteObservation', JSON.stringify({ key, reading })); } catch {}
+    }
   } catch (error) {
     if (key !== stationKey()) return;
     observationError = /401|403|rejected/i.test(error.message) ? 'Check station credentials' : 'Station update unavailable';
@@ -210,6 +227,7 @@ async function refreshForecast() {
     const forecast = await api.betterForecast();
     if (key !== JSON.stringify([coords(), settings().units])) return;
     baseForecast = forecast;
+    if (!configured() || settings().activePlace) recordHistory(forecast.current_conditions, 'forecast');
     try { localStorage.setItem('wd.liteForecast', JSON.stringify({ key, forecast })); } catch {}
     forecastError = false;
   } catch { forecastError = true; }
@@ -239,8 +257,19 @@ function showPage(name) {
   $$('.page').forEach((page) => { page.hidden = page.id !== `${name}Page`; });
   $$('nav [data-page]').forEach((button) => button.setAttribute('aria-current', button.dataset.page === name ? 'page' : 'false'));
   if (name === 'radar') loadRadarStill();
+  if (name === 'history') loadHistory();
   if (name !== 'radar') stopRadar();
   scrollTo(0, 0);
+}
+
+let historyHours = 24;
+async function loadHistory() {
+  $('#historyStatus').textContent = 'Loading history…';
+  try {
+    const { renderHistory } = await import('./history-view.js');
+    await renderHistory({ context: historyContext(settings(), coords()), hours: historyHours,
+      status: $('#historyStatus'), container: $('#historyRows') });
+  } catch (error) { $('#historyStatus').textContent = `History unavailable: ${error.message}`; }
 }
 
 const nearestSite = () => {
@@ -259,7 +288,7 @@ function loadRadarStill() {
   if (!site) return;
   $('#radarStill').onerror = () => {
     $('#radarStill').hidden = true;
-    $('.radar-label').textContent = 'Radar snapshot unavailable · press Play for live radar';
+    $('.radar-label').textContent = safeMode() ? 'Radar snapshot unavailable' : 'Radar snapshot unavailable · press Play for live radar';
   };
   $('#radarStill').onload = () => { $('#radarStill').hidden = false; };
   $('#radarStill').src = `https://img.hookecho.io/snapshot.png?${new URLSearchParams({ site, size: '768', zoom: '6.5', basemap: 'dark', t: Math.floor(Date.now() / 300000) })}`;
@@ -267,6 +296,7 @@ function loadRadarStill() {
 }
 
 function playRadar() {
+  if (safeMode()) return;
   const frame = $('#radarViewer');
   if (!frame.src) {
     const point = coords();
@@ -349,6 +379,11 @@ async function pairDevice() {
 }
 
 $$('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
+$$('[data-history-hours]').forEach((button) => button.addEventListener('click', () => {
+  historyHours = Number(button.dataset.historyHours);
+  $$('[data-history-hours]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+  loadHistory();
+}));
 $$('[data-open]').forEach((button) => button.addEventListener('click', () => openDialog(button.dataset.open)));
 $$('[data-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
 $$('[data-forecast]').forEach((button) => button.addEventListener('click', () => { $$('[data-forecast]').forEach((peer) => peer.setAttribute('aria-pressed', String(peer === button))); renderForecast(button.dataset.forecast); }));
@@ -396,13 +431,21 @@ $('#stationStep').addEventListener('click', (event) => {
 });
 
 const destinations = {
-  'Station details': '../#signals', 'History and analysis': '../#data',
+  'Station details': '../#signals', 'Detailed history and analysis': '../#data',
   'Timeline and local signals': '../#timeline', 'Alert rules': '../#desk',
   Integrations: '../#home', 'Backup and export': '../#data', Account: '../',
 };
-$$('[data-preview]').forEach((button) => button.addEventListener('click', () => { const title = button.dataset.preview.split('|')[0]; location.href = destinations[title] || '../'; }));
+$$('[data-preview]').forEach((button) => button.addEventListener('click', () => {
+  const title = button.dataset.preview.split('|')[0];
+  const destination = destinations[title] || '../';
+  location.href = safeMode() ? destination.replace('../', '../?full=1') : destination;
+}));
 
 async function start() {
+  if (safeMode()) {
+    $('#radarPlay').hidden = true;
+    $('#radarPage .page-lede').textContent = 'Radar snapshot refreshes every five minutes.';
+  }
   const initial = new URLSearchParams(location.search);
   document.documentElement.dataset.theme = ['light', 'dark', 'system'].includes(initial.get('theme')) ? initial.get('theme') : localStorage.getItem('wd.liteTheme') || 'system';
   $('#themeSelect').value = document.documentElement.dataset.theme;
@@ -421,9 +464,12 @@ async function start() {
   if (point.name) $('#locationButton').textContent = `⌖ ${point.name}`;
   sites = await fetch('../sites.json').then((response) => response.json()).catch(() => []);
   await refresh();
-  if (['today', 'forecast', 'radar', 'more'].includes(initial.get('page'))) showPage(initial.get('page'));
+  if (['today', 'forecast', 'radar', 'history', 'more'].includes(initial.get('page'))) showPage(initial.get('page'));
   setInterval(() => { if (!document.hidden) refreshForecast(); }, 300000);
   setInterval(() => { if (!document.hidden) refreshObservation(); }, 60000);
+  setInterval(() => {
+    if (!document.hidden && !$('#radarPage').hidden) { radarLoaded = false; loadRadarStill(); }
+  }, 300000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 

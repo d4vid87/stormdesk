@@ -9,7 +9,6 @@ import { motionLevel } from './motion.js';
 import { initDesk, refreshDesk, refreshObs, refreshAlerts, refreshAqi } from './desk.js';
 import { initIntel, refreshModels, refreshNowcast } from './intel.js';
 import { initSignals, refreshSignals } from './signals.js';
-import { initBoards } from './boards.js';
 import { initAlmanac } from './almanac.js';
 import { initRules, renderRules } from './rules.js';
 import { initEnv } from './env.js';
@@ -17,13 +16,36 @@ import { initPlaces, renderPlaces } from './places.js';
 import { initPro } from './pro.js?v=clear-list-20260926';
 import { initLayout, snapshot, restore, hiddenPanels, unhide, panelIds, tabOf, setTab, TABS, NEVER_HIDE } from './layout.js';
 import { initUdp } from './udp.js';
-import { initHome } from './home.js';
 import { initOutlook } from './outlook.js';
 import { initDetail } from './detail.js';
-import { initTimeline, timelineSettings } from './timeline.js';
+import { timelineSettings } from './timeline-settings.js';
 import { applyMotion } from './motion.js';
 
 const $ = (id) => document.getElementById(id);
+let historyModules;
+let homeModule;
+function initHome() {
+  const s = settings();
+  if (!homeModule && !s.mqttUrl && !s.haUrl && !(s.mqttSubs || []).length) return;
+  if (!homeModule) homeModule = import('./home.js');
+  homeModule.then((module) => module.initHome()).catch((error) => console.warn('Integrations unavailable', error));
+}
+function initHistory() {
+  if (!historyModules) {
+    historyModules = Promise.all([import('./boards.js'), import('./timeline.js')]).then(([boards, timeline]) => {
+      boards.initBoards();
+      timeline.initTimeline();
+      return [boards, timeline];
+    });
+  }
+  return historyModules;
+}
+window.addEventListener('wd:section', (event) => {
+  if (event.detail === 'data' || event.detail === 'timeline') initHistory().catch((error) => console.warn('History unavailable', error));
+});
+function refreshHistoryIfLoaded() {
+  historyModules?.then(([boards, timeline]) => { boards.initBoards(); timeline.initTimeline(); });
+}
 // Apply this switch immediately, so disabled alerts cannot remain queued until drawer Save.
 $('set-speak').onchange = () => saveSettings({ speakAlerts: $('set-speak').checked });
 $('btn-voice-test').onclick = () => {
@@ -619,7 +641,7 @@ $('btn-save').onclick = async () => {
   }
   loadDeskRadar();
   initDesk(); // idempotent: every() replaces existing jobs
-  initIntel(); initSignals(); initBoards(); initAlmanac(); initEnv(); initPro(); initLayout(); initDetail(); initTimeline(); initUdp(); initHome(); initOutlook();
+  initIntel(); initSignals(); refreshHistoryIfLoaded(); initAlmanac(); initEnv(); initPro(); initLayout(); initDetail(); initUdp(); initHome(); initOutlook();
 };
 
 // station meta fills name/lat/lon and the Tempest device id when blank
@@ -1261,6 +1283,8 @@ $('btn-diag').onclick = async () => {
   $('health-summary').innerHTML = cards.map(([name, ok, detail]) =>
     `<div><span>${name}</span><span class="${ok ? 'ok' : 'fail'}">${ok ? '✓' : '✗'} ${detail}</span></div>`).join('');
   $('health-summary')._report = { version: APP_VERSION, viewport: view, platform: navigator.platform,
+    compatibility: { mode: window.__WD_BOOT_REASON || 'unknown', safe: safeMode(), cores: navigator.hardwareConcurrency || null,
+      memoryGb: navigator.deviceMemory || null },
     motion: document.documentElement.dataset.motion, render: settings().render, server, performance: window.__WD_TIMINGS || {},
     sources: rows.map((r) => ({ name: r.name, ok: r.ok })) };
 };
@@ -1424,9 +1448,24 @@ window.addEventListener('wd:storm', (e) => {
 // lazy-load the Lab iframe on first visit — full chrome there, it is the roomier view
 window.addEventListener('wd:section', (e) => {
   const f = $('lab-frame');
-  if (e.detail !== 'lab') return;
+  if (e.detail !== 'desk') {
+    const deskFrame = $('desk-radar-frame');
+    if (deskFrame.src) { deskFrame.src = 'about:blank'; deskFrame.removeAttribute('src'); }
+    $('desk-radar-still').hidden = true;
+    clearJob('radar-still');
+    loadDeskRadar.armed = false;
+    radarAlive();
+  } else loadDeskRadar();
+  if (e.detail !== 'lab') {
+    if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); }
+    clearJob('lab-radar-still');
+    return;
+  }
   if (safeMode()) {
-    if ($('lab-radar-still')) return;
+    if ($('lab-radar-still')) {
+      every('lab-radar-still', 300, () => { $('lab-radar-still').src = stillUrl(); });
+      return;
+    }
     const img = document.createElement('img');
     img.id = 'lab-radar-still';
     img.alt = 'Radar snapshot';
@@ -1639,9 +1678,11 @@ pulled.then(() => {
   showWizard();
   hydrateStation().then(() => {
     loadDeskRadar();
-    initDesk(); initIntel(); initSignals(); initBoards(); initAlmanac(); initEnv(); initPro(); initDetail(); initTimeline(); initUdp(); initHome();
+    initDesk(); initIntel(); initSignals(); refreshHistoryIfLoaded(); initAlmanac(); initEnv(); initPro(); initDetail(); initUdp(); initHome();
     every('server-alerts', 300, probeServerAlerts);
     (window.__WD_TIMINGS ||= {}).initialDeskRenderMs = Math.round(performance.now());
+    try { localStorage.removeItem('wd.boot.pending'); } catch { /* storage may be disabled */ }
+    window.__TAURI__?.core?.invoke('frontend_ready')?.catch(() => {});
   });
 });
 

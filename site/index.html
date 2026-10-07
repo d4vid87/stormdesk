@@ -5,6 +5,29 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#121416">
+<script>
+  // Route constrained browsers before the full dashboard preloads its module graph.
+  // ?full=1 keeps the full UI available for diagnosis and capable devices.
+  (function () {
+    if (!/(\/|\/index\.html)$/.test(location.pathname)) return;
+    var forcedFull = new URLSearchParams(location.search).get('full') === '1';
+    var appliance = /Family\s*Hub|Tizen|SMART-TV|Smart\s*Hub|CrOS/i.test(navigator.userAgent)
+      || (/SamsungBrowser/i.test(navigator.userAgent) && !/Android/i.test(navigator.userAgent));
+    var constrained = navigator.deviceMemory <= 2 && navigator.hardwareConcurrency <= 4;
+    var failedBoot = false;
+    try {
+      var pending = JSON.parse(localStorage.getItem('wd.boot.pending') || 'null');
+      failedBoot = pending && Date.now() - pending.started < 86400000;
+    } catch (_) {}
+    if (!forcedFull && (appliance || constrained || failedBoot)) {
+      location.replace(new URL('lite/' + location.search, location.href));
+      return;
+    }
+    window.__WD_BOOT_REASON = appliance ? 'appliance override' : constrained ? 'low memory override'
+      : failedBoot ? 'recovery override' : 'standard';
+    try { localStorage.setItem('wd.boot.pending', JSON.stringify({ started: Date.now() })); } catch (_) {}
+  }());
+</script>
 <!-- Installable from a phone's browser. sw.js caches the shell only, and only on a secure
      origin — see shouldRegisterSW() in js/boot.js. The weather itself is never cached there;
      desk.js keeps the last good forecast and obs and marks them stale. -->
@@ -25,7 +48,6 @@
 <link rel="modulepreload" href="js/icons.js">
 <link rel="modulepreload" href="js/motion.js">
 <link rel="modulepreload" href="js/sky.js">
-<link rel="modulepreload" href="js/timeline.js">
 <style>
   @font-face { font-family: 'Barlow SC'; font-style: normal; font-weight: 500; font-display: swap;
     src: url(fonts/barlow-semi-condensed-500.woff2) format('woff2'); }

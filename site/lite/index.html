@@ -11,6 +11,12 @@
 <meta property="og:title" content="Stormdesk Lite">
 <meta property="og:description" content="A fast, focused weather dashboard that works on everyday hardware.">
 <meta property="og:image" content="https://mystormdesk.com/images/stormdesk-lite-desktop.png">
+<script>
+  // Lite stores and copies plain JSON weather records; older appliance browsers lack this API.
+  if (!window.structuredClone) window.structuredClone = function (value) {
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  };
+</script>
 <style>
   :root {
     color-scheme: light;
@@ -107,11 +113,15 @@
   .more-card.status { cursor:default; }
   .status-dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--good); margin-right:6px; }
   nav { position:fixed; z-index:20; left:0; right:0; bottom:0; background:var(--surface); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
-  .nav-inner { max-width:680px; margin:auto; display:grid; grid-template-columns:repeat(4,1fr); }
+  .nav-inner { max-width:680px; margin:auto; display:grid; grid-template-columns:repeat(5,1fr); }
   nav button { min-height:64px; border:0; background:transparent; color:var(--muted); display:grid; place-content:center; gap:1px; }
   nav button span:first-child { font-size:20px; }
   nav button span:last-child { font-size:11px; font-weight:700; }
   nav button[aria-current="page"] { color:var(--amber); }
+  .history-row { display:grid; grid-template-columns:minmax(130px,1.6fr) repeat(3,minmax(65px,1fr)); gap:10px; padding:12px; border-bottom:1px solid var(--line); align-items:center; font-variant-numeric:tabular-nums; }
+  .history-row:last-child { border-bottom:0; }
+  .history-heading { color:var(--muted); font-size:12px; font-weight:700; }
+  .history-row span { min-width:0; overflow-wrap:anywhere; }
   dialog { color:var(--text); background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 70px #0007; width:min(600px,calc(100% - 24px)); max-height:90dvh; padding:0; }
   dialog::backdrop { background:#0a1017a8; }
   .dialog-head { display:flex; align-items:center; gap:12px; padding:18px 20px; border-bottom:1px solid var(--line); }
@@ -180,6 +190,7 @@ header{position:static;background:transparent;border:0;backdrop-filter:none}.hea
   <header>
     <div class="header-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true">☁</span><span>Stormdesk Lite<small>Live weather</small></span></div>
+      <a class="button" href="../?full=1">Full dashboard</a>
       <button class="button location-button" id="locationButton" type="button" aria-haspopup="dialog">⌖ Oklahoma City, OK</button>
     </div>
   </header>
@@ -244,11 +255,21 @@ header{position:static;background:transparent;border:0;backdrop-filter:none}.hea
       </div>
     </section>
 
+    <section class="page" id="historyPage" aria-labelledby="historyTitle" hidden>
+      <h1 id="historyTitle">History</h1><p class="page-lede">Past station readings and saved browser samples</p>
+      <div class="segmented" role="group" aria-label="History range">
+        <button type="button" data-history-hours="24" aria-pressed="true">24 hours</button>
+        <button type="button" data-history-hours="168" aria-pressed="false">7 days</button>
+      </div>
+      <p id="historyStatus" class="source" role="status">Loading history…</p>
+      <div id="historyRows" class="forecast-list card"></div>
+    </section>
+
     <section class="page" id="morePage" aria-labelledby="moreTitle" hidden>
       <h1 id="moreTitle">More</h1><p class="page-lede">Station tools and advanced weather details load only when opened.</p>
       <div class="more-grid">
         <button class="more-card card" type="button" data-preview="Station details|Live measurements, sensor health, battery status, and the age of the last report."> <span class="icon">⌁</span><span><strong>Station details</strong><span id="stationStatus"><i class="status-dot"></i>Forecast-only mode</span></span></button>
-        <button class="more-card card" type="button" data-preview="History and analysis|Charts, records, rain totals, model comparisons, and your local weather archive."><span class="icon">▥</span><span><strong>History & analysis</strong><span>Charts, records, rain totals</span></span></button>
+        <button class="more-card card" type="button" data-preview="Detailed history and analysis|Charts, records, rain totals, model comparisons, and your local weather archive."><span class="icon">▥</span><span><strong>Detailed history & analysis</strong><span>Charts, records, rain totals</span></span></button>
         <button class="more-card card" type="button" data-preview="Timeline and local signals|Past conditions, upcoming weather events, nearby sensors, lightning, and recent notifications."><span class="icon">↝</span><span><strong>Timeline & local signals</strong><span>Past day and next two days</span></span></button>
         <button class="more-card card" type="button" data-preview="Alert rules|Create alerts for wind, rain, heat, cold, and other station or forecast thresholds."><span class="icon">⚠</span><span><strong>Alert rules</strong><span>Custom thresholds and notices</span></span></button>
         <button class="more-card card" type="button" data-preview="Integrations|Connect Home Assistant, MQTT, ntfy, webhooks, and supported smart-home workflows."><span class="icon">⌘</span><span><strong>Integrations</strong><span>Home Assistant, MQTT, webhooks</span></span></button>
@@ -263,6 +284,7 @@ header{position:static;background:transparent;border:0;backdrop-filter:none}.hea
     <button type="button" data-page="today" aria-current="page"><span aria-hidden="true">☀</span><span>Today</span></button>
     <button type="button" data-page="forecast"><span aria-hidden="true">▤</span><span>Forecast</span></button>
     <button type="button" data-page="radar"><span aria-hidden="true">◎</span><span>Radar</span></button>
+    <button type="button" data-page="history"><span aria-hidden="true">▥</span><span>History</span></button>
     <button type="button" data-page="more"><span aria-hidden="true">•••</span><span>More</span></button>
   </div></nav>
 </div>

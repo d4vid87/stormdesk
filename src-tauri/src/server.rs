@@ -603,18 +603,20 @@ pub fn window(url: &str, now: u64) -> (i64, i64) {
 
 fn asset(path: &str) -> Option<(Vec<u8>, &'static str)> {
     let rel = path.trim_start_matches('/');
-    let rel = if rel.is_empty() { "index.html" } else { rel };
+    let rel = if rel.is_empty() { "index.html".to_owned() }
+        else if rel.ends_with('/') { format!("{rel}index.html") }
+        else { rel.to_owned() };
     // The site is baked in at compile time, so editing a file would otherwise mean rebuilding
     // the binary to see it. `WD_SITE_DIR` serves from disk instead — development only; nothing
     // sets it in a release.
     let live = std::env::var("WD_SITE_DIR")
         .ok()
-        .map(|d| Path::new(&d).join(rel));
+        .map(|d| Path::new(&d).join(&rel));
     let bytes = match live {
         Some(p) if p.is_file() => std::fs::read(p).ok()?,
-        _ => SITE.get_file(rel)?.contents().to_vec(),
+        _ => SITE.get_file(&rel)?.contents().to_vec(),
     };
-    let mime = match Path::new(rel)
+    let mime = match Path::new(&rel)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
@@ -850,6 +852,9 @@ fn handle(state: &Arc<State>, mut req: Request) {
         // reverse proxy to the outside world. Same config with every secret taken out of it, and
         // a flag the page uses to hide the settings drawer.
         "/config-public" => json(redact(&read_config(&state.cfg_path))),
+        "/lite" => Response::empty(302)
+            .with_header(header("Location", "/lite/"))
+            .boxed(),
         "/public" => Response::empty(302)
             .with_header(header("Location", "/"))
             .boxed(),
@@ -1450,6 +1455,12 @@ pub fn start_backfill(state: Arc<State>) {
 // reach the public blob, and a v2 client's whole-blob write must keep working.
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn lite_directory_serves_its_page() {
+        let (body, mime) = super::asset("/lite/").expect("Lite directory entry");
+        assert_eq!(mime, "text/html");
+        assert!(String::from_utf8_lossy(&body).contains("Stormdesk Lite"));
+    }
     use super::*;
 
     /// The window a history request asks for: the old `hours` contract, and the explicit range a

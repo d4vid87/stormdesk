@@ -6,6 +6,7 @@ let s = { stationId: '123', token: 'test', stationName: 'Backyard', units: 'impe
 let rendered, fails = false, forecastFails = false;
 const memory = new Map();
 const context = vm.createContext({ console, structuredClone, Date, URLSearchParams,
+  recordHistory:()=>{},
   settings: () => s, saveSettings: p => Object.assign(s, p), coords: () => s.places.find(p=>p.id===s.activePlace)||s,
   localStorage: { getItem:k=>memory.get(k)||null, setItem:(k,v)=>memory.set(k,v) },
   render:v=>{rendered=v}, openDialog:()=>{}, refreshAlerts:()=>{},

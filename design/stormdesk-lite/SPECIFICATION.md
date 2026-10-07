@@ -7,7 +7,8 @@ Stormdesk Lite is the focused StormDesk interface at `/lite/`. It uses the same 
 - **Today** shows official warnings, current conditions, source age, six upcoming hours, five forecast days, and station connection status.
 - **Forecast** switches between the next 24 hours and ten days.
 - **Radar** requests a still image only when opened and loads the interactive HookEcho viewer only after Play.
-- **More** opens the existing StormDesk station health, timeline, history, alert rules, integrations, backup, and access tools. These modules never load during Lite startup.
+- **History** shows the last 24 hours or seven days of station readings and browser samples. A connected StormDesk host supplies its archive; a configured Tempest account can supply device history. Forecast-only browsers collect bounded samples while the page is running.
+- **More** opens the existing StormDesk station health, detailed history, timeline, alert rules, integrations, backup, and access tools. These modules never load during Lite startup.
 - Appearance follows the device by default. Light and Dark overrides and US/metric units are saved per browser.
 - Current readings retain their last value and display their age. Missing station fields say “Unavailable”; numeric zero remains zero.
 
@@ -32,4 +33,6 @@ The existing one-station-per-host storage model remains. Multi-user hosted stati
 
 The interface uses native buttons, inputs, selects, links, and dialogs; visible focus; labeled controls; reduced-motion handling; and responsive layouts for phone, tablet, and desktop widths. System fonts and dependency-free HTML, CSS, and JavaScript keep the runtime portable.
 
-Hardware performance benchmarking is excluded at the owner's request.
+Samsung Smart Hub/Family Hub, ChromeOS, and low-memory browsers enter Lite before the full dashboard loads. A full dashboard boot that fails on one visit also offers Lite on the next visit. `?full=1` forces the full dashboard. The live radar viewer stays opt-in on Lite; constrained browsers use the still image.
+
+Browser compatibility checks cover routing, History, bounded cache size, and a long simulated session. AMD Linux software rendering and the headless browser package are checked in CI. Physical Samsung, Chromebook, and AMD hardware validation remains provisional until those devices are available.

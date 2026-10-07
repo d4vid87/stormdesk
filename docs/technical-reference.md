@@ -18,6 +18,8 @@ If StormDesk is useful to you, please [give the project a star](https://github.c
 
 ## The three destinations
 
+On Samsung Smart Hub/Family Hub, ChromeOS, and small-memory browsers, the hosted dashboard opens **StormDesk Lite** before loading the full dashboard modules. Lite has Today, Forecast, still Radar, and basic History. A full dashboard boot that fails once also opens Lite on the next visit. Use `?full=1` to retry the full dashboard. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
+
 - **Weather** uses the Observatory layout: seven top metrics, compact current conditions and a forecast list on the left, HookEcho radar in the center (enabled by default for new screens; saved on/off choices are preserved), and local signals, alerts, astronomy, and device health on the right. The list shows up to ten forecast days; providers may supply fewer. A live local clock and a banner for nearby official warnings and emergencies sit in the header. **More weather details & analysis** retains the timeline, additional charts, and advanced tools.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
@@ -32,7 +34,7 @@ Settings now opens to a searchable home with six category cards: Everyday, Appea
 
 Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [theme screenshots](../README.md#screenshots).
 
-These screenshots and layout notes describe the current web/source UI. The latest packaged release remains **4.4.0**; an existing downloaded installer may show the earlier interface until a new package is published.
+These screenshots and layout notes describe the current web/source UI. The latest packaged release is **4.5.2**; an existing downloaded installer may show the earlier interface until it updates.
 
 The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Radar → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 
@@ -544,7 +546,8 @@ On Windows, if the tablet can't load the LAN URL, it's the firewall prompt that 
 first launch — allow StormDesk on private networks.
 
 **The window opens blank (Linux).** WebKitGTK's GPU paths do not survive every combination of
-driver and compositor — an Intel iGPU under the AppImage is the known-bad one. Start it once with
+driver and compositor. Intel and AMD GPUs under the AppImage default to software compositing.
+If the window is still blank, start it once with
 the workarounds on:
 
 ```sh

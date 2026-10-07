@@ -4,22 +4,14 @@ import * as api from './api.js';
 import { settings, U, num, every, msToWind } from './app.js';
 import { forecast as deskForecast } from './desk.js';
 import { openDetail } from './detail.js';
+import { timelineSettings as savedTimelineSettings } from './timeline-settings.js';
 
 const $ = (id) => document.getElementById(id);
 const HOUR = 3600;
-const DEFAULT_CATS = ['precip', 'storm', 'winter', 'freeze', 'heat', 'wind', 'aqi', 'change', 'sun', 'alert'];
 let history = [], alerts = [], aqi = null, models = null, events = [];
 let filter = 'all';
 
-export const timelineSettings = (s = settings()) => ({
-  precip: 30,
-  freezeC: 0,
-  heatC: 35,
-  gustMs: 13.4112, // 30 mph
-  aqi: 101,
-  categories: DEFAULT_CATS,
-  ...(s.timeline || {}),
-});
+export const timelineSettings = (s = settings()) => savedTimelineSettings(s);
 
 const metric = (v, imperial) => imperial ? v * 9 / 5 + 32 : v;
 const wind = (v) => v == null ? null : msToWind(v);

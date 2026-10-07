@@ -141,9 +141,9 @@ pub fn run() {
 /// Which WebKitGTK renderer knobs to set before the window is created.
 ///
 /// The DMABUF renderer draws a blank window on some Wayland stacks; on the AppImage — which
-/// always runs under XWayland, because linuxdeploy's GTK hook exports `GDK_BACKEND=x11` — an
-/// Intel iGPU needs software compositing on top of that. Both flags cost the GPU path, so
-/// `auto` only reaches for the second one on the combination that is known to draw nothing.
+/// always runs under XWayland, because linuxdeploy's GTK hook exports `GDK_BACKEND=x11` —
+/// Intel and AMD GPUs under the AppImage can need software compositing on top of that.
+/// Both flags cost the GPU path, so `auto` only reaches for the second one there.
 /// Pure so it can be tested; `main.rs` decides the mode and does the setting.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn render_env(mode: &str, appimage: bool, gpu_vendor: Option<&str>) -> Vec<(&'static str, &'static str)> {
@@ -155,8 +155,8 @@ pub fn render_env(mode: &str, appimage: bool, gpu_vendor: Option<&str>) -> Vec<(
         ],
         _ => {
             let mut v = vec![("WEBKIT_DISABLE_DMABUF_RENDERER", "1")];
-            // 0x8086 is Intel. The desktop's NVIDIA card draws fine with compositing on.
-            if appimage && gpu_vendor == Some("0x8086") {
+            // 0x8086 is Intel, 0x1002 is AMD. The NVIDIA path keeps compositing on.
+            if appimage && matches!(gpu_vendor, Some("0x8086" | "0x1002")) {
                 v.push(("WEBKIT_DISABLE_COMPOSITING_MODE", "1"));
             }
             v
@@ -195,6 +195,10 @@ mod render_tests {
         );
         assert_eq!(
             names(render_env("auto", true, Some("0x8086"))),
+            ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"]
+        );
+        assert_eq!(
+            names(render_env("auto", true, Some("0x1002"))),
             ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"]
         );
         assert_eq!(names(render_env("auto", true, Some("0x10de"))), ["WEBKIT_DISABLE_DMABUF_RENDERER"]);

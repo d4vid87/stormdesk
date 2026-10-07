@@ -20,9 +20,12 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+      - run: cargo check --manifest-path src-tauri/Cargo.toml --no-default-features
 
   site:
     runs-on: ubuntu-latest
+    env:
+      CHROME: google-chrome
     steps:
       - uses: actions/checkout@v4
       - run: node marketing/tests/carbon-preview.mjs
@@ -33,6 +36,7 @@ jobs:
       - run: node scripts/check-browser-compat.mjs
       - run: node scripts/check-stormdesk-lite.mjs
       - run: node scripts/check-lite-readings.mjs
+      - run: node scripts/check-lite-history.mjs
       - run: node scripts/check-speech.mjs
       - run: python3 scripts/check-natural-voice.py
       - run: bash .github/ci/selftest.sh

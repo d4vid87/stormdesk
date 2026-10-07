@@ -146,6 +146,40 @@ jobs:
             "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ needs.create-release.outputs.release_id }}/assets?name=StormDesk_${{ github.ref_name }}.apk" \
             --input "$apk"
 
+  # Browser-mode Linux package: no Tauri, GTK or WebKit runtime dependency.
+  browser-package:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            arch: amd64
+          - platform: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+      - run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+      - run: cargo build --release --no-default-features --manifest-path src-tauri/Cargo.toml --bin stormdesk
+      - name: Package and upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          mkdir -p browser-package
+          cp src-tauri/target/release/stormdesk scripts/stormdesk-browser.sh LICENSE browser-package/
+          chmod +x browser-package/stormdesk-browser.sh
+          asset="StormDesk_${GITHUB_REF_NAME}_browser_${{ matrix.arch }}.tar.gz"
+          tar -czf "$asset" -C browser-package .
+          gh api --method POST -H 'Content-Type: application/gzip' \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=$asset" \
+            --input "$asset"
+
   # Windows Defender false-positives new unsigned installers, and the only honest answer to "is
   # this safe?" is a checksum published beside the download. Runs after every build job so the
   # list covers all of them.
@@ -154,7 +188,7 @@ jobs:
   # .msi at microsoft.com/wdsi/filesubmission as "Software developer" → "Incorrectly detected as
   # malware". Turnaround is usually a day, and it clears the detection for everyone.
   checksums:
-    needs: [create-release, build]
+    needs: [create-release, build, browser-package]
     runs-on: ubuntu-latest
     steps:
       - env:

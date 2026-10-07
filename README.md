@@ -14,7 +14,7 @@ New installs open in **Graphite Silver**. Choose **Settings → Appearance → T
 
 ![A demo-data tour of StormDesk’s Observatory dashboard, HookEcho radar, History, and theme settings](docs/stormdesk-hero.gif)
 
-The interface images show the current design with labeled demo station data. HookEcho supplies the radar map. The latest packaged release is **4.5.1**.
+The interface images show the current design with labeled demo station data. HookEcho supplies the radar map. The latest packaged release is **4.5.2**.
 
 Stormdesk Lite remains available as a lighter browser interface for older devices: [open Lite](https://app.mystormdesk.com/lite/) or read its [design specification](design/stormdesk-lite/SPECIFICATION.md).
 
@@ -91,11 +91,16 @@ If the AppImage opens a blank window, use browser mode:
 ./StormDesk_*_amd64.AppImage --browser
 ```
 
+Linux releases also include a browser-mode archive for x86-64 and ARM64. Extract it and run
+`stormdesk-browser.sh` to keep the station collector and archive local while showing the full
+dashboard in your system browser. This build needs no GTK or WebKit installation.
+
 ### Chromebook
 
 The easiest option is to run StormDesk on another computer in your home, then open the address
-shown by StormDesk in the Chromebook browser. If Linux is enabled on your Chromebook, you can also
-download the AppImage and run it with `--browser`.
+shown by StormDesk in the Chromebook browser. If Linux is enabled on your Chromebook, use the
+browser-mode archive matching its CPU architecture. Chromebook and Samsung hub browsers open
+StormDesk Lite by default; choose **Full dashboard** there if the device can handle it.
 
 ## Set it up
 

@@ -12,6 +12,7 @@ assert.match(source, /Stormdesk Lite/);
 assert.match(source, /data-page="today"/);
 assert.match(source, /data-page="forecast"/);
 assert.match(source, /data-page="radar"/);
+assert.match(source, /data-page="history"/);
 assert.match(source, /data-page="more"/);
 assert.doesNotMatch(source, /fetch\(|XMLHttpRequest|WebSocket/);
 assert.match(source, /src="lite\.js(?:\?[^"]*)?"/);
@@ -23,7 +24,7 @@ assert.match(productionJs, /!site\.id\.startsWith\('T'\)/);
 assert.match(productionJs, /Radar snapshot unavailable/);
 assert.doesNotMatch(productionJs, /Sample forecast|DEMO-TOKEN/);
 
-for (const query of ['', '?page=forecast', '?page=radar', '?page=more&theme=dark', '?scenario=stale']) {
+for (const query of ['', '?page=forecast', '?page=radar', '?page=history', '?page=more&theme=dark', '?scenario=stale']) {
   const dom = execFileSync(chrome, [
     '--headless', '--no-sandbox', '--disable-gpu', '--dump-dom', `file://${file}${query}`,
   ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -31,4 +32,4 @@ for (const query of ['', '?page=forecast', '?page=radar', '?page=more&theme=dark
   assert.match(dom, /Next six hours/);
 }
 
-console.log('Stormdesk Lite: production wiring and 5 design states passed');
+console.log('Stormdesk Lite: production wiring and 6 design states passed');

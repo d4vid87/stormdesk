@@ -20,7 +20,7 @@ fn main() {
         return stormdesk_lib::run_browser();
     }
     // WebKitGTK renderer knobs. Which ones depend on the box: the AppImage runs under XWayland
-    // and an Intel iGPU there draws a blank window unless compositing is software too. Mode comes
+    // and Intel or AMD GPUs there can draw a blank window unless compositing is software too. Mode comes
     // from `WD_RENDER`, `--render <mode>`, then the saved setting, so a blank window can be fixed
     // from any browser on the LAN. Only set what the user has not set themselves.
     #[cfg(target_os = "linux")]

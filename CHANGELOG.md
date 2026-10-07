@@ -8,6 +8,17 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ## [Unreleased]
 
+## [4.5.2] - 2026-10-07
+
+### Added
+- StormDesk Lite now includes basic 24-hour and seven-day History from the local archive, Tempest, or bounded browser samples.
+- Linux browser-mode downloads for x86-64 and ARM64 keep the station collector without GTK or WebKit.
+
+### Fixed
+- Route Samsung Smart Hub, Family Hub, ChromeOS, and low-memory browsers to Lite before the full dashboard loads. Offer Lite after a failed full boot and allow `?full=1` to retry.
+- Use software compositing automatically for AMD AppImages when the native renderer is unreliable. Defer advanced dashboard modules and pause radar work outside its page.
+- Serve `/lite/` correctly from the StormDesk local host.
+
 ## [4.5.1] - 2026-09-27
 
 ### Fixed
