@@ -66,7 +66,7 @@ void Radar::setScale(double scale) {
 #ifdef STORMDESK_WEBENGINE
   if (view) {
     view->setZoomFactor(scale);
-    view->setMinimumHeight(qRound((compact ? 460 : 640) * scale));
+    view->setMinimumHeight(qRound((compact ? 920 : 640) * scale));
   }
 #else
   Q_UNUSED(scale);
