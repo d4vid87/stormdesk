@@ -382,6 +382,7 @@ QJsonObject archiveSummary(const QJsonArray &days) {
   return out;
 }
 Advanced::Advanced(Services &s) : QObject(&s), services(s) {
+  locationKey = key();
   connect(&s, &Services::changed, this, &Advanced::recordForecast);
 }
 QString Advanced::key() const {
@@ -664,8 +665,8 @@ void Advanced::recordForecast() {
   }
   while (scores.size() > 200)
     scores.removeFirst();
-  services.archive.setMeta(
-      "native_verification:" + key(),
-      QString::fromUtf8(QJsonDocument(scores).toJson(QJsonDocument::Compact)));
+  const auto encoded = QString::fromUtf8(QJsonDocument(scores).toJson(QJsonDocument::Compact));
+  if (services.archive.meta("native_verification:"+key()) != encoded)
+    services.archive.setMeta("native_verification:"+key(),encoded);
 }
 } // namespace storm

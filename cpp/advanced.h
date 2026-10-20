@@ -1,5 +1,6 @@
 #pragma once
 #include "services.h"
+#include <QJsonDocument>
 #include <QDate>
 #include <QSet>
 

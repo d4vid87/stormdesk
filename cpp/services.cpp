@@ -74,7 +74,11 @@ void Services::request(const QUrl &url, std::function<void(QJsonDocument, QStrin
         reply->deleteLater(); callback(doc, error);
     });
 }
-void Services::refresh() { pollStation(); pollForecast(); pollWarnings(); }
+void Services::refresh() {
+    const auto place=config.location();const auto key=QString::number(place.value("lat").toDouble(),'g',12)+","+QString::number(place.value("lon").toDouble(),'g',12);
+    if(forecast.contains("_location") && forecast.value("_location").toString()!=key){forecast={};warnings={};emit changed();}
+    pollStation(); pollForecast(); pollWarnings();
+}
 void Services::resetRuntime() {
     observation=archive.latest(); counters.clear();keptAt.clear();rawAt.clear();ruleSince.clear();latched.clear();packets={};diagnostics={};
     laCrosseToken.clear();lastRulesAt=0;backfillEmpty=0;forecast={};warnings={};emit changed();
