@@ -51,7 +51,7 @@ Android builds and touch behavior need validation on real tablets before distrib
 
 The toolbar has a saved **70–200%** interface-size selector. It changes text, controls, cards, and charts. Map controls scale with the interface; map zoom is independent. Qt handles the monitor's DPI separately. Each device keeps its own size choice; one tablet does not resize every other screen.
 
-At narrower widths, navigation becomes a page selector and the metric and content cards stack. Content scrolls vertically, and native scroll views and tables support touch scrolling. Under Tools → Customize dashboard, cards can be hidden or reordered and spacing changed. Official warnings remain visible. F11 enters or leaves full screen; Escape leaves it. Automated layout checks cover 360×800, 800×480, 1280×720, 1920×1080, and 3840×2160 at 70%, 100%, 150%, and 200% size. Tests use the offscreen platform; real monitor transitions and touch accessibility still require device testing.
+At narrower widths, navigation becomes a page selector and the metric and content cards stack. Content scrolls vertically, and native scroll views and tables support touch scrolling. Under Tools → Customize dashboard, cards can be hidden or reordered and spacing changed. Official warnings remain visible. F11 enters or leaves full screen; Escape leaves it. Automated layout checks cover 360×800, 800×480, 1280×720, 1920×1080, and 3840×2160 at 70%, 100%, 150%, and 200% size. Linux/Windows layout tests use the offscreen platform; macOS uses its native Cocoa backend and repeats the UI suite five times. Real monitor transitions and touch accessibility still require device testing.
 
 For a disposable, labeled preview:
 
