@@ -7,7 +7,6 @@
 #include <QNetworkDatagram>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QRegularExpression>
 #include <QSqlQuery>
 #include <QUrlQuery>
 #include <algorithm>
@@ -148,6 +147,8 @@ void Services::resetRuntime() {
   backfillEmpty = 0;
   forecast = {};
   warnings = {};
+  warningLocation.clear();
+  warningStatus.clear();
   emit changed();
 }
 void Services::pollForecast() {
@@ -212,11 +213,22 @@ void Services::pollForecast() {
   });
 }
 void Services::pollWarnings() {
-  if (warningsBusy || !config.location().contains("lat"))
+  if (!config.location().contains("lat"))
     return;
   double lat = config.location().value("lat").toDouble(999),
          lon = config.location().value("lon").toDouble(999);
-  if (std::abs(lat) > 90 || std::abs(lon) > 180)
+  if (!std::isfinite(lat) || !std::isfinite(lon) || std::abs(lat) > 90 ||
+      std::abs(lon) > 180)
+    return;
+  const auto location =
+      QString::number(lat, 'g', 12) + "," + QString::number(lon, 'g', 12);
+  if (warningLocation != location) {
+    warningLocation = location;
+    warnings = {};
+    warningStatus = "Checking US official warnings…";
+    emit changed();
+  }
+  if (warningsBusy)
     return;
   warningsBusy = true;
   auto url = queryUrl("https://api.weather.gov/alerts/active",
@@ -229,7 +241,7 @@ void Services::pollWarnings() {
       pollWarnings();
       return;
     }
-    if (!error.isEmpty())
+    if (!error.isEmpty() || !doc.object().value("features").isArray())
       warningStatus =
           "US official warnings unavailable; check your local weather service";
     else {
@@ -682,33 +694,7 @@ QUrl Services::radarUrl() const {
   if (lat.isDouble() && lon.isDouble() && std::isfinite(lat.toDouble()) &&
       std::isfinite(lon.toDouble()) && std::abs(lat.toDouble()) <= 90 &&
       std::abs(lon.toDouble()) <= 180) {
-    auto site = place.value("radarSite").toString().trimmed().toUpper();
-    if (!QRegularExpression("^[A-Z0-9]{4}$").match(site).hasMatch())
-      site.clear();
-    if (site.isEmpty()) {
-      static const QJsonArray sites = [] {
-        QFile file(":/site/sites.json");
-        return file.open(QIODevice::ReadOnly)
-                   ? QJsonDocument::fromJson(file.readAll()).array()
-                   : QJsonArray();
-      }();
-      double best = 2;
-      constexpr double rad = 3.14159265358979323846 / 180;
-      for (const auto &v : sites) {
-        const auto candidate = v.toObject();
-        const double a = lat.toDouble() * rad;
-        const double b = candidate.value("lat").toDouble() * rad;
-        const double dLon =
-            (lon.toDouble() - candidate.value("lon").toDouble()) * rad;
-        const double distance =
-            std::pow(std::sin((a - b) / 2), 2) +
-            std::cos(a) * std::cos(b) * std::pow(std::sin(dLon / 2), 2);
-        if (distance < best) {
-          best = distance;
-          site = candidate.value("id").toString();
-        }
-      }
-    }
+    const auto site = nexradSite(place);
     url.setFragment("goto=" + site + "," +
                     QString::number(lon.toDouble(), 'g', 12) + "," +
                     QString::number(lat.toDouble(), 'g', 12) + ",7,bm:dark");

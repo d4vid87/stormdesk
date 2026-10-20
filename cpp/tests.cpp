@@ -4,11 +4,13 @@
 #include "http.h"
 #include "integrations.h"
 #include <QFile>
+#include <QNetworkProxy>
 #include <QNetworkReply>
 #include <QSqlQuery>
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimeZone>
+#include <QUrlQuery>
 #include <QtTest>
 #include <limits>
 
@@ -43,6 +45,94 @@ private slots:
     s["lat"] = 100;
     cfg.value["settings"] = s;
     QVERIFY(services.radarUrl().fragment().isEmpty());
+  }
+  void nexradExcludesAirportRadars() {
+    QJsonObject location{{"lat", 33.0649986}, {"lon", -96.9179993}};
+    QCOMPARE(nexradSite(location), QString("KFWS"));
+    location["radarSite"] = "TDFW";
+    QCOMPARE(nexradSite(location), QString("KFWS"));
+    location["radarSite"] = "KDFW";
+    QCOMPARE(nexradSite(location), QString("KFWS"));
+    location = {{"lat", 18.47}, {"lon", -66.18}, {"radarSite", "TSJU"}};
+    QCOMPARE(nexradSite(location), QString("TJUA"));
+    location = {{"lat", 60.7919}, {"lon", -161.8764}};
+    QCOMPARE(nexradSite(location), QString("PABC"));
+    location["lat"] = std::numeric_limits<double>::infinity();
+    QVERIFY(nexradSite(location).isEmpty());
+  }
+  void tempestMetadataSetsStationLocation() {
+    QJsonObject station{
+        {"station_id", 12345},
+        {"name", "My Tempest"},
+        {"latitude", 33.065},
+        {"longitude", -96.918},
+        {"station_meta", QJsonObject{{"elevation", 180}}},
+        {"devices",
+         QJsonArray{QJsonObject{{"device_type", "HB"}, {"device_id", 7}},
+                    QJsonObject{{"device_type", "AR"}, {"device_id", 8}},
+                    QJsonObject{{"device_type", "ST"},
+                                {"device_id", 98765},
+                                {"serial_number", "ST-TEST"}}}}};
+    QString error;
+    const auto settings = tempestStationSettings(station, &error);
+    QVERIFY2(!settings.isEmpty(), qPrintable(error));
+    QCOMPARE(settings.value("stationId").toString(), QString("12345"));
+    QCOMPARE(settings.value("deviceId").toString(), QString("98765"));
+    QCOMPARE(settings.value("nativeTempestConnection").toString(),
+             QString("cloud"));
+    QCOMPARE(settings.value("lat").toDouble(), 33.065);
+    QCOMPARE(settings.value("lon").toDouble(), -96.918);
+    QCOMPARE(settings.value("radarSite").toString(), QString("KFWS"));
+    QCOMPARE(settings.value("elevationM").toDouble(), 180.0);
+    QVERIFY(settings.value("activePlace").toString().isEmpty());
+    QVERIFY(!settings.contains("token"));
+    auto broken = station;
+    broken.remove("latitude");
+    QVERIFY(tempestStationSettings(broken, &error).isEmpty());
+    QVERIFY(!error.isEmpty());
+    broken = station;
+    broken["longitude"] = 181;
+    QVERIFY(tempestStationSettings(broken, &error).isEmpty());
+    broken = station;
+    broken["station_id"] = "../invalid";
+    QVERIFY(tempestStationSettings(broken, &error).isEmpty());
+    broken = station;
+    broken["devices"] =
+        QJsonArray{QJsonObject{{"device_type", "AR"}, {"device_id", 8}}};
+    QVERIFY(tempestStationSettings(broken, &error).isEmpty());
+    broken = station;
+    broken.remove("station_meta");
+    QVERIFY(
+        tempestStationSettings(broken, &error).value("elevationM").isNull());
+    broken["name"] = "";
+    broken["public_name"] = "Public station";
+    QCOMPARE(
+        tempestStationSettings(broken, &error).value("stationName").toString(),
+        QString("Public station"));
+  }
+  void warningsFollowLocationDuringPendingRequest() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    cfg.value = {{"settings", QJsonObject{{"lat", 40.0}, {"lon", -105.0}}}};
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    services.network.setProxy(
+        QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", 1));
+    QStringList requested;
+    connect(&services.network, &QNetworkAccessManager::finished, this,
+            [&requested](QNetworkReply *reply) {
+              requested << QUrlQuery(reply->url()).queryItemValue("point");
+            });
+    services.pollWarnings();
+    services.warnings = QJsonArray{QJsonObject{{"id", "old-location-warning"}}};
+    cfg.value = {{"settings", QJsonObject{{"lat", 33.065}, {"lon", -96.918}}}};
+    services.pollWarnings();
+    QVERIFY(services.warnings.isEmpty());
+    QVERIFY(services.warningStatus.contains("Checking"));
+    QTRY_VERIFY(requested.contains("33.0650,-96.9180"));
+    QVERIFY(services.warningStatus.contains("unavailable"));
   }
   void nativeCloudConnectionIgnoresUdp() {
     QTemporaryDir dir;

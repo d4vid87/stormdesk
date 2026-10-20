@@ -9,6 +9,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QNetworkProxy>
+#include <QNetworkReply>
 #include <QPointer>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -16,6 +17,7 @@
 #include <QStandardPaths>
 #include <QTabWidget>
 #include <QTemporaryDir>
+#include <QUrlQuery>
 #include <QtTest>
 #include <cmath>
 
@@ -181,6 +183,7 @@ private slots:
     setup = window.findChild<SetupDialog *>("stationSetup");
     setup->findChild<QPushButton *>("setup-station")->click();
     next = setup->findChild<QPushButton *>("setupNext");
+    setup->findChild<QComboBox *>("setupMethod")->setCurrentIndex(0);
     next->click();
     next->click();
     QVERIFY(setup->findChild<QLabel *>("setupMessage")
@@ -203,6 +206,122 @@ private slots:
     setup->reject();
     QTest::qWait(5);
     window.applyScale(1);
+  }
+  void tempestImportDrivesWarningsAndRadar() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    QString error;
+    QJsonObject oldSettings{{"stationName", "Old forecast location"},
+                            {"lat", 40.0},
+                            {"lon", -105.0},
+                            {"radarSite", "KFTG"},
+                            {"elevationM", 1500},
+                            {"keepThis", 42},
+                            {"activePlace", "away"}};
+    oldSettings["places"] =
+        QJsonArray{QJsonObject{{"id", "away"}, {"lat", 42.0}, {"lon", -71.0}}};
+    QVERIFY(cfg.save({{"settings", oldSettings}}, &error));
+    Archive db(dir.filePath("db"));
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    Window window(services, server);
+    window.applyScale(1);
+    window.resize(1440, 950);
+    window.show();
+    window.setup();
+    QPointer<SetupDialog> setup =
+        window.findChild<SetupDialog *>("stationSetup");
+    QVERIFY(setup);
+    window.applyScale(2);
+    setup->resize(360, 700);
+    QTest::qWait(10);
+    QVERIFY(setup->width() <= 360);
+    for (auto area : setup->findChildren<QScrollArea *>())
+      QVERIFY(area->horizontalScrollBar()->maximum() == 0);
+    window.applyScale(1);
+    setup->resize(850, 760);
+    setup->findChild<QPushButton *>("setup-tempest")->click();
+    auto next = setup->findChild<QPushButton *>("setupNext");
+    auto method = setup->findChild<QComboBox *>("setupMethod");
+    QCOMPARE(method->currentIndex(), 1);
+    auto token = setup->findChild<QLineEdit *>("setup-token");
+    QCOMPARE(token->echoMode(), QLineEdit::Password);
+    QVERIFY(token->isVisible());
+    QVERIFY(setup->findChild<QLineEdit *>("setup-deviceId")->isReadOnly());
+    next->click();
+    QVERIFY(setup->findChild<QLabel *>("setupMessage")
+                ->text()
+                .contains("Import station"));
+    token->setText(" fixture-token ");
+    auto stations = setup->findChild<QComboBox *>("setupStations");
+    QJsonObject station{
+        {"station_id", 12345},
+        {"name", "My Tempest"},
+        {"latitude", 33.0650123},
+        {"longitude", -96.9180456},
+        {"station_meta", QJsonObject{{"elevation", 180}}},
+        {"devices",
+         QJsonArray{QJsonObject{{"device_type", "HB"}, {"device_id", 7}},
+                    QJsonObject{{"device_type", "ST"},
+                                {"device_id", 98765},
+                                {"serial_number", "ST-TEST"}}}}};
+    stations->setProperty("tempestToken", "fixture-token");
+    stations->addItem("My Tempest", station);
+    QVERIFY(QMetaObject::invokeMethod(stations, "activated", Q_ARG(int, 0)));
+    QVERIFY(setup->findChild<QLabel *>("setupStationSummary")
+                ->text()
+                .contains("KFWS"));
+    next->click();
+    QCOMPARE(cfg.text("token"), QString("fixture-token"));
+    QCOMPARE(cfg.text("deviceId"), QString("98765"));
+    QCOMPARE(cfg.text("stationId"), QString("12345"));
+    QCOMPARE(cfg.text("stationName"), QString("My Tempest"));
+    QCOMPARE(cfg.text("radarSite"), QString("KFWS"));
+    QCOMPARE(cfg.number("lat"), 33.0650123);
+    QCOMPARE(cfg.number("lon"), -96.9180456);
+    QCOMPARE(cfg.number("elevationM"), 180.0);
+    QCOMPARE(cfg.number("keepThis"), 42.0);
+    QVERIFY(cfg.text("activePlace").isEmpty());
+    QVERIFY(services.radarUrl().fragment().startsWith(
+        "goto=KFWS,-96.9180456,33.0650123,"));
+    bool warningsAtStation = false;
+    for (auto reply : services.network.findChildren<QNetworkReply *>())
+      if (reply->url().host() == "api.weather.gov") {
+        QCOMPARE(QUrlQuery(reply->url()).queryItemValue("point"),
+                 QString("33.0650,-96.9180"));
+        warningsAtStation = true;
+      }
+    QVERIFY(warningsAtStation);
+    QVERIFY(setup->findChild<QLabel *>("setupConnectionStatus")
+                ->text()
+                .contains("KFWS"));
+    setup->findChild<QPushButton *>("setupBack")->click();
+    token->setText("replacement-token");
+    QVERIFY(stations->count() == 0);
+    next->click();
+    QVERIFY(setup->findChild<QLabel *>("setupMessage")
+                ->text()
+                .contains("Import station"));
+    QCOMPARE(cfg.text("token"), QString("fixture-token"));
+    stations->setProperty("tempestToken", "fixture-token");
+    stations->addItem("Stale result", station);
+    QVERIFY(QMetaObject::invokeMethod(stations, "activated", Q_ARG(int, 0)));
+    QVERIFY(setup->findChild<QLabel *>("setupMessage")
+                ->text()
+                .contains("current token"));
+    next->click();
+    QCOMPARE(cfg.text("token"), QString("fixture-token"));
+    window.applyScale(2);
+    setup->resize(360, 700);
+    QTest::qWait(10);
+    QVERIFY(setup->width() <= 360);
+    for (auto area : setup->findChildren<QScrollArea *>())
+      QVERIFY(area->horizontalScrollBar()->maximum() == 0);
+    setup->reject();
+    QTest::qWait(5);
+    QVERIFY(!setup);
   }
   void nativeMapsAndCustomization() {
     QTemporaryDir dir;

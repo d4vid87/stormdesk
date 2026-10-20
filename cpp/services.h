@@ -54,7 +54,7 @@ private:
   QHash<QString, double> rawAt;
   QHash<QString, qint64> ruleSince;
   QHash<QString, bool> latched;
-  QString rulesRevision;
+  QString rulesRevision, warningLocation;
   bool forecastBusy = false, stationBusy = false, warningsBusy = false;
   void takeFields(const QJsonObject &fields, qint64 rawTime, int source,
                   const QString &origin);

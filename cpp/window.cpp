@@ -675,69 +675,9 @@ QWidget *Window::makeSettings() {
   text(station, "Station ID / MAC", "stationId");
   text(station, "Tempest device ID", "deviceId");
   text(station, "Tempest personal token", "token", true);
-  auto tempestResults = new QComboBox;
-  tempestResults->setAccessibleName("Tempest account stations");
-  tempestResults->setSizeAdjustPolicy(
-      QComboBox::AdjustToMinimumContentsLengthWithIcon);
-  tempestResults->setMinimumContentsLength(5);
-  station->addRow("Tempest account stations", tempestResults);
-  auto findTempest = new QPushButton("Find stations");
-  station->addRow(findTempest);
-  connect(findTempest, &QPushButton::clicked, this, [this, tempestResults] {
-    QUrl address("https://swd.weatherflow.com/swd/rest/stations");
-    QUrlQuery q;
-    q.addQueryItem("token",
-                   qobject_cast<QLineEdit *>(editors.value("token"))->text());
-    address.setQuery(q);
-    services.request(
-        address, [this, tempestResults](QJsonDocument doc, QString error) {
-          tempestResults->clear();
-          if (!error.isEmpty()) {
-            settingsMessage->setText(error);
-            return;
-          }
-          for (const auto &v : doc.object().value("stations").toArray()) {
-            auto p = v.toObject();
-            tempestResults->addItem(
-                p.value("name").toString(p.value("public_name").toString()), p);
-          }
-          settingsMessage->setText(
-              tempestResults->count()
-                  ? "Choose a station, then save changes."
-                  : "No stations found. Check the token’s account access.");
-        });
-  });
-  connect(tempestResults, &QComboBox::activated, this,
-          [this, tempestResults](int i) {
-            const auto station = tempestResults->itemData(i).toJsonObject();
-            auto put = [this](const QString &key, const QJsonValue &v) {
-              if (!v.isNull() && !v.isUndefined())
-                qobject_cast<QLineEdit *>(editors.value(key))
-                    ->setText(v.toVariant().toString());
-            };
-            put("stationId", station.value("station_id"));
-            for (const auto &v : station.value("devices").toArray()) {
-              auto d = v.toObject();
-              if (d.value("device_type") == "ST" ||
-                  d.value("device_type") == "AR") {
-                put("deviceId", d.value("device_id"));
-                break;
-              }
-            }
-            for (const auto &p : QList<QPair<QString, QString>>{
-                     {"lat", "latitude"}, {"lon", "longitude"}})
-              if (station.value(p.second).isDouble()) {
-                qobject_cast<QDoubleSpinBox *>(editors.value(p.first))
-                    ->setValue(station.value(p.second).toDouble());
-                editors.value(p.first)->setProperty("locationEdited", true);
-              }
-            qobject_cast<QLineEdit *>(editors.value("stationName"))
-                ->setText(station.value("name").toString());
-            qobject_cast<QComboBox *>(editors.value("stationSource"))
-                ->setCurrentIndex(
-                    qobject_cast<QComboBox *>(editors.value("stationSource"))
-                        ->findData("tempest"));
-          });
+  auto importTempest = new QPushButton("Import Tempest");
+  station->addRow(importTempest);
+  connect(importTempest, &QPushButton::clicked, this, &Window::setup);
   choice(station, "Tempest feed", "nativeTempestConnection",
          {{"Local hub / cloud backup", "local"}, {"Cloud only", "cloud"}});
   text(station, "Tempest serial (optional)", "tempestSerial");
@@ -819,7 +759,9 @@ QWidget *Window::makeSettings() {
             "saved on this device. Display DPI is handled automatically. Press "
             "F11 for a full-screen wall display; Escape leaves full screen.",
             "muted"));
-  text(appearance, "Radar site (optional, e.g. KFWS)", "radarSite");
+  text(appearance, "NEXRAD WSR-88D site (automatic when blank)", "radarSite");
+  editors.value("radarSite")
+      ->setToolTip("For example KFWS. Airport TDWR sites are excluded.");
   auto alert = section("Alerts");
   check(alert, "Local alerts", "nativeNotifications");
   check(alert, "Push warnings", "pushOfficial");
@@ -1137,7 +1079,8 @@ void Window::saveSettings() {
         "Elevation must be between −500 and 10,000 metres.");
     return;
   }
-  s["elevationM"] = elevation.isEmpty() ? QJsonValue() : QJsonValue(metres);
+  if (!setupChanges.contains("elevationM"))
+    s["elevationM"] = elevation.isEmpty() ? QJsonValue() : QJsonValue(metres);
   for (const auto &key : {"quietStart", "quietEnd"}) {
     const auto text = s.value(key).toString();
     if (!text.isEmpty() && !QTime::fromString(text, "HH:mm").isValid()) {
@@ -1625,7 +1568,9 @@ void Window::render() {
       warningText.isEmpty()
           ? (services.warningStatus.isEmpty()
                  ? "Choose a location in Settings to start."
-                 : services.warningStatus + " · No active warnings returned")
+             : services.warningStatus == "US National Weather Service"
+                 ? services.warningStatus + " · No active warnings returned"
+                 : services.warningStatus)
           : warningText.join("\n"));
   status->setText(services.forecastStatus + "   ·   Home network port " +
                   QString::number(server.serverPort()));

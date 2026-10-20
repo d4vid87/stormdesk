@@ -78,6 +78,97 @@ QJsonObject Config::location() const {
   home["name"] = s.value("stationName");
   return home;
 }
+QString nexradSite(const QJsonObject &location) {
+  const auto lat = location.value("lat"), lon = location.value("lon");
+  if (!lat.isDouble() || !lon.isDouble() || !std::isfinite(lat.toDouble()) ||
+      !std::isfinite(lon.toDouble()) || std::abs(lat.toDouble()) > 90 ||
+      std::abs(lon.toDouble()) > 180)
+    return {};
+  static const QJsonArray sites = [] {
+    QFile file(":/site/sites.json");
+    return file.open(QIODevice::ReadOnly)
+               ? QJsonDocument::fromJson(file.readAll()).array()
+               : QJsonArray();
+  }();
+  const auto preferred =
+      location.value("radarSite").toString().trimmed().toUpper();
+  QString nearest;
+  double best = 2;
+  constexpr double rad = 3.14159265358979323846 / 180;
+  for (const auto &v : sites) {
+    const auto site = v.toObject();
+    const auto id = site.value("id").toString();
+    // TJUA is WSR-88D; other T sites are TDWR. Use canonical Alaska IDs.
+    if ((id.startsWith('T') && id != "TJUA") ||
+        QStringList{"KABC", "KACG", "KAIH", "KAKC"}.contains(id))
+      continue;
+    if (id == preferred)
+      return id;
+    const double a = lat.toDouble() * rad,
+                 b = site.value("lat").toDouble() * rad;
+    const double dLon = (lon.toDouble() - site.value("lon").toDouble()) * rad;
+    const double distance =
+        std::pow(std::sin((a - b) / 2), 2) +
+        std::cos(a) * std::cos(b) * std::pow(std::sin(dLon / 2), 2);
+    if (distance < best) {
+      best = distance;
+      nearest = id;
+    }
+  }
+  return nearest;
+}
+QJsonObject tempestStationSettings(const QJsonObject &station, QString *error) {
+  auto id = [](const QJsonValue &value) {
+    bool ok = false;
+    const auto number = value.toVariant().toString().toLongLong(&ok);
+    return ok && number > 0 ? QString::number(number) : QString();
+  };
+  const auto stationId = id(station.value("station_id"));
+  const auto lat = station.value("latitude"), lon = station.value("longitude");
+  if (stationId.isEmpty() || !lat.isDouble() || !lon.isDouble() ||
+      !std::isfinite(lat.toDouble()) || !std::isfinite(lon.toDouble()) ||
+      std::abs(lat.toDouble()) > 90 || std::abs(lon.toDouble()) > 180) {
+    fail(error, "WeatherFlow did not return a valid station ID and location.");
+    return {};
+  }
+  QJsonObject device;
+  for (const auto &v : station.value("devices").toArray())
+    if (v.toObject().value("device_type") == "ST" &&
+        !id(v.toObject().value("device_id")).isEmpty()) {
+      device = v.toObject();
+      break;
+    }
+  if (device.isEmpty()) {
+    fail(error, "This station has no Tempest sensor. Choose a station with a "
+                "Tempest device.");
+    return {};
+  }
+  auto name = station.value("name").toString().trimmed();
+  if (name.isEmpty())
+    name = station.value("public_name").toString().trimmed();
+  if (name.isEmpty())
+    name = "Tempest " + stationId;
+  QJsonObject settings{
+      {"stationSource", "tempest"},
+      {"nativeTempestConnection", "cloud"},
+      {"stationId", stationId},
+      {"deviceId", id(device.value("device_id"))},
+      {"tempestSerial", device.value("serial_number").toString()},
+      {"stationName", name},
+      {"lat", lat},
+      {"lon", lon},
+      {"activePlace", ""},
+      {"elevationM", QJsonValue()}};
+  const auto elevation =
+      station.value("station_meta").toObject().value("elevation");
+  if (elevation.isDouble() && std::isfinite(elevation.toDouble()) &&
+      elevation.toDouble() >= -500 && elevation.toDouble() <= 10000)
+    settings["elevationM"] = elevation;
+  settings["radarSite"] = nexradSite(settings);
+  if (error)
+    error->clear();
+  return settings;
+}
 QString defaultDataDir() {
   const auto override = qEnvironmentVariable("WD_DATA_DIR");
   if (!override.isEmpty())

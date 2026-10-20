@@ -25,7 +25,10 @@ private:
   Apply apply;
   QStackedWidget *pages;
   QLabel *heading, *message, *progress, *checkStatus, *instructions;
-  QPushButton *back, *next, *skip;
+  QPushButton *back, *next, *skip, *discover;
+  QWidget *locationFields;
+  QLabel *locationHint, *stationSummary, *uploadHint;
+  QJsonObject importedTempest;
   QComboBox *source, *method, *places, *found, *units, *sizeChoice;
   QGridLayout *navigation = nullptr;
   QPushButton *closeButton;
@@ -40,6 +43,7 @@ private:
   qint64 testedAt = 0;
   void showStep(int index);
   void connectionForm();
+  void selectStation(int index);
   void advance();
   void checkConnection();
   QJsonObject changes() const;

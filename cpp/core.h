@@ -13,6 +13,8 @@ QJsonArray toJson(const Reading &row);
 std::optional<Reading> fromJson(const QJsonArray &row);
 QString fingerprint(const QJsonObject &settings);
 QString defaultDataDir();
+QString nexradSite(const QJsonObject &location);
+QJsonObject tempestStationSettings(const QJsonObject &station, QString *error);
 bool copyDocument(const QString &source, const QString &destination,
                   QString *error);
 
