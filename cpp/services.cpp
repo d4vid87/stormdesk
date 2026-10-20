@@ -394,13 +394,15 @@ void Services::checkRules() {
     const bool quiet = start.isValid() && end.isValid() && (start <= end ? currentTime >= start && currentTime < end : currentTime >= start || currentTime < end);
     for (int i = 0; i < rules.size(); ++i) {
         auto rule = rules[i].toObject(); const auto id = QString::number(i), key = rule.value("metric").toString();
-        if (!metrics.contains(key) || !rule.value("value").isDouble()) continue;
+        if (!metrics.contains(key) || !rule.value("value").isDouble()) { ruleSince.remove(id); continue; }
         double value = metrics.value(key), target = rule.value("value").toDouble(); bool below = rule.value("op") == "<";
         bool holds = below ? value < target : value > target;
         const auto second = rule.value("metric2").toString();
         if (!second.isEmpty()) holds = holds && metrics.contains(second) && (rule.value("op2") == "<" ? metrics.value(second) < rule.value("value2").toDouble() : metrics.value(second) > rule.value("value2").toDouble());
-        if (!holds) ruleSince.remove(id);
-        if (latched.value(id) && (below ? value > target * 1.1 : value < target * .9)) latched[id] = false;
+        if (!holds) {
+            ruleSince.remove(id);
+            if (latched.value(id) && (below ? value > target * 1.1 : value < target * .9)) latched[id] = false;
+        }
         if (holds && !ruleSince.contains(id)) ruleSince[id] = now();
         if (holds && !latched.value(id) && now() - ruleSince.value(id) >= rule.value("durMin").toDouble() * 60 && !quiet) {
             latched[id] = true; const auto text = key + " " + QString::number(value, 'f', 1) + " (threshold " + QString::number(target) + ")";

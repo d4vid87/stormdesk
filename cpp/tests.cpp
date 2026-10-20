@@ -114,7 +114,11 @@ private slots:
         service.checkRules(); QCOMPARE(notifications.size(), 1);
         service.observation[7] = 20; service.checkRules();
         service.observation[7] = 30; service.checkRules(); QCOMPARE(notifications.size(), 2);
-        service.observation[0] = QDateTime::currentSecsSinceEpoch() - 1000; service.checkRules(); QCOMPARE(notifications.size(), 2);
+        auto settings = cfg.settings(); settings["rules"] = QJsonArray{QJsonObject{{"metric", "temp"}, {"op", "<"}, {"value", -5}}}; cfg.value["settings"] = settings;
+        service.observation[7] = -6; service.checkRules(); QCOMPARE(notifications.size(), 3);
+        service.observation[7] = -5.2; service.checkRules(); QCOMPARE(notifications.size(), 3);
+        service.observation[7] = -4; service.checkRules(); service.observation[7] = -6; service.checkRules(); QCOMPARE(notifications.size(), 4);
+        service.observation[0] = QDateTime::currentSecsSinceEpoch() - 1000; service.checkRules(); QCOMPARE(notifications.size(), 4);
     }
     void wbgtAndReporting() {
         QVERIFY(!wbgt(20, 0, 500, 1)); auto sun = wbgt(35, 50, 800, 1); QVERIFY(sun.has_value());

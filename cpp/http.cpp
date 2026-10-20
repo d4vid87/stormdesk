@@ -223,7 +223,12 @@ void HttpServer::route(QTcpSocket *socket, const HttpRequest &req) {
     if (path == "/proxy/nhc" || path == "/ha/states" || path == "/ha/test") {
         QUrl upstream = path == "/proxy/nhc" ? QUrl("https://www.nhc.noaa.gov/CurrentStorms.json") : QUrl(services.config.text("haUrl") + "/api/" + (path == "/ha/states" ? "states" : ""));
         QPointer<QTcpSocket> guard(socket);
-        services.request(upstream, [guard](QJsonDocument doc, const QString &error) { if (guard) respond(guard, error.isEmpty() ? 200 : 502, error.isEmpty() ? doc.toJson(QJsonDocument::Compact) : "{\"error\":\"Upstream unavailable\"}"); }, {}, path == "/proxy/nhc" ? QByteArray() : "Bearer " + services.config.text("haToken").toUtf8());
+        services.request(upstream, [guard](QJsonDocument doc, const QString &error) {
+            if (!guard) return;
+            const auto body = error.isEmpty() ? doc.toJson(QJsonDocument::Compact)
+                : QJsonDocument(QJsonObject{{"error", "Upstream unavailable"}}).toJson(QJsonDocument::Compact);
+            respond(guard, error.isEmpty() ? 200 : 502, body);
+        }, {}, path == "/proxy/nhc" ? QByteArray() : "Bearer " + services.config.text("haToken").toUtf8());
         return;
     }
     QString relative = path;
