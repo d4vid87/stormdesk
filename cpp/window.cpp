@@ -324,7 +324,7 @@ QWidget *Window::makeWeather() {
   auto page = new QWidget;
   auto layout = new QVBoxLayout(page);
   layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(16);
+  layout->setSpacing(6);
   alerts = label(
       "Choose a location in Settings to load weather and official warnings.",
       "notice");
@@ -340,7 +340,8 @@ QWidget *Window::makeWeather() {
     auto widget = card(
         QString::number(i + 1).rightJustified(2, '0') + " / " + names[i], &box);
     widget->setMinimumWidth(0);
-    box->setSpacing(4);
+    box->setSpacing(2);
+    box->setContentsMargins(8, 5, 8, 5);
     faces[i] = new InstrumentFace(i);
     faces[i]->setObjectName("instrumentFace" + QString::number(i));
     faces[i]->setAccessibleName(names[i] + " details");
@@ -419,15 +420,15 @@ QWidget *Window::makeWeather() {
   auto source = label({}, "muted");
   source->setObjectName("stationDetail");
   context->addWidget(source);
-  context->addStretch();
+  auto actions = new QHBoxLayout;
+  actions->setObjectName("contextActions");
+  context->addLayout(actions);
   auto link = new QPushButton("Tools →");
   connect(link, &QPushButton::clicked, this,
           [this] { pages->setCurrentIndex(4); });
-  context->addWidget(link);
-  auto hint = label("Weather readings are labeled by source. Missing sensor "
-                    "data remains unavailable.",
-                    "muted");
-  context->addWidget(hint);
+  actions->addWidget(link);
+  context->setContentsMargins(8, 5, 8, 5);
+  context->setSpacing(3);
   currentCard->setObjectName("instrumentHero");
   heroHeading = label("Current conditions", "subtitle");
   weatherGlyph = new WeatherGlyph;
@@ -446,15 +447,17 @@ QWidget *Window::makeWeather() {
   }
   currentLayout->removeWidget(radar);
   currentLayout->removeWidget(speak);
-  context->addWidget(radar);
-  context->addWidget(speak);
+  actions->addWidget(radar);
+  actions->addWidget(speak);
   heroLayout->setColumnStretch(0, 1);
   currentLayout->insertLayout(0, heroLayout);
-  currentLayout->setContentsMargins(0, 10, 0, 14);
-  layout->insertWidget(0, currentCard);
+  currentLayout->setContentsMargins(8, 0, 8, 0);
+  heroLayout->setSpacing(2);
   sunCycle = new SunCycle;
   sunCycle->setObjectName("sunCycle");
-  layout->insertWidget(1, sunCycle);
+  body->addWidget(currentCard, 0, 0);
+  body->addWidget(sunCycle, 0, 1);
+  body->addWidget(contextCard, 0, 2);
   auto liveRadar = new Radar(services, nullptr, true);
   liveRadar->setObjectName("dashboardRadar");
   dashboardRadarCard = liveRadar;
@@ -1202,9 +1205,9 @@ void Window::applyScale(double value) {
   font.setPixelSize(qRound(13 * scaleFactor));
   QApplication::setFont(font);
   for (auto face : faces)
-    face->setScale(scaleFactor * .72);
-  weatherGlyph->setScale(scaleFactor * .65);
-  sunCycle->setScale(scaleFactor * .85);
+    face->setScale(scaleFactor * .48);
+  weatherGlyph->setScale(scaleFactor * .42);
+  sunCycle->setScale(scaleFactor * .60);
   radarStage->setScale(scaleFactor);
   for (auto radar : findChildren<Radar *>())
     radar->setScale(scaleFactor);
@@ -1299,6 +1302,20 @@ void Window::applyTheme() {
       ";} QTabBar::tab:selected {color:" + accent +
       ";} QToolTip {color:" + foreground + ";background:" + panel +
       ";}"
+      "QScrollArea#instrumentShelf QLabel[kind=metric],"
+      "QScrollArea#instrumentShelf QLabel[kind=temperature] {font-size:" +
+      px(23) +
+      "px;}"
+      "QScrollArea#instrumentShelf QLabel[kind=subtitle] {font-size:" +
+      px(15) +
+      "px;}"
+      "QScrollArea#instrumentShelf QLabel[kind=muted],"
+      "QScrollArea#instrumentShelf QLabel[kind=eyebrow] {font-size:" +
+      px(11) +
+      "px;}"
+      "QScrollArea#instrumentShelf QPushButton {padding:" +
+      px(4) + "px " + px(8) +
+      "px;}"
       "QScrollArea#instrumentShelf {border:1px solid " +
       border +
       ";border-radius:8px;}"
@@ -1341,7 +1358,10 @@ void Window::arrange() {
     navigation->addWidget(setupButton, 0, 8);
     navigation->addWidget(motionButton, 0, 9);
   }
-  const int columns = available >= 360 ? 2 : 1;
+  const int columns = available >= 1200  ? 8
+                      : available >= 650 ? 4
+                      : available >= 360 ? 2
+                                         : 1;
   const auto dashboard =
       services.config.settings().value("nativeDashboard").toObject();
   const auto hidden = dashboard.value("hidden").toArray(),
@@ -1369,9 +1389,11 @@ void Window::arrange() {
       ++cell;
     }
   }
+  for (int col = 0; col < 8; ++col)
+    metrics->setColumnStretch(col, col < std::min(columns, cell) ? 1 : 0);
   double density = std::clamp(dashboard.value("density").toDouble(1), .6, 1.5);
-  metrics->setSpacing(qRound(12 * scaleFactor * density));
-  body->setSpacing(qRound(16 * scaleFactor * density));
+  metrics->setSpacing(qRound(6 * scaleFactor * density));
+  body->setSpacing(qRound(6 * scaleFactor * density));
   if (!currentCard || !contextCard || !dashboardRadarCard)
     return;
   auto detail = currentCard->findChild<QLabel *>("conditionsDetail");
@@ -1379,14 +1401,24 @@ void Window::arrange() {
        QList<QWidget *>{heroHeading, heroSource, detail, heroTemperature,
                         heroCondition, weatherGlyph})
     heroLayout->removeWidget(widget);
-  heroLayout->addWidget(heroHeading, 0, 0, 1, 2);
-  heroLayout->addWidget(heroTemperature, 1, 0);
-  heroLayout->addWidget(weatherGlyph, 1, 1);
-  heroLayout->addWidget(heroCondition, 2, 0, 1, 2);
-  heroLayout->addWidget(heroSource, 3, 0, 1, 2);
-  heroLayout->addWidget(detail, 4, 0, 1, 2);
-  body->addWidget(contextCard, 0, 0);
-  body->setColumnStretch(0, 1);
+  heroHeading->hide();
+  heroLayout->addWidget(heroTemperature, 0, 0);
+  heroLayout->addWidget(weatherGlyph, 0, 1, 2, 1);
+  heroLayout->addWidget(heroCondition, 1, 0);
+  heroLayout->addWidget(heroSource, 2, 0, 1, 2);
+  heroLayout->addWidget(detail, 3, 0, 1, 2);
+  for (auto widget :
+       {currentCard, static_cast<QWidget *>(sunCycle), contextCard})
+    body->removeWidget(widget);
+  contextCard->findChild<QHBoxLayout *>("contextActions")
+      ->setDirection(available < 650 ? QBoxLayout::TopToBottom
+                                     : QBoxLayout::LeftToRight);
+  const int contextColumns = available >= 1050 ? 3 : 1;
+  body->addWidget(currentCard, 0, 0);
+  body->addWidget(sunCycle, 1 / contextColumns, 1 % contextColumns);
+  body->addWidget(contextCard, 2 / contextColumns, 2 % contextColumns);
+  for (int col = 0; col < 3; ++col)
+    body->setColumnStretch(col, col < contextColumns ? 1 : 0);
   contextCard->setVisible(!hidden.contains("Your local context"));
   dashboardRadarCard->setVisible(!hidden.contains("Local radar"));
   currentCard->setVisible(!hidden.contains("Current conditions"));

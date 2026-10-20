@@ -142,24 +142,24 @@ void RadarStage::resizeEvent(QResizeEvent *event) {
 void RadarStage::arrange() {
   radar->setGeometry(rect());
   const int margin = qRound(12 * scaleFactor);
-  const int panelWidth =
-      std::max(1, std::min(qRound(420 * scaleFactor), width() - 2 * margin));
+  const int panelWidth = std::max(1, width() - 2 * margin);
   if (!userToggled)
     toggle->setChecked(width() / scaleFactor >= 900);
   const int buttonHeight = toggle->sizeHint().height();
   const int top =
-      height() > 300 * scaleFactor ? qRound(68 * scaleFactor) : margin;
+      height() > 300 * scaleFactor ? qRound(96 * scaleFactor) : margin;
+  const int panelHeight =
+      std::max(0, std::min(qRound(236 * scaleFactor), height() / 3));
+  instruments->setGeometry(margin, top, panelWidth, panelHeight);
+  instruments->setVisible(toggle->isChecked() && panelHeight > 0);
   toggle->setText(toggle->isChecked() ? "Hide instruments"
                                       : "Show instruments");
-  toggle->setGeometry(margin, top,
+  const int buttonTop = instruments->isVisible()
+                            ? top + panelHeight + qRound(6 * scaleFactor)
+                            : top;
+  toggle->setGeometry(margin, buttonTop,
                       std::min(panelWidth, toggle->sizeHint().width()),
                       buttonHeight);
-  const int panelTop = top + buttonHeight + qRound(8 * scaleFactor);
-  const int bottom =
-      height() > 300 * scaleFactor ? qRound(88 * scaleFactor) : margin;
-  const int panelHeight = std::max(0, height() - panelTop - bottom);
-  instruments->setGeometry(margin, panelTop, panelWidth, panelHeight);
-  instruments->setVisible(toggle->isChecked() && panelHeight > 0);
   radar->lower();
   instruments->raise();
   toggle->raise();

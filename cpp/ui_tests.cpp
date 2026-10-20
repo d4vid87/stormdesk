@@ -107,6 +107,8 @@ private slots:
     QVERIFY(stage && shelf && toggle);
     QCOMPARE(radar->geometry(), stage->rect());
     QVERIFY(shelf->isVisible());
+    QVERIFY(shelf->width() > stage->width() * .9);
+    QVERIFY(shelf->height() <= stage->height() / 3);
     QVERIFY(shelf->isAncestorOf(sunCycle));
     auto hit = stage->childAt(QPoint(stage->width() - 30, stage->height() / 2));
     QVERIFY(hit == radar || radar->isAncestorOf(hit));
@@ -125,6 +127,10 @@ private slots:
     QVERIFY(wind && wind->reading());
     QCOMPARE(*wind->reading(), 5.0);
     QVERIFY(dew && dew->reading());
+    QCOMPARE(rain->parentWidget()->mapTo(shelf, QPoint()).y(),
+             dew->parentWidget()->mapTo(shelf, QPoint()).y());
+    QVERIFY(rain->height() < 50);
+    QVERIFY(rain->mapTo(shelf, QPoint()).x() < dew->mapTo(shelf, QPoint()).x());
     auto glyph = window.findChild<WeatherGlyph *>();
     QVERIFY(glyph && glyph->animated());
     window.findChild<QPushButton *>("weatherMotion")->click();
