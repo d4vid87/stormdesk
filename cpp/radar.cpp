@@ -164,11 +164,12 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
   layout->addWidget(status);
   canvas = new Canvas(*this);
   layout->addWidget(canvas, 1);
-  auto controls = new QGridLayout;
+  controls = new QGridLayout;
   int cell = 0;
   for (const auto &name :
        {QString("−"), QString("+"), QString("Center"), QString("Update")}) {
     auto button = new QPushButton(name);
+    buttons << button;
     controls->addWidget(button, cell / 2, cell % 2);
     ++cell;
     connect(button, &QPushButton::clicked, this, [this, name] {
@@ -230,6 +231,14 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
 void Radar::showEvent(QShowEvent *event) {
   QWidget::showEvent(event);
   refresh();
+}
+void Radar::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  const int columns = width() < 500 ? 1 : 2;
+  for (auto button : buttons)
+    controls->removeWidget(button);
+  for (int i = 0; i < buttons.size(); ++i)
+    controls->addWidget(buttons[i], i / columns, i % columns);
 }
 void Radar::refresh() {
   if (!services.config.location().contains("lat"))

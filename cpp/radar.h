@@ -1,6 +1,7 @@
 #pragma once
 #include "services.h"
 #include <QCache>
+#include <QGridLayout>
 #include <QImage>
 #include <QLabel>
 #include <QSet>
@@ -17,6 +18,7 @@ public:
 
 protected:
   void showEvent(QShowEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
 
 private:
   class Canvas;
@@ -30,5 +32,7 @@ private:
   QString host, location;
   qint64 fetched = 0;
   bool busy = false;
+  QGridLayout *controls;
+  QList<QWidget *> buttons;
 };
 } // namespace storm
