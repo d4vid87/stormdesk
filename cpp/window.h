@@ -15,6 +15,7 @@ class Tools;
 class InstrumentFace;
 class WeatherGlyph;
 class SunCycle;
+class RadarStage;
 class Plot : public QWidget {
 public:
   explicit Plot(QWidget *parent = nullptr);
@@ -54,6 +55,7 @@ private:
   QLabel *heroHeading;
   SunCycle *sunCycle;
   QWidget *dashboardRadarCard = nullptr;
+  RadarStage *radarStage = nullptr;
   QJsonObject setupChanges;
   void showInstrument(int index);
   QList<QWidget *> metricCards;

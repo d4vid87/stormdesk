@@ -4,6 +4,7 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QVBoxLayout>
+#include <algorithm>
 #ifdef STORMDESK_WEBENGINE
 #include <QWebEngineSettings>
 #include <QWebEngineView>
@@ -51,6 +52,9 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
              : "HookEcho could not load. Check the connection, then reload or "
                "open HookEcho.");
       setProperty("hookEchoLoaded", ok);
+      status->setVisible(!immersive || !ok);
+      for (auto button : buttons)
+        button->setVisible(!immersive || !ok);
     });
   } else
     status->setText("Synthetic demo mode · Live HookEcho radar is disabled.");
@@ -66,10 +70,22 @@ void Radar::setScale(double scale) {
 #ifdef STORMDESK_WEBENGINE
   if (view) {
     view->setZoomFactor(scale);
-    view->setMinimumHeight(qRound((compact ? 920 : 640) * scale));
+    view->setMinimumHeight(immersive ? 0
+                                     : qRound((compact ? 920 : 640) * scale));
   }
 #else
   Q_UNUSED(scale);
+#endif
+}
+void Radar::setImmersive(bool enabled) {
+  immersive = enabled;
+  setScale(scaleFactor);
+#ifdef STORMDESK_WEBENGINE
+  if (view) {
+    status->setVisible(!immersive);
+    for (auto button : buttons)
+      button->setVisible(!immersive);
+  }
 #endif
 }
 void Radar::showEvent(QShowEvent *event) {
@@ -96,5 +112,56 @@ void Radar::refresh() {
   status->setText("HookEcho · Loading radar…");
   view->setUrl(url);
 #endif
+}
+RadarStage::RadarStage(Radar *background, QWidget *panel, QWidget *parent)
+    : QWidget(parent), radar(background), instruments(panel) {
+  setObjectName("radarStage");
+  setMinimumSize(0, 0);
+  radar->setParent(this);
+  radar->setImmersive(true);
+  instruments->setParent(this);
+  instruments->setObjectName("instrumentShelf");
+  toggle = new QPushButton("Hide instruments", this);
+  toggle->setObjectName("toggleInstruments");
+  toggle->setCheckable(true);
+  toggle->setChecked(true);
+  toggle->setAccessibleName("Show or hide native instruments");
+  connect(toggle, &QPushButton::clicked, this, [this] {
+    userToggled = true;
+    arrange();
+  });
+}
+void RadarStage::setScale(double value) {
+  scaleFactor = value;
+  arrange();
+}
+void RadarStage::resizeEvent(QResizeEvent *event) {
+  QWidget::resizeEvent(event);
+  arrange();
+}
+void RadarStage::arrange() {
+  radar->setGeometry(rect());
+  const int margin = qRound(12 * scaleFactor);
+  const int panelWidth =
+      std::max(1, std::min(qRound(420 * scaleFactor), width() - 2 * margin));
+  if (!userToggled)
+    toggle->setChecked(width() / scaleFactor >= 900);
+  const int buttonHeight = toggle->sizeHint().height();
+  const int top =
+      height() > 300 * scaleFactor ? qRound(68 * scaleFactor) : margin;
+  toggle->setText(toggle->isChecked() ? "Hide instruments"
+                                      : "Show instruments");
+  toggle->setGeometry(margin, top,
+                      std::min(panelWidth, toggle->sizeHint().width()),
+                      buttonHeight);
+  const int panelTop = top + buttonHeight + qRound(8 * scaleFactor);
+  const int bottom =
+      height() > 300 * scaleFactor ? qRound(88 * scaleFactor) : margin;
+  const int panelHeight = std::max(0, height() - panelTop - bottom);
+  instruments->setGeometry(margin, panelTop, panelWidth, panelHeight);
+  instruments->setVisible(toggle->isChecked() && panelHeight > 0);
+  radar->lower();
+  instruments->raise();
+  toggle->raise();
 }
 } // namespace storm

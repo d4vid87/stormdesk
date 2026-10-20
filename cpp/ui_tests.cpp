@@ -101,13 +101,27 @@ private slots:
     }
     auto radar = window.findChild<Radar *>("dashboardRadar");
     QVERIFY(radar);
-    QVERIFY(sunCycle->mapTo(&window, QPoint()).y() <
-            radar->mapTo(&window, QPoint()).y());
+    auto stage = window.findChild<RadarStage *>("radarStage");
+    auto shelf = window.findChild<QScrollArea *>("instrumentShelf");
+    auto toggle = window.findChild<QPushButton *>("toggleInstruments");
+    QVERIFY(stage && shelf && toggle);
+    QCOMPARE(radar->geometry(), stage->rect());
+    QVERIFY(shelf->isVisible());
+    QVERIFY(shelf->isAncestorOf(sunCycle));
+    auto hit = stage->childAt(QPoint(stage->width() - 30, stage->height() / 2));
+    QVERIFY(hit == radar || radar->isAncestorOf(hit));
+    toggle->click();
+    QVERIFY(!shelf->isVisible());
+    QVERIFY(!sunCycle->animated());
+    QCOMPARE(radar->geometry(), stage->rect());
+    toggle->click();
+    QVERIFY(shelf->isVisible());
     QVERIFY(QFontDatabase::families().contains("Barlow Semi Condensed Medium"));
     auto rain = window.findChild<InstrumentFace *>("instrumentFace0");
     auto wind = window.findChild<InstrumentFace *>("instrumentFace2");
     auto dew = window.findChild<InstrumentFace *>("instrumentFace7");
     QVERIFY(rain && !rain->reading());
+    QVERIFY(shelf->isAncestorOf(rain));
     QVERIFY(wind && wind->reading());
     QCOMPARE(*wind->reading(), 5.0);
     QVERIFY(dew && dew->reading());
@@ -421,6 +435,18 @@ private slots:
         for (int page : {0, 1, 2, 3, 4}) {
           window.findChild<QStackedWidget *>()->setCurrentIndex(page);
           QTest::qWait(10);
+          if (page == 0) {
+            auto stage = window.findChild<RadarStage *>("radarStage");
+            auto radar = window.findChild<Radar *>("dashboardRadar");
+            auto toggle = window.findChild<QPushButton *>("toggleInstruments");
+            auto shelf = window.findChild<QScrollArea *>("instrumentShelf");
+            QVERIFY(stage && radar && toggle && shelf);
+            QCOMPARE(radar->geometry(), stage->rect());
+            if (!toggle->isChecked())
+              toggle->click();
+            if (shelf->isVisible())
+              QVERIFY(stage->rect().contains(shelf->geometry()));
+          }
           auto tabs = window.findChild<QTabWidget *>();
           auto tool = window.findChild<QComboBox *>("nativeTool");
           const int count = page == 3   ? tabs->count()

@@ -16,6 +16,7 @@ public:
                  bool compact = false);
   void refresh();
   void setScale(double scale);
+  void setImmersive(bool enabled);
 signals:
   void warningsRequested();
 protected:
@@ -23,7 +24,7 @@ protected:
   void resizeEvent(QResizeEvent *event) override;
 private:
   Services &services;
-  bool compact;
+  bool compact, immersive = false;
   QLabel *status;
   QUrl loadedUrl;
   QGridLayout *controls;
@@ -32,5 +33,22 @@ private:
 #ifdef STORMDESK_WEBENGINE
   QWebEngineView *view = nullptr;
 #endif
+};
+class RadarStage : public QWidget {
+  Q_OBJECT
+public:
+  RadarStage(Radar *radar, QWidget *instruments, QWidget *parent = nullptr);
+  void setScale(double scale);
+
+protected:
+  void resizeEvent(QResizeEvent *event) override;
+
+private:
+  Radar *radar;
+  QWidget *instruments;
+  QPushButton *toggle;
+  double scaleFactor = 1;
+  bool userToggled = false;
+  void arrange();
 };
 } // namespace storm

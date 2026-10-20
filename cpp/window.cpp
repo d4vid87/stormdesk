@@ -329,7 +329,6 @@ QWidget *Window::makeWeather() {
       "Choose a location in Settings to load weather and official warnings.",
       "notice");
   alerts->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  layout->addWidget(alerts);
   metrics = new QGridLayout;
   metrics->setSpacing(12);
   layout->addLayout(metrics);
@@ -341,6 +340,7 @@ QWidget *Window::makeWeather() {
     auto widget = card(
         QString::number(i + 1).rightJustified(2, '0') + " / " + names[i], &box);
     widget->setMinimumWidth(0);
+    box->setSpacing(4);
     faces[i] = new InstrumentFace(i);
     faces[i]->setObjectName("instrumentFace" + QString::number(i));
     faces[i]->setAccessibleName(names[i] + " details");
@@ -429,7 +429,7 @@ QWidget *Window::makeWeather() {
                     "muted");
   context->addWidget(hint);
   currentCard->setObjectName("instrumentHero");
-  heroHeading = label("Know your atmosphere.", "subtitle");
+  heroHeading = label("Current conditions", "subtitle");
   weatherGlyph = new WeatherGlyph;
   heroLayout = new QGridLayout;
   for (auto w : {heroSource, heroTemperature, heroCondition, details})
@@ -451,22 +451,26 @@ QWidget *Window::makeWeather() {
   heroLayout->setColumnStretch(0, 1);
   currentLayout->insertLayout(0, heroLayout);
   currentLayout->setContentsMargins(0, 10, 0, 14);
-  layout->insertWidget(1, currentCard);
-  QVBoxLayout *radarLayout;
-  dashboardRadarCard = card("Sun & radar / HookEcho", &radarLayout);
+  layout->insertWidget(0, currentCard);
   sunCycle = new SunCycle;
   sunCycle->setObjectName("sunCycle");
-  radarLayout->addWidget(sunCycle);
+  layout->insertWidget(1, sunCycle);
   auto liveRadar = new Radar(services, nullptr, true);
   liveRadar->setObjectName("dashboardRadar");
-  radarLayout->addWidget(liveRadar);
+  dashboardRadarCard = liveRadar;
   connect(liveRadar, &Radar::warningsRequested, this, [this] {
     tools->findChild<QComboBox *>("nativeTool")->setCurrentIndex(6);
     pages->setCurrentIndex(4);
   });
   layout->addStretch();
+  radarStage = new RadarStage(liveRadar, scrollView(page));
+  auto dashboard = new QWidget;
+  auto dashboardLayout = new QVBoxLayout(dashboard);
+  dashboardLayout->setContentsMargins(0, 0, 0, 0);
+  dashboardLayout->addWidget(alerts);
+  dashboardLayout->addWidget(radarStage, 1);
   arrange();
-  return scrollView(page);
+  return dashboard;
 }
 QWidget *Window::makeRadar() { return scrollView(new Radar(services)); }
 void Window::openRadar() {
@@ -1198,9 +1202,10 @@ void Window::applyScale(double value) {
   font.setPixelSize(qRound(13 * scaleFactor));
   QApplication::setFont(font);
   for (auto face : faces)
-    face->setScale(scaleFactor);
-  weatherGlyph->setScale(scaleFactor);
-  sunCycle->setScale(scaleFactor);
+    face->setScale(scaleFactor * .72);
+  weatherGlyph->setScale(scaleFactor * .65);
+  sunCycle->setScale(scaleFactor * .85);
+  radarStage->setScale(scaleFactor);
   for (auto radar : findChildren<Radar *>())
     radar->setScale(scaleFactor);
   applyTheme();
@@ -1267,7 +1272,7 @@ void Window::applyTheme() {
       "px;font-family:'Barlow Semi Condensed Medium','Arial Narrow','DejaVu "
       "Sans "
       "Condensed';font-weight:500;} QLabel[kind=temperature] {font-size:" +
-      px(76) +
+      px(42) +
       "px;font-weight:600;}"
       "QLabel[kind=subtitle] {font-size:" +
       px(24) + "px;font-weight:600;} QLabel[kind=notice] {padding:" + px(12) +
@@ -1292,7 +1297,13 @@ void Window::applyTheme() {
       "QTabWidget::pane {border:1px solid " +
       border + ";} QTabBar::tab {padding:" + px(10) + "px;background:" + panel +
       ";} QTabBar::tab:selected {color:" + accent +
-      ";} QToolTip {color:" + foreground + ";background:" + panel + ";}");
+      ";} QToolTip {color:" + foreground + ";background:" + panel +
+      ";}"
+      "QScrollArea#instrumentShelf {border:1px solid " +
+      border +
+      ";border-radius:8px;}"
+      "QScrollArea#instrumentShelf>QWidget>QWidget {background:" +
+      background + ";}");
 }
 void Window::arrange() {
   if (!metrics || !body)
@@ -1330,7 +1341,7 @@ void Window::arrange() {
     navigation->addWidget(setupButton, 0, 8);
     navigation->addWidget(motionButton, 0, 9);
   }
-  const int columns = available >= 800 ? 4 : (available >= 420 ? 2 : 1);
+  const int columns = available >= 360 ? 2 : 1;
   const auto dashboard =
       services.config.settings().value("nativeDashboard").toObject();
   const auto hidden = dashboard.value("hidden").toArray(),
@@ -1368,55 +1379,21 @@ void Window::arrange() {
        QList<QWidget *>{heroHeading, heroSource, detail, heroTemperature,
                         heroCondition, weatherGlyph})
     heroLayout->removeWidget(widget);
-  heroLayout->addWidget(heroHeading, 0, 0);
-  heroLayout->addWidget(heroSource, 1, 0);
-  heroLayout->addWidget(detail, 2, 0);
-  if (compact) {
-    heroLayout->addWidget(heroTemperature, 3, 0);
-    heroLayout->addWidget(weatherGlyph, 4, 0);
-    heroLayout->addWidget(heroCondition, 5, 0);
-  } else {
-    heroLayout->addWidget(heroTemperature, 0, 1, 2, 1);
-    heroLayout->addWidget(heroCondition, 2, 1);
-    heroLayout->addWidget(weatherGlyph, 0, 2, 3, 1);
-  }
-  const QHash<QString, QWidget *> cards{
-      {"Local radar", dashboardRadarCard},
-      {"Your local context", contextCard}};
-  QList<QWidget *> arranged;
-  for (const auto &v : order)
-    if (cards.contains(v.toString()) &&
-        !arranged.contains(cards.value(v.toString())))
-      arranged << cards.value(v.toString());
-  for (auto w : {dashboardRadarCard, contextCard})
-    if (!arranged.contains(w))
-      arranged << w;
-  for (auto w : arranged)
-    body->removeWidget(w);
-  for (int i = 0; i < 3; ++i)
-    body->setColumnStretch(i, 0);
-  const int bodyColumns = 1;
-  int at = 0;
-  for (auto w : arranged) {
-    auto key = cards.key(w);
-    w->setVisible(!hidden.contains(key));
-    if (!w->isHidden()) {
-      body->addWidget(w, at / bodyColumns, at % bodyColumns);
-      ++at;
-    }
-  }
+  heroLayout->addWidget(heroHeading, 0, 0, 1, 2);
+  heroLayout->addWidget(heroTemperature, 1, 0);
+  heroLayout->addWidget(weatherGlyph, 1, 1);
+  heroLayout->addWidget(heroCondition, 2, 0, 1, 2);
+  heroLayout->addWidget(heroSource, 3, 0, 1, 2);
+  heroLayout->addWidget(detail, 4, 0, 1, 2);
+  body->addWidget(contextCard, 0, 0);
   body->setColumnStretch(0, 1);
-  body->setColumnStretch(1, bodyColumns == 2 ? 1 : 0);
+  contextCard->setVisible(!hidden.contains("Your local context"));
+  dashboardRadarCard->setVisible(!hidden.contains("Local radar"));
   currentCard->setVisible(!hidden.contains("Current conditions"));
 }
 void Window::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
   arrange();
-  heroTemperature->setStyleSheet(
-      "font-size:" +
-      QString::number(qRound(
-          std::min(76 * scaleFactor, std::max(36.0, (width() - 100) / 5.5)))) +
-      "px;font-weight:600;");
 }
 void Window::render() {
   if (services.config.text("theme") == "auto" &&
