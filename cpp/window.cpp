@@ -748,7 +748,7 @@ QWidget *Window::makeSettings() {
   text(alert, "ntfy server", "ntfyUrl");
   text(alert, "ntfy topic", "ntfyTopic", true);
   text(alert, "Webhook URL", "webhookUrl", true);
-  auto test = new QPushButton("Test notification");
+  auto test = new QPushButton("Test push");
   alert->addRow(test);
   connect(test, &QPushButton::clicked, this, [this] {
     services.push("StormDesk test",
