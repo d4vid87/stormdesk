@@ -23,6 +23,7 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QScreen>
 #include <QScrollArea>
 #include <QScroller>
 #include <QSpinBox>
@@ -278,7 +279,11 @@ Window::Window(Services &s, HttpServer &http)
   });
   applyScale(
       local.value("scale", services.config.number("fontScale", 1)).toDouble());
-  resize(local.value("size", QSize(1440, 950)).toSize());
+  auto initialSize = local.value("size", QSize(1440, 950)).toSize();
+  if (auto screen = QGuiApplication::primaryScreen())
+    initialSize = initialSize.boundedTo(screen->availableGeometry().size() -
+                                        QSize(40, 80));
+  resize(initialSize.expandedTo(minimumSize()));
   render();
   connect(qApp, &QCoreApplication::aboutToQuit, this,
           [this] { local.setValue("size", size()); });
