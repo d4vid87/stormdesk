@@ -228,6 +228,11 @@ Window::Window(Services &s, HttpServer &http)
   pages->addWidget(makeSettings());
   tools = new Tools(services);
   pages->addWidget(scrollView(tools));
+  connect(radarPage->findChild<Radar *>(), &Radar::warningsRequested, this,
+          [this] {
+            tools->findChild<QComboBox *>("nativeTool")->setCurrentIndex(6);
+            pages->setCurrentIndex(4);
+          });
   connect(tools, &Tools::dashboardChanged, this, [this] {
     arrange();
     render();

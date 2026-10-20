@@ -53,6 +53,10 @@ private slots:
     QCOMPARE(db.meta("station_fingerprint"), QString("tempest:other"));
   }
   void advancedToolsPreserveMeaningAndTracking() {
+    QVERIFY(std::abs(dewPoint(20, 50).value() - 9.26) < .05);
+    QVERIFY(std::abs(wetBulb(20, 50).value() - 13.7) < .2);
+    QVERIFY(!dewPoint(20, 0));
+    QVERIFY(!wetBulb(20, 101));
     auto equinox = QDateTime::fromString("2026-03-20T12:00:00Z", Qt::ISODate)
                        .toSecsSinceEpoch();
     QVERIFY(solarAltitude(equinox, 0, 0) > 85);

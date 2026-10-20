@@ -677,17 +677,31 @@ double feelsLike(double c, double rh, double wind) {
            1.8;
   return c;
 }
-std::optional<double> wbgt(double c, double rh, double solar, double wind) {
+std::optional<double> dewPoint(double c, double rh) {
+  if (!std::isfinite(c) || !(rh > 0) || rh > 100 || c <= -243.04)
+    return {};
+  const double g = std::log(rh / 100) + 17.625 * c / (243.04 + c),
+               result = 243.04 * g / (17.625 - g);
+  return std::isfinite(result) ? std::optional<double>(result) : std::nullopt;
+}
+std::optional<double> wetBulb(double c, double rh) {
   if (!std::isfinite(c) || !(rh > 0) || rh > 100)
     return {};
   double wet = c * std::atan(.151977 * std::sqrt(rh + 8.313659)) +
                std::atan(c + rh) - std::atan(rh - 1.676331) +
                .00391838 * std::pow(rh, 1.5) * std::atan(.023101 * rh) -
                4.686035;
+  return std::isfinite(wet) ? std::optional<double>(wet) : std::nullopt;
+}
+std::optional<double> wbgt(double c, double rh, double solar, double wind) {
+  const auto wet = wetBulb(c, rh);
+  if (!wet || !std::isfinite(solar) || !std::isfinite(wind))
+    return {};
   if (solar < 100)
-    return .7 * wet + .3 * c;
+    return .7 * *wet + .3 * c;
   double globe = c + .021 * solar - .42 * std::max(wind, 0.0) + 3.6;
-  return .7 * wet + .2 * globe + .1 * c;
+  const double result = .7 * *wet + .2 * globe + .1 * c;
+  return std::isfinite(result) ? std::optional<double>(result) : std::nullopt;
 }
 double uiScale(double value) {
   return std::isfinite(value) ? std::clamp(value, .7, 2.0) : 1.0;

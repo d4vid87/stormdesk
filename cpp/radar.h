@@ -15,6 +15,8 @@ class Radar : public QWidget {
 public:
   explicit Radar(Services &services, QWidget *parent = nullptr);
   void refresh();
+signals:
+  void warningsRequested();
 
 protected:
   void showEvent(QShowEvent *event) override;
@@ -27,6 +29,7 @@ private:
   Canvas *canvas;
   QSlider *frames;
   QLabel *status;
+  QLabel *warnings;
   QTimer animation, cadence;
   QJsonArray past;
   QString host, location;

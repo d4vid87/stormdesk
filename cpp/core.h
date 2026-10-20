@@ -73,4 +73,6 @@ double feelsLike(double c, double humidity, double wind);
 double uiScale(double value);
 std::optional<double> wbgt(double temperature, double humidity, double solar,
                            double wind);
+std::optional<double> dewPoint(double temperature, double humidity);
+std::optional<double> wetBulb(double temperature, double humidity);
 } // namespace storm

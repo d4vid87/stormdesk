@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QScroller>
+#include <QSignalBlocker>
 #include <QSqlQuery>
 #include <QTableWidget>
 #include <QUrlQuery>
@@ -353,6 +354,24 @@ void Tools::showEvent(QShowEvent *event) {
   refresh();
 }
 void Tools::refresh(bool force) {
+  const int group = topic->currentIndex() == 2   ? 2
+                    : topic->currentIndex() == 9 ? 9
+                                                 : 1;
+  if (metric->property("group").toInt() != group) {
+    QSignalBlocker blocker(metric);
+    metric->clear();
+    if (group == 2)
+      metric->addItems({"Temperature", "Precipitation", "Wind"});
+    else if (group == 9)
+      metric->addItems({"High temperature", "Rain", "Wind gust", "Pressure",
+                        "Humidity", "UV index", "Low temperature",
+                        "Lightning strikes"});
+    else
+      metric->addItems({"Temperature", "Precipitation", "Wind", "Pressure",
+                        "Humidity", "UV index", "Solar radiation", "Dew point",
+                        "Wet bulb"});
+    metric->setProperty("group", group);
+  }
   QStringList providers;
   switch (topic->currentIndex()) {
   case 0:
@@ -521,13 +540,42 @@ void Tools::render() {
                        .value(spec.first),
                    spin);
     }
+    auto categories = new QListWidget;
+    categories->setAccessibleName("Timeline categories");
+    categories->setMinimumHeight(180);
+    form->addRow("Event categories", categories);
+    auto selected = prefs.value("categories").isArray()
+                        ? prefs.value("categories").toArray()
+                        : QJsonArray();
+    for (int i = 1; i < filter->count(); ++i) {
+      auto item = new QListWidgetItem(filter->itemText(i), categories);
+      item->setData(Qt::UserRole, filter->itemData(i));
+      item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+      item->setCheckState(
+          !prefs.value("categories").isArray() ||
+                  selected.contains(filter->itemData(i).toString())
+              ? Qt::Checked
+              : Qt::Unchecked);
+    }
+    for (const auto &v : selected)
+      if (filter->findData(v.toString()) < 0) {
+        auto item = new QListWidgetItem(v.toString(), categories);
+        item->setData(Qt::UserRole, v.toString());
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Checked);
+      }
     auto save = new QPushButton("Save thresholds");
     form->addRow(save);
-    connect(save, &QPushButton::clicked, this, [this, spins] {
+    connect(save, &QPushButton::clicked, this, [this, spins, categories] {
       auto prefs =
           advanced.services.config.settings().value("timeline").toObject();
       for (auto i = spins.begin(); i != spins.end(); ++i)
         prefs[i.key()] = i.value()->value();
+      QJsonArray enabled;
+      for (int i = 0; i < categories->count(); ++i)
+        if (categories->item(i)->checkState() == Qt::Checked)
+          enabled.append(categories->item(i)->data(Qt::UserRole).toString());
+      prefs["categories"] = enabled;
       QString error;
       advanced.services.config.merge(
           {{"_rev", advanced.services.config.value.value("_rev")},
@@ -536,18 +584,21 @@ void Tools::render() {
       note->setText(error.isEmpty() ? "Timeline thresholds saved" : error);
     });
   } else if (index == 1) {
-    const QStringList keys{"temperature_2m",       "precipitation",
-                           "wind_speed_10m",       "pressure_msl",
-                           "relative_humidity_2m", "uv_index"};
+    const QStringList keys{"temperature_2m",         "precipitation",
+                           "wind_speed_10m",         "pressure_msl",
+                           "relative_humidity_2m",   "uv_index",
+                           "shortwave_radiation",    "dew_point_2m",
+                           "wet_bulb_temperature_2m"};
     int m = metric->currentIndex();
-    double factor = m == 0   ? tf
-                    : m == 1 ? rf
-                    : m == 2 ? wf
-                    : m == 3 ? (metricUnits ? 1 : 1 / 33.8639)
-                             : 1,
-           shift = m == 0 ? ts : 0;
+    double factor = m == 0 || m >= 7 ? tf
+                    : m == 1         ? rf
+                    : m == 2         ? wf
+                    : m == 3         ? (metricUnits ? 1 : 1 / 33.8639)
+                                     : 1,
+           shift = m == 0 || m >= 7 ? ts : 0;
     chart(h, {keys[m]}, {metric->currentText()}, factor, shift,
-          QStringList{tu, ru, wu, metricUnits ? "hPa" : "inHg", "%", "UV"}[m],
+          QStringList{tu, ru, wu, metricUnits ? "hPa" : "inHg", "%", "UV",
+                      "W/m²", tu, tu}[m],
           at);
     QList<QStringList> rows;
     for (int i = 0; i < times.size(); ++i)
@@ -996,9 +1047,20 @@ void Tools::render() {
     heading("Local signals · native station feed");
     auto obs = s.archive.current();
     QList<QStringList> rows;
-    for (auto k : {"temp", "humidity", "wind_avg", "wind_dir", "pressure",
-                   "pressure_trend", "strikes"})
+    for (auto k : {"temp", "humidity", "wind_avg", "wind_gust", "wind_lull",
+                   "wind_dir", "pressure", "pressure_trend", "strikes",
+                   "strike_dist", "day_rain", "solar", "uv", "lux", "battery"})
       rows << QStringList{k, obs.value(k).toVariant().toString()};
+    if (obs.value("temp").isDouble() && obs.value("humidity").isDouble()) {
+      auto dew = dewPoint(obs.value("temp").toDouble(),
+                          obs.value("humidity").toDouble()),
+           wet = wetBulb(obs.value("temp").toDouble(),
+                         obs.value("humidity").toDouble());
+      rows << QStringList{"Dew point estimate (°C)",
+                          dew ? QString::number(*dew, 'f', 1) : "Unavailable"}
+           << QStringList{"Wet bulb estimate (°C)",
+                          wet ? QString::number(*wet, 'f', 1) : "Unavailable"};
+    }
     table(body, {"Live reading (SI)", "Value"}, rows);
     heading("Best outdoor window · next 24 hours");
     double best = 1e30;
@@ -1129,8 +1191,8 @@ void Tools::render() {
     heading("Archive explorer");
     QJsonObject series;
     QJsonArray x, y;
-    const QStringList keys{"tempMax",      "rain",         "gustMax",
-                           "pressureMean", "humidityMean", "uvMax"};
+    const QStringList keys{"tempMax",      "rain",  "gustMax", "pressureMean",
+                           "humidityMean", "uvMax", "tempMin", "strikes"};
     QString field = keys[metric->currentIndex()];
     QList<QStringList> rows;
     QMap<QString, QJsonObject> months;
@@ -1166,15 +1228,19 @@ void Tools::render() {
     }
     int m = metric->currentIndex();
     chart({{"time", x}, {"value", y}}, {"value"}, {metric->currentText()},
-          m == 0   ? tf
-          : m == 1 ? rf
-          : m == 2 ? wf
-                   : 1,
-          m == 0 ? ts : 0,
-          m == 0   ? tu
-          : m == 1 ? ru
-          : m == 2 ? wu
-                   : "SI");
+          m == 0 || m == 6 ? tf
+          : m == 1         ? rf
+          : m == 2         ? wf
+          : m == 3         ? (metricUnits ? 1 : 1 / 33.8639)
+                           : 1,
+          m == 0 || m == 6 ? ts : 0,
+          m == 0 || m == 6 ? tu
+          : m == 1         ? ru
+          : m == 2         ? wu
+          : m == 3         ? (metricUnits ? "hPa" : "inHg")
+          : m == 4         ? "%"
+          : m == 5         ? "UV"
+                           : "strikes");
     table(body,
           {"Day", "Low " + tu, "High " + tu, "Rain " + ru, "Gust " + wu,
            "Strikes"},
@@ -1553,6 +1619,7 @@ void Tools::customization() {
   body->addWidget(text("Choose and reorder Weather cards. Official warnings "
                        "always stay visible."));
   auto order = new QListWidget;
+  order->setObjectName("dashboardCards");
   order->setAccessibleName("Dashboard card order");
   order->setDragDropMode(QAbstractItemView::InternalMove);
   order->setMinimumHeight(320);

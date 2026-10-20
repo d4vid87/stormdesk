@@ -197,7 +197,7 @@ QJsonArray weatherTimeline(const QJsonObject &forecast,
   QJsonArray raw;
   QStringList defaults{"precip", "storm", "winter", "freeze", "heat",
                        "wind",   "aqi",   "change", "sun",    "alert"};
-  auto enabled = prefs.contains("categories")
+  auto enabled = prefs.value("categories").isArray()
                      ? prefs.value("categories").toArray()
                      : QJsonArray::fromStringList(defaults);
   auto add = [&](QString kind, qint64 start, QString title, QString text,

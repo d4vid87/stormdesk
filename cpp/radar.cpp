@@ -158,6 +158,27 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
   cache->setMaximumCacheSize(64 * 1024 * 1024);
   tiles.setCache(cache);
   auto layout = new QVBoxLayout(this);
+  warnings = new QLabel;
+  warnings->setTextFormat(Qt::PlainText);
+  warnings->setWordWrap(true);
+  warnings->setProperty("kind", "notice");
+  layout->addWidget(warnings);
+  auto details = new QPushButton("Warnings");
+  layout->addWidget(details);
+  connect(details, &QPushButton::clicked, this, &Radar::warningsRequested);
+  auto updateWarnings = [this, details] {
+    const auto alerts = services.warnings;
+    warnings->setVisible(!alerts.isEmpty());
+    details->setVisible(!alerts.isEmpty());
+    if (!alerts.isEmpty()) {
+      const auto first = alerts[0].toObject().value("properties").toObject();
+      warnings->setText(QString::number(alerts.size()) +
+                        " active US weather warning(s)\n" +
+                        first.value("event").toString());
+    }
+  };
+  connect(&services, &Services::changed, this, updateWarnings);
+  updateWarnings();
   status = new QLabel("Radar · choose a location in Settings");
   status->setTextFormat(Qt::PlainText);
   status->setWordWrap(true);

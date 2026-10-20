@@ -53,7 +53,7 @@ private slots:
     auto tool = window.findChild<QComboBox *>("nativeTool");
     tool->setCurrentIndex(12);
     QTest::qWait(10);
-    auto list = window.findChild<QListWidget *>();
+    auto list = window.findChild<QListWidget *>("dashboardCards");
     QVERIFY(list);
     list->item(0)->setCheckState(Qt::Unchecked);
     QPushButton *apply = nullptr;
@@ -144,6 +144,9 @@ private slots:
     auto current = tables.last();
     QCOMPARE(current->rowCount(), 48);
     QCOMPARE(current->columnCount(), 4);
+    for (auto box : tools->findChildren<QComboBox *>())
+      if (box->accessibleName() == "Tool measurement")
+        QCOMPARE(box->count(), 3);
     QCOMPARE(current->item(0, 3)->text(), QString("4.0"));
     auto area = qobject_cast<QScrollArea *>(
         window.findChild<QStackedWidget *>()->currentWidget());

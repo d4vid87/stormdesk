@@ -727,10 +727,8 @@ void Services::checkRules() {
   put("wind", observation[2], config.windFactor());
   put("gust", observation[3], config.windFactor());
   if (observation[7] && observation[8] && *observation[8] > 0) {
-    double g = std::log(*observation[8] / 100) +
-               17.625 * *observation[7] / (243.04 + *observation[7]);
-    double dew = 243.04 * g / (17.625 - g);
-    metrics["dew"] = metric ? dew : dew * 1.8 + 32;
+    put("dew", dewPoint(*observation[7], *observation[8]), metric ? 1 : 1.8,
+        metric ? 0 : 32);
   }
   QSqlQuery q(archive.db);
   q.prepare(
