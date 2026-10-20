@@ -1284,11 +1284,20 @@ void Tools::render() {
                        .toSecsSinceEpoch() -
                    offset);
     if (q.exec())
-      while (q.next())
-        ++counts[int(std::floor((q.value(0).toDouble() + 11.25) / 22.5)) % 16];
+      while (q.next()) {
+        double angle = q.value(0).toDouble();
+        if (std::isfinite(angle) && angle >= 0 && angle <= 360)
+          ++counts[int(std::floor((angle + 11.25) / 22.5)) % 16];
+      }
     for (int i = 0; i < 16; ++i)
       bins.points << QPointF(i * 22.5, counts[i]);
     rose->lines << bins;
+    rose->setAccessibleName("Wind rose");
+    int validDirections = 0;
+    for (int count : counts)
+      validDirections += count;
+    rose->setAccessibleDescription(QString::number(validDirections) +
+                                   " valid wind directions");
     body->addWidget(rose);
     heading("Climate normals · 1991–2020 reanalysis");
     auto normal =

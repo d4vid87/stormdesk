@@ -192,6 +192,25 @@ private slots:
     if (!qEnvironmentVariable("STORMDESK_TOOLS_CAPTURE").isEmpty())
       QVERIFY(
           window.grab().save(qEnvironmentVariable("STORMDESK_TOOLS_CAPTURE")));
+    Reading invalid{};
+    invalid[0] = double(now);
+    invalid[2] = 1;
+    invalid[4] = -999;
+    invalid[7] = 20;
+    QVERIFY(db.insert(invalid, 0, "tempest:fixture", &error));
+    invalid[0] = double(now + 1);
+    invalid[4] = 90;
+    QVERIFY(db.insert(invalid, 0, "tempest:fixture", &error));
+    tools->advanced.fetched["normals"] = now;
+    tools->advanced.fetched["official"] = now;
+    window.findChild<QComboBox *>("nativeTool")->setCurrentIndex(9);
+    QTest::qWait(10);
+    QWidget *rose = nullptr;
+    for (auto widget : tools->findChildren<QWidget *>())
+      if (widget->accessibleName() == "Wind rose")
+        rose = widget;
+    QVERIFY(rose);
+    QCOMPARE(rose->accessibleDescription(), QString("1 valid wind directions"));
   }
   void settingsKeepRulesAndUnsetLocation() {
     QTemporaryDir dir;
