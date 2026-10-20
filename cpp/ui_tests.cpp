@@ -325,6 +325,7 @@ private slots:
           QMetaObject::invokeMethod(box, "activated", Q_ARG(int, i));
           QTest::qWait(10);
         }
+        break; // Page changes can rebuild the remaining controls in the snapshot.
       }
     if (!qEnvironmentVariable("STORMDESK_UI_CAPTURE").isEmpty()) {
       window.applyScale(1.5);
