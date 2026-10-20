@@ -287,7 +287,7 @@ bool Services::accept(const Reading &row, int source, const QString &identity,
   return true;
 }
 void Services::receivePacket(QJsonObject p) {
-  if (config.stationSource() != "tempest")
+  if (config.stationSource() != "tempest" || config.text("nativeTempestConnection") == "cloud")
     return;
   auto type = p.value("type").toString();
   if (type.isEmpty() || type.size() > 64)

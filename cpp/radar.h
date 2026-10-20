@@ -13,7 +13,8 @@ QPointF mercator(double lat, double lon, int zoom);
 class Radar : public QWidget {
   Q_OBJECT
 public:
-  explicit Radar(Services &services, QWidget *parent = nullptr);
+  explicit Radar(Services &services, QWidget *parent = nullptr,
+                 bool compact = false);
   void refresh();
 signals:
   void warningsRequested();
@@ -25,6 +26,7 @@ protected:
 private:
   class Canvas;
   Services &services;
+  bool compact;
   QNetworkAccessManager tiles;
   Canvas *canvas;
   QSlider *frames;

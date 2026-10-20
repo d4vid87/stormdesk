@@ -12,6 +12,8 @@
 
 namespace storm {
 class Tools;
+class InstrumentFace;
+class WeatherGlyph;
 class Plot : public QWidget {
 public:
   explicit Plot(QWidget *parent = nullptr);
@@ -25,6 +27,7 @@ public:
   Window(Services &services, HttpServer &server);
   void render();
   void applyScale(double scale);
+  void setup();
   double scale() const { return scaleFactor; }
 
 protected:
@@ -43,7 +46,16 @@ private:
   QLabel *clock, *location, *heroTemperature, *heroCondition, *heroSource,
       *status, *alerts, *sun;
   QLabel *forecastNote;
-  std::array<QLabel *, 7> metricValues, metricSources;
+  std::array<QLabel *, 8> metricValues, metricSources;
+  std::array<InstrumentFace *, 8> faces;
+  WeatherGlyph *weatherGlyph;
+  QPushButton *setupButton, *motionButton;
+  QGridLayout *heroLayout;
+  QLabel *heroHeading, *dashboardPlotSource;
+  Plot *dashboardPlot;
+  QWidget *dashboardPlotCard = nullptr, *dashboardRadarCard = nullptr;
+  QJsonObject setupChanges;
+  void showInstrument(int index);
   QList<QWidget *> metricCards;
   QGridLayout *metrics = nullptr, *body = nullptr;
   QWidget *forecastCard = nullptr, *currentCard = nullptr,

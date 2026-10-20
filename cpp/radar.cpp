@@ -52,7 +52,20 @@ public:
     if (auto image = images.object(address)) {
       if (overlay)
         p.setOpacity(.72);
-      p.drawImage(rect, *image);
+      if (!overlay && palette().color(QPalette::Window).lightness() < 128) {
+        const auto key = address + ":dark";
+        if (!images.object(key)) {
+          auto dark = image->convertToFormat(QImage::Format_Grayscale8);
+          dark.invertPixels();
+          dark = dark.convertToFormat(QImage::Format_RGB32);
+          QPainter shade(&dark);
+          shade.fillRect(dark.rect(), QColor(17, 23, 31, 85));
+          shade.end();
+          images.insert(key, new QImage(dark));
+        }
+        p.drawImage(rect, *images.object(key));
+      } else
+        p.drawImage(rect, *image);
       p.setOpacity(1);
       return;
     }
@@ -150,7 +163,8 @@ public:
     e->accept();
   }
 };
-Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
+Radar::Radar(Services &s, QWidget *parent, bool compactMode)
+    : QWidget(parent), services(s), compact(compactMode) {
   auto cache = new QNetworkDiskCache(&tiles);
   cache->setCacheDirectory(
       QStandardPaths::writableLocation(QStandardPaths::CacheLocation) +
@@ -168,8 +182,8 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
   connect(details, &QPushButton::clicked, this, &Radar::warningsRequested);
   auto updateWarnings = [this, details] {
     const auto alerts = services.warnings;
-    warnings->setVisible(!alerts.isEmpty());
-    details->setVisible(!alerts.isEmpty());
+    warnings->setVisible(!compact && !alerts.isEmpty());
+    details->setVisible(!compact && !alerts.isEmpty());
     if (!alerts.isEmpty()) {
       const auto first = alerts[0].toObject().value("properties").toObject();
       warnings->setText(QString::number(alerts.size()) +
@@ -226,6 +240,14 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
   auto coverage = new QCheckBox("Coverage");
   coverage->setToolTip("Show areas without radar coverage");
   layout->addWidget(coverage);
+  if (compact) {
+    layout->setContentsMargins(0, 0, 0, 0);
+    canvas->setMinimumHeight(240);
+    for (auto button : buttons)
+      button->hide();
+    frames->hide();
+    coverage->hide();
+  }
   connect(coverage, &QCheckBox::toggled, this, [this](bool enabled) {
     canvas->coverage = enabled;
     canvas->update();

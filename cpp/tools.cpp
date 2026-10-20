@@ -1683,7 +1683,7 @@ void Tools::customization() {
   const QStringList defaults{
       "Rain today",     "Lightning",         "Wind",     "Heat stress / WBGT",
       "UV index",       "Pressure",          "Humidity", "Current conditions",
-      "10-day outlook", "Your local context"};
+      "10-day outlook", "Your local context", "Dew point", "Temperature / six hours", "Local radar"};
   auto ids = saved.value("order").toArray();
   for (const auto &name : defaults)
     if (!ids.contains(name))

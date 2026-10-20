@@ -1,10 +1,15 @@
+#include "instruments.h"
 #include "radar.h"
+#include "setup.h"
 #include "tools.h"
 #include "window.h"
+#include <QCheckBox>
 #include <QFontDatabase>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QNetworkProxy>
+#include <QPointer>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSettings>
@@ -25,12 +30,121 @@ private slots:
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
                        preferences.path());
     QStandardPaths::setTestModeEnabled(true);
+    QNetworkProxy::setApplicationProxy(
+        QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", 1));
 #ifdef Q_OS_WIN
     // The offscreen plugin does not load the Windows system font database.
     QVERIFY(QFontDatabase::addApplicationFont(qEnvironmentVariable("WINDIR") +
                                               "/Fonts/segoeui.ttf") >= 0);
     QApplication::setFont(QFont("Segoe UI"));
 #endif
+  }
+  void instrumentAndRealSetup() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    QString error;
+    QVERIFY(cfg.save({{"settings", QJsonObject{{"stationName", "Home"},
+                                               {"lat", 32.6},
+                                               {"lon", -97.3},
+                                               {"units", "imperial"},
+                                               {"keepThis", 42}}}},
+                     &error));
+    Archive db(dir.filePath("db"));
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    services.forecast = {{"_at", double(now)},
+                         {"current", QJsonObject{{"temperature_2m", 20},
+                                                 {"relative_humidity_2m", 50},
+                                                 {"wind_speed_10m", 5},
+                                                 {"wind_direction_10m", 220},
+                                                 {"pressure_msl", 1013},
+                                                 {"weather_code", 61},
+                                                 {"is_day", 1}}}};
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    Window window(services, server);
+    window.applyScale(1);
+    QSettings isolated(QSettings::defaultFormat(), QSettings::UserScope,
+                       "StormDesk", "Native");
+    QCOMPARE(isolated.value("scale").toDouble(), 1.0);
+    window.resize(1440, 950);
+    window.show();
+    QTest::qWait(10);
+    QCOMPARE(window.findChildren<InstrumentFace *>().size(), 8);
+    QVERIFY(QFontDatabase::families().contains("Barlow Semi Condensed Medium"));
+    auto rain = window.findChild<InstrumentFace *>("instrumentFace0");
+    auto wind = window.findChild<InstrumentFace *>("instrumentFace2");
+    auto dew = window.findChild<InstrumentFace *>("instrumentFace7");
+    QVERIFY(rain && !rain->reading());
+    QVERIFY(wind && wind->reading());
+    QCOMPARE(*wind->reading(), 5.0);
+    QVERIFY(dew && dew->reading());
+    auto glyph = window.findChild<WeatherGlyph *>();
+    QVERIFY(glyph && glyph->animated());
+    window.findChild<QPushButton *>("weatherMotion")->click();
+    QVERIFY(!glyph->animated());
+    QCOMPARE(cfg.settings().value("nativeMotion").toBool(), false);
+    rain->click();
+    auto reading = window.findChild<QDialog *>();
+    QVERIFY(reading);
+    reading->accept();
+    QTest::qWait(5);
+    window.setup();
+    QPointer<SetupDialog> setup =
+        window.findChild<SetupDialog *>("stationSetup");
+    QVERIFY(setup);
+    setup->findChild<QPushButton *>("setup-forecast")->click();
+    auto next = setup->findChild<QPushButton *>("setupNext");
+    setup->findChild<QLineEdit *>("setupName")->clear();
+    next->click();
+    QVERIFY(setup->findChild<QLabel *>("setupMessage")
+                ->text()
+                .contains("location"));
+    setup->findChild<QLineEdit *>("setupName")->setText("Actual location");
+    next->click();
+    services.forecast["_at"] = double(QDateTime::currentSecsSinceEpoch());
+    emit services.changed();
+    QVERIFY2(setup->findChild<QLabel *>("setupConnectionStatus")
+                 ->text()
+                 .contains("Forecast received"),
+             qPrintable(
+                 setup->findChild<QLabel *>("setupMessage")->text() + " / " +
+                 setup->findChild<QLabel *>("setupConnectionStatus")->text()));
+    QVERIFY(next->isEnabled());
+    next->click();
+    next->click();
+    QTest::qWait(5);
+    QVERIFY(!setup);
+    QVERIFY(cfg.settings().value("nativeSetupDone").toBool());
+    QCOMPARE(cfg.settings().value("keepThis").toInt(), 42);
+    QCOMPARE(cfg.text("stationName"), QString("Actual location"));
+    window.setup();
+    setup = window.findChild<SetupDialog *>("stationSetup");
+    setup->findChild<QPushButton *>("setup-station")->click();
+    next = setup->findChild<QPushButton *>("setupNext");
+    next->click();
+    next->click();
+    QVERIFY(setup->findChild<QLabel *>("setupMessage")
+                ->text()
+                .contains("Tempest serial"));
+    setup->findChild<QLineEdit *>("setup-tempestSerial")->setText("ST-TEST");
+    next->click();
+    QVERIFY(!next->isEnabled());
+    QVERIFY(setup->findChild<QLabel *>("setupConnectionStatus")
+                ->text()
+                .contains("No recent station reading"));
+    QCOMPARE(cfg.text("nativeTempestConnection"), QString("local"));
+    QCOMPARE(db.health().value("rows").toInt(), 0);
+    window.applyScale(2);
+    setup->resize(360, 700);
+    QTest::qWait(10);
+    QVERIFY(setup->width() <= 360);
+    for (auto area : setup->findChildren<QScrollArea *>())
+      QVERIFY(area->horizontalScrollBar()->maximum() == 0);
+    setup->reject();
+    QTest::qWait(5);
+    window.applyScale(1);
   }
   void nativeMapsAndCustomization() {
     QCOMPARE(mercator(0, 0, 2), QPointF(512, 512));
@@ -325,7 +439,8 @@ private slots:
           QMetaObject::invokeMethod(box, "activated", Q_ARG(int, i));
           QTest::qWait(10);
         }
-        break; // Page changes can rebuild the remaining controls in the snapshot.
+        break; // Page changes can rebuild the remaining controls in the
+               // snapshot.
       }
     if (!qEnvironmentVariable("STORMDESK_UI_CAPTURE").isEmpty()) {
       window.applyScale(1.5);

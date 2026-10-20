@@ -226,6 +226,9 @@ int main(int argc, char **argv) {
       window->applyScale(value);
     }
     window->show();
+    if (!demo && (config.settings().isEmpty() ||
+                  config.settings().value("nativeSetupPending").toBool()))
+      QTimer::singleShot(0, window.get(), &storm::Window::setup);
     if (cli.isSet("screenshot"))
       QTimer::singleShot(1000, window.get(), [&] {
         const bool saved = window->grab().save(cli.value("screenshot"));

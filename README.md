@@ -6,9 +6,9 @@ A C++17 / Qt 6 weather application for desktop computers, Raspberry Pi, and Andr
 
 Choose a location for forecasts, or connect a personal weather station for measurements. StormDesk supports WeatherFlow Tempest, Ecowitt, Ambient Weather, Davis WeatherLink Live, La Crosse, and compatible Weather Underground upload protocols. Missing readings stay unavailable; forecast estimates are labeled.
 
-The interface has saved **70–200% scaling**, automatic display DPI support, responsive navigation/cards, touch scrolling, full screen, themes, and dashboard card customization. The same CMake project builds a native GUI or a small headless collector/server.
+The native **Instrument** interface has eight measurement faces, animated weather icons, live radar, and a six-hour station/forecast chart. First-run onboarding guides location selection, station connection, real feed verification, and display preferences. Saved **70–200% scaling**, automatic display DPI, touch scrolling, themes, and dashboard customization support different screens. The same CMake project builds a native GUI or a small headless collector/server.
 
-![Native Qt dashboard with synthetic demonstration readings](docs/native-dashboard.png)
+![Native Qt Instrument dashboard using live provider data; no personal station connected](docs/native-instrument.png)
 
 ## Build
 

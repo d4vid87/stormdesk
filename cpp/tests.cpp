@@ -16,6 +16,33 @@ using namespace storm;
 class CoreTest : public QObject {
   Q_OBJECT
 private slots:
+  void nativeCloudConnectionIgnoresUdp() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    cfg.value = {
+        {"settings", QJsonObject{{"stationSource", "tempest"},
+                                 {"stationId", "test"},
+                                 {"tempestSerial", "ST-TEST"},
+                                 {"nativeTempestConnection", "cloud"}}}};
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    Reading reading{};
+    reading[0] = double(QDateTime::currentSecsSinceEpoch());
+    reading[7] = 20;
+    auto packet = QJsonObject{{"type", "obs_st"},
+                              {"serial_number", "ST-TEST"},
+                              {"obs", QJsonArray{QJsonValue(toJson(reading))}}};
+    services.receivePacket(packet);
+    QCOMPARE(db.health().value("rows").toInt(), 0);
+    QVERIFY(!services.observation[0]);
+    auto settings = cfg.settings();
+    settings["nativeTempestConnection"] = "local";
+    cfg.value["settings"] = settings;
+    services.receivePacket(packet);
+    QCOMPARE(db.health().value("rows").toInt(), 1);
+  }
   void discoveryPacketsAreBounded() {
     auto packet =
         serviceAnnouncement("stormdesk-test.local", "192.168.1.2", 8088);
