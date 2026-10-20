@@ -30,6 +30,7 @@ public:
     QString stationSource() const;
     QString windUnit() const;
     double windFactor() const;
+    QJsonObject location() const;
 };
 
 class Archive {
@@ -51,6 +52,8 @@ public:
     static QJsonObject inspect(const QString &path, QJsonObject *config, QString *error);
     bool restore(const QString &source, QString *error);
     bool exportCsv(const QString &destination, QString *error) const;
+    int importJsonl(const QString &directory, const QString &station, QString *error);
+    bool clear(const QString &station, QString *error);
 };
 
 struct Counters {

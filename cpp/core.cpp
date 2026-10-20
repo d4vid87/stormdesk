@@ -44,6 +44,11 @@ QString fingerprint(const QJsonObject &s) {
     if (id.isEmpty()) id = s.value("ingestKey").toString();
     return id.isEmpty() ? "none" : source + ":" + id;
 }
+QJsonObject Config::location() const {
+    const auto s = settings(); const auto active = s.value("activePlace").toString();
+    if (!active.isEmpty()) for (const auto &v : s.value("places").toArray()) { auto p = v.toObject(); if (p.value("id").toString() == active && p.value("lat").isDouble() && p.value("lon").isDouble()) return p; }
+    auto home = s; home["name"] = s.value("stationName"); return home;
+}
 QString defaultDataDir() {
     const auto override = qEnvironmentVariable("WD_DATA_DIR");
     if (!override.isEmpty()) return override;
@@ -162,6 +167,28 @@ bool Archive::setMeta(const QString &key, const QString &value) {
     QSqlQuery q(db); q.prepare("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value");
     q.addBindValue(key); q.addBindValue(value); return q.exec();
 }
+bool Archive::clear(const QString &station, QString *error) {
+    if (!db.transaction()) return fail(error,db.lastError().text()); QSqlQuery query(db);
+    bool ok=query.exec("DELETE FROM obs") && query.exec("DELETE FROM meta");
+    if (ok && station!="none" && !station.isEmpty()) ok=setMeta("station_fingerprint",station);
+    if (ok && db.commit()) return true;
+    db.rollback(); return fail(error,query.lastError().text());
+}
+int Archive::importJsonl(const QString &directory, const QString &station, QString *error) {
+    const auto bound=meta("station_fingerprint");
+    if(station.isEmpty() || station=="none" || (!bound.isEmpty() && bound!=station)) { fail(error,"Choose the matching station before importing its archive");return -1; }
+    QDir dir(directory);const auto files=dir.entryInfoList({"*.jsonl"},QDir::Files|QDir::NoSymLinks,QDir::Name);
+    if(files.isEmpty()) {fail(error,"No JSONL observation files found");return -1;}
+    if(!db.transaction()){fail(error,db.lastError().text());return -1;} QSqlQuery query(db);
+    query.prepare("INSERT OR IGNORE INTO obs(ts,"+fields.join(',')+",src) VALUES("+QString("?,").repeated(19)+"?)");int count=0;
+    for(const auto &info:files) {QFile file(info.absoluteFilePath());if(!file.open(QIODevice::ReadOnly)){db.rollback();fail(error,file.errorString());return -1;}
+        while(!file.atEnd()) {auto line=file.readLine(65537);if(line.size()>65536){db.rollback();fail(error,"Oversized JSONL observation");return -1;}auto row=fromJson(QJsonDocument::fromJson(line).array());if(!row || !(*row)[0] || *(*row)[0]<=0)continue;
+            for(int i=0;i<19;++i)query.bindValue(i,(*row)[i]?QVariant(*(*row)[i]):QVariant());query.bindValue(19,2);
+            if(!query.exec()){db.rollback();fail(error,query.lastError().text());return -1;} count+=query.numRowsAffected();
+        }
+    }
+    if(!setMeta("station_fingerprint",station)||!setMeta("jsonl_imported",QString::number(count))||!db.commit()){db.rollback();fail(error,db.lastError().text());return -1;}return count;
+}
 bool Archive::insert(const Reading &row, int source, const QString &station, QString *error, const QJsonObject &metadata) {
     if (!row[0] || !std::isfinite(*row[0]) || *row[0] <= 0) return fail(error, "Invalid observation time");
     if (station.isEmpty() || station == "none") return fail(error, "Set a station ID before archiving readings");
@@ -208,9 +235,9 @@ QJsonArray Archive::tuples(qint64 from, qint64 to) const {
 }
 QJsonArray Archive::daily(int offsetMinutes, qint64 from) const {
     QSqlQuery q(db);
-    q.prepare("SELECT strftime('%Y-%m-%d',ts+?,'unixepoch'),MIN(temp),MAX(temp),MAX(wind_gust),SUM(rain),SUM(strikes),MIN(battery) FROM obs WHERE ts>=? GROUP BY 1 ORDER BY 1");
+    q.prepare("SELECT strftime('%Y-%m-%d',ts+?,'unixepoch'),MIN(temp),MAX(temp),MAX(wind_gust),SUM(rain),SUM(strikes),MIN(battery),AVG(pressure),AVG(humidity),MAX(uv) FROM obs WHERE ts>=? GROUP BY 1 ORDER BY 1");
     q.addBindValue(std::clamp(offsetMinutes, -840, 840) * 60); q.addBindValue(from);
-    const QStringList keys = {"tempMin", "tempMax", "gustMax", "rain", "strikes", "battMin"};
+    const QStringList keys = {"tempMin", "tempMax", "gustMax", "rain", "strikes", "battMin", "pressureMean", "humidityMean", "uvMax"};
     QJsonArray out;
     if (q.exec()) while (q.next()) {
         QJsonObject day{{"day", q.value(0).toString()}};

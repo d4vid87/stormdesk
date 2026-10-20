@@ -21,6 +21,12 @@ static QUrl queryUrl(const QString &base, const QList<QPair<QString, QString>> &
     url.setQuery(q); return url;
 }
 Services::Services(Config &cfg, Archive &db, QObject *parent) : QObject(parent), config(cfg), archive(db) {
+    connect(this, &Services::notification, this, [this](const QString &title, const QString &message) {
+        auto log = QJsonDocument::fromJson(archive.meta("native_notifications").toUtf8()).array();
+        log.prepend(QJsonObject{{"at", double(now())}, {"title", title}, {"message", message}});
+        while (log.size() > 100) log.removeLast();
+        archive.setMeta("native_notifications", QString::fromUtf8(QJsonDocument(log).toJson(QJsonDocument::Compact)));
+    });
     connect(&stationTimer, &QTimer::timeout, this, &Services::pollStation);
     connect(&forecastTimer, &QTimer::timeout, this, &Services::pollForecast);
     connect(&warningTimer, &QTimer::timeout, this, &Services::pollWarnings);
@@ -69,40 +75,44 @@ void Services::request(const QUrl &url, std::function<void(QJsonDocument, QStrin
     });
 }
 void Services::refresh() { pollStation(); pollForecast(); pollWarnings(); }
+void Services::resetRuntime() {
+    observation=archive.latest(); counters.clear();keptAt.clear();rawAt.clear();ruleSince.clear();latched.clear();packets={};diagnostics={};
+    laCrosseToken.clear();lastRulesAt=0;backfillEmpty=0;forecast={};warnings={};emit changed();
+}
 void Services::pollForecast() {
     if (forecastBusy) return;
-    const auto settings = config.settings();
+    const auto settings = config.location();
     if (settings.value("lat").isNull() || !settings.contains("lat") || !settings.contains("lon")) return;
-    const double lat = config.number("lat", 999), lon = config.number("lon", 999);
+    const double lat = config.location().value("lat").toDouble(999), lon = config.location().value("lon").toDouble(999);
     if (std::abs(lat) > 90 || std::abs(lon) > 180) { forecastStatus = "Invalid location"; emit changed(); return; }
     const auto location = QString::number(lat, 'g', 12) + "," + QString::number(lon, 'g', 12);
     forecastBusy = true; forecastStatus = "Updating forecast…"; emit changed();
     auto url = queryUrl("https://api.open-meteo.com/v1/forecast", {
         {"latitude", QString::number(lat, 'g', 12)}, {"longitude", QString::number(lon, 'g', 12)},
         {"current", "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m"},
-        {"daily", "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max"},
-        {"hourly", "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,weather_code,pressure_msl,wind_speed_10m,uv_index"},
+        {"daily", "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,snowfall_sum"},
+        {"hourly", "temperature_2m,relative_humidity_2m,precipitation_probability,precipitation,weather_code,pressure_msl,wind_speed_10m,wind_gusts_10m,uv_index,shortwave_radiation,dew_point_2m,wet_bulb_temperature_2m"},
         {"wind_speed_unit", "ms"}, {"forecast_days", "10"}, {"timezone", "auto"}, {"timeformat", "unixtime"}});
     request(url, [this, location](QJsonDocument doc, const QString &error) {
         forecastBusy = false;
-        if (location != QString::number(config.number("lat"), 'g', 12) + "," + QString::number(config.number("lon"), 'g', 12)) { pollForecast(); return; }
+        if (location != QString::number(config.location().value("lat").toDouble(), 'g', 12) + "," + QString::number(config.location().value("lon").toDouble(), 'g', 12)) { pollForecast(); return; }
         if (!error.isEmpty() || !doc.object().contains("current")) forecastStatus = error.isEmpty() ? "Forecast unavailable" : error;
         else {
-            forecast = doc.object(); forecast["_at"] = double(now());
+            forecast = doc.object(); forecast["_at"] = double(now()); forecast["_location"] = location;
             forecastStatus = "Forecast updated " + QDateTime::currentDateTime().toString("HH:mm");
         }
         emit changed();
     });
 }
 void Services::pollWarnings() {
-    if (warningsBusy || !config.settings().contains("lat")) return;
-    double lat = config.number("lat", 999), lon = config.number("lon", 999);
+    if (warningsBusy || !config.location().contains("lat")) return;
+    double lat = config.location().value("lat").toDouble(999), lon = config.location().value("lon").toDouble(999);
     if (std::abs(lat) > 90 || std::abs(lon) > 180) return;
     warningsBusy = true;
     auto url = queryUrl("https://api.weather.gov/alerts/active", {{"point", QString::number(lat, 'f', 4) + "," + QString::number(lon, 'f', 4)}});
     request(url, [this, lat, lon](QJsonDocument doc, const QString &error) {
         warningsBusy = false;
-        if (lat != config.number("lat") || lon != config.number("lon")) { pollWarnings(); return; }
+        if (lat != config.location().value("lat").toDouble() || lon != config.location().value("lon").toDouble()) { pollWarnings(); return; }
         if (!error.isEmpty()) warningStatus = "US official warnings unavailable; check your local weather service";
         else {
             warnings = doc.object().value("features").toArray(); warningStatus = "US National Weather Service";
@@ -113,7 +123,7 @@ void Services::pollWarnings() {
                 if (!old.contains(id) && (p.value("severity") == "Severe" || p.value("severity") == "Extreme")) {
                     const auto title = p.value("event").toString(); const auto text = p.value("headline").toString();
                     emit notification(title, text);
-                    if (config.settings().value("pushOfficial").toBool()) push(title, text);
+                    if (config.location().value("pushOfficial").toBool()) push(title, text);
                 }
             }
             archive.setMeta("warning_ids", seen.join('\n'));

@@ -76,7 +76,7 @@ void Integrations::tick() {
         connected = false; mqttConfig.clear(); return;
     }
 #ifdef STORMDESK_MQTT
-    QJsonObject signature{{"url", address}, {"user", cfg.text("mqttUser")}, {"pass", cfg.text("mqttPass")}, {"id", cfg.text("stationId")}, {"name", cfg.text("stationName")}, {"prefix", cfg.text("haDiscoveryPrefix")}};
+    QJsonObject signature{{"url", address}, {"user", cfg.text("mqttUser")}, {"pass", cfg.text("mqttPass")}, {"id", cfg.text("stationId")}, {"name", cfg.text("stationName")}, {"prefix", cfg.text("haDiscoveryPrefix")}, {"subscriptions",cfg.settings().value("mqttSubs")}};
     auto next = QString::fromUtf8(QJsonDocument(signature).toJson(QJsonDocument::Compact));
     if (next != mqttConfig) {
         if (mqtt) { publish("status", "offline"); mosquitto_disconnect(mqtt); mosquitto_loop_stop(mqtt, false); mosquitto_destroy(mqtt); mqtt = nullptr; }
@@ -100,12 +100,26 @@ void Integrations::tick() {
                 self->connected = result == 0;
                 self->services.diagnostics["mqtt"] = QJsonObject{{"ok", result == 0}, {"what", result == 0 ? "Connected" : "Broker refused connection"}};
                 if (self->connected) self->announce();
+                if (self->connected) for (const auto &v : self->services.config.settings().value("mqttSubs").toArray()) {
+                    auto topic = v.toObject().value("topic").toString().toUtf8();
+                    if (!topic.isEmpty() && topic.size() <= 256) mosquitto_subscribe(client, nullptr, topic.constData(), 1);
+                }
                 emit self->services.changed();
             }, Qt::QueuedConnection);
         });
         mosquitto_disconnect_callback_set(mqtt, [](mosquitto *client, void *context, int) {
             auto self = static_cast<Integrations *>(context);
             QMetaObject::invokeMethod(self, [self, client] { if (self->mqtt == client) self->connected = false; }, Qt::QueuedConnection);
+        });
+        mosquitto_message_callback_set(mqtt, [](mosquitto *client, void *context, const mosquitto_message *message) {
+            if (!message || message->payloadlen < 0 || message->payloadlen > 65536) return;
+            auto self = static_cast<Integrations *>(context); const QString topic = QString::fromUtf8(message->topic);
+            const QString payload = QString::fromUtf8(static_cast<const char *>(message->payload), message->payloadlen);
+            QMetaObject::invokeMethod(self, [self, client, topic, payload] {
+                if (self->mqtt != client) return;
+                if (!self->services.mqttValues.contains(topic) && self->services.mqttValues.size() >= 100) return;
+                self->services.mqttValues[topic] = QJsonObject{{"value",payload},{"at",double(QDateTime::currentSecsSinceEpoch())}}; emit self->services.changed();
+            }, Qt::QueuedConnection);
         });
         int result = mosquitto_connect_async(mqtt, url.host().toUtf8().constData(), url.port(url.scheme() == "mqtts" ? 8883 : 1883), 60);
         if (result == MOSQ_ERR_SUCCESS) result = mosquitto_loop_start(mqtt);

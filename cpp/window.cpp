@@ -1,4 +1,6 @@
 #include "window.h"
+#include "tools.h"
+#include "radar.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QDateTime>
@@ -33,10 +35,6 @@
 #include <cmath>
 #ifdef STORMDESK_SPEECH
 #include <QTextToSpeech>
-#endif
-#ifdef STORMDESK_RADAR
-#include <QWebEngineView>
-#include <QWebEngineSettings>
 #endif
 
 namespace storm {
@@ -96,24 +94,27 @@ Window::Window(Services &s, HttpServer &http) : services(s), server(http), local
     layout->addLayout(header);
     navigation = new QGridLayout;
     pages = new QStackedWidget; pages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    const QStringList titles = {"Weather", "Radar", "History", "Settings"};
+    const QStringList titles = {"Weather", "Radar", "History", "Settings", "Tools"};
     for (int i = 0; i < titles.size(); ++i) {
         auto button = new QPushButton(titles[i]); button->setCheckable(true); button->setChecked(i == 0); button->setProperty("nav", true);
         connect(button, &QPushButton::clicked, this, [this, i] { pages->setCurrentIndex(i); if (i == 1) openRadar(); if (i == 2) renderHistory(); if (i == 3) loadSettings(); });
         connect(pages, &QStackedWidget::currentChanged, button, [button, i](int selected) { button->setChecked(i == selected); });
         navigation->addWidget(button, 0, i); navButtons << button;
     }
-    navigation->setColumnStretch(4, 1);
+    navigation->setColumnStretch(5, 1);
     pageSelect = new QComboBox; pageSelect->addItems(titles); pageSelect->setAccessibleName("Dashboard page"); pageSelect->hide();
     connect(pageSelect, &QComboBox::activated, this, [this](int i) { pages->setCurrentIndex(i); if (i == 1) openRadar(); if (i == 2) renderHistory(); if (i == 3) loadSettings(); });
     connect(pages, &QStackedWidget::currentChanged, pageSelect, &QComboBox::setCurrentIndex);
     scaleBox = new QComboBox; scaleBox->setAccessibleName("Interface size"); scaleBox->setToolTip("UI size, in addition to your display’s automatic DPI scaling");
     for (int percent : {70, 85, 100, 115, 125, 150, 175, 200}) scaleBox->addItem(QString::number(percent) + "%", percent / 100.0);
     connect(scaleBox, &QComboBox::activated, this, [this](int i) { applyScale(scaleBox->itemData(i).toDouble()); });
-    navigation->addWidget(scaleBox, 0, 5);
-    refreshButton = new QPushButton("Refresh"); connect(refreshButton, &QPushButton::clicked, &services, &Services::refresh); navigation->addWidget(refreshButton, 0, 6);
+    navigation->addWidget(scaleBox, 0, 6);
+    refreshButton = new QPushButton("Refresh"); connect(refreshButton, &QPushButton::clicked, &services, &Services::refresh); navigation->addWidget(refreshButton, 0, 7);
     layout->addLayout(navigation);
     pages->addWidget(makeWeather()); radarPage = makeRadar(); pages->addWidget(radarPage); pages->addWidget(makeHistory()); pages->addWidget(makeSettings());
+    tools = new Tools(services); pages->addWidget(tools);
+    connect(tools, &Tools::dashboardChanged, this, [this] { arrange(); render(); });
+    connect(refreshButton, &QPushButton::clicked, this, [this] { if (pages->currentIndex() == 4) tools->refresh(true); });
     layout->addWidget(pages, 1); status = label({}, "muted"); status->setTextInteractionFlags(Qt::TextSelectableByMouse); layout->addWidget(status);
     connect(&services, &Services::changed, this, &Window::render);
     connect(&services, &Services::notification, this, &Window::notify);
@@ -160,37 +161,13 @@ QWidget *Window::makeWeather() {
     QVBoxLayout *context; contextCard = card("Your local context", &context);
     sun = label("Sunrise and sunset will appear here."); context->addWidget(sun);
     auto source = label({}, "muted"); source->setObjectName("stationDetail"); context->addWidget(source); context->addStretch();
-    auto link = new QPushButton("Home dashboard");
-    connect(link, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(QUrl("http://127.0.0.1:" + QString::number(server.serverPort()))); }); context->addWidget(link);
+    auto link = new QPushButton("Tools →");
+    connect(link, &QPushButton::clicked, this, [this] { pages->setCurrentIndex(4); }); context->addWidget(link);
     auto hint = label("Weather readings are labeled by source. Missing sensor data remains unavailable.", "muted"); context->addWidget(hint);
     layout->addStretch(); arrange(); return scrollView(page);
 }
-QWidget *Window::makeRadar() {
-    auto page = new QWidget; auto layout = new QVBoxLayout(page);
-    layout->addWidget(label("Live radar", "subtitle"));
-    layout->addWidget(label("HookEcho radar · Internet connection required", "muted"));
-    auto open = new QPushButton("Open radar in system browser"); connect(open, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(services.radarUrl()); }); layout->addWidget(open);
-#ifndef STORMDESK_RADAR
-    layout->addWidget(label("This build uses your system browser for radar. On Android this keeps radar compatible with the device’s browser.")); layout->addStretch();
-#endif
-    return page;
-}
-void Window::openRadar() {
-#ifdef STORMDESK_RADAR
-    auto view = radarPage->findChild<QWebEngineView *>();
-    if (!view) {
-        view = new QWebEngineView(radarPage); view->setAccessibleName("HookEcho live weather radar");
-        view->settings()->setAttribute(QWebEngineSettings::JavascriptCanOpenWindows, false);
-        view->settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, false);
-        radarPage->layout()->addWidget(view);
-        connect(view, &QWebEngineView::loadFinished, this, [this](bool ok) { if (!ok) status->setText("Radar could not load. Check the connection or open radar in your system browser."); });
-    }
-    const auto url = services.radarUrl();
-    if (url != radarLocation) { radarLocation = url; view->load(url); }
-    view->setZoomFactor(scaleFactor);
-#endif
-    radarLoaded = true;
-}
+QWidget *Window::makeRadar() { return new Radar(services); }
+void Window::openRadar() { static_cast<Radar *>(radarPage)->refresh(); }
 QWidget *Window::makeHistory() {
     auto page = new QWidget; auto layout = new QVBoxLayout(page);
     layout->addWidget(label("Your weather archive", "subtitle"));
@@ -278,7 +255,7 @@ QWidget *Window::makeSettings() {
     auto test = new QPushButton("Test notification"); alert->addRow(test);
     connect(test, &QPushButton::clicked, this, [this] { services.push("StormDesk test", "Your weather notification channel is working."); notify("StormDesk test", "Native notifications are enabled."); });
     alert->addRow(label("Save changes before testing delivery. Rule thresholds use your display units.", "muted"));
-    ruleTable = new QTableWidget(0, 4); ruleTable->setHorizontalHeaderLabels({"Measurement", "When", "Threshold", "Minutes"});
+    ruleTable = new QTableWidget(0, 5); ruleTable->setHorizontalHeaderLabels({"Measurement", "When", "Threshold", "Minutes", "Second condition"});
     ruleTable->setAccessibleName("Weather alert rules"); ruleTable->setMinimumHeight(220); ruleTable->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     alert->addRow(ruleTable);
     auto ruleButtons = new QVBoxLayout; auto add = new QPushButton("Add rule"), remove = new QPushButton("Remove rule");
@@ -295,6 +272,8 @@ QWidget *Window::makeSettings() {
     auto backupButton = new QPushButton("Back up…"); connect(backupButton, &QPushButton::clicked, this, &Window::backup); data->addRow(backupButton);
     auto restoreButton = new QPushButton("Restore…"); connect(restoreButton, &QPushButton::clicked, this, &Window::restore); data->addRow(restoreButton);
     auto exportButton = new QPushButton("Export CSV…"); connect(exportButton, &QPushButton::clicked, this, &Window::exportCsv); data->addRow(exportButton);
+    auto importButton = new QPushButton("Import JSONL…"); data->addRow(importButton);
+    connect(importButton,&QPushButton::clicked,this,[this]{auto folder=QFileDialog::getExistingDirectory(this,"Choose the old station’s log folder");if(folder.isEmpty())return;if(QMessageBox::question(this,"Import station archive","Import these observations into the configured station’s archive? Only use files from this station. Original files are kept.")!=QMessageBox::Yes)return;QString error;int count=services.archive.importJsonl(folder,fingerprint(services.config.settings()),&error);settingsMessage->setText(count<0?error:QString::number(count)+" readings imported. Original files kept.");if(count>=0){services.resetRuntime();services.refresh();}});
     auto pair = new QPushButton("Pair screen"); data->addRow(pair);
     connect(pair, &QPushButton::clicked, this, [this] { auto result = server.pairCode(); QMessageBox::information(this, "Pair screen", "Pairing code: " + result.value("code").toString() + "\nValid for 10 minutes. Open the home network dashboard on the other screen and choose Join my home."); });
     for (const auto &path : QList<QPair<QString, QString>>{{"Archive file", services.archive.path}, {"Settings file", services.config.path}}) {
@@ -320,6 +299,20 @@ void Window::addRule(const QJsonObject &rule) {
     connect(value, &QDoubleSpinBox::valueChanged, value, [value] { value->setProperty("edited", true); });
     connect(duration, &QDoubleSpinBox::valueChanged, duration, [duration] { duration->setProperty("edited", true); });
     ruleTable->setCellWidget(row, 0, metric); ruleTable->setCellWidget(row, 1, op); ruleTable->setCellWidget(row, 2, value); ruleTable->setCellWidget(row, 3, duration);
+    auto compound = new QPushButton(rule.value("metric2").toString().isEmpty() ? "Add AND…" : "Edit AND…"); ruleTable->setCellWidget(row, 4, compound);
+    connect(compound, &QPushButton::clicked, this, [this, metric, compound, metrics] {
+        auto saved = metric->property("savedRule").toJsonObject(); QDialog dialog(this); dialog.setWindowTitle("Second alert condition"); auto layout = new QVBoxLayout(&dialog);
+        auto enabled = new QCheckBox("Require both conditions"); enabled->setChecked(!saved.value("metric2").toString().isEmpty()); layout->addWidget(enabled);
+        auto field = new QComboBox; for (const auto &m : metrics) field->addItem(m.first,m.second); field->setCurrentIndex(std::max(0,field->findData(saved.value("metric2").toString()))); layout->addWidget(field);
+        auto comparison = new QComboBox; comparison->addItems({">","<"}); comparison->setCurrentText(saved.value("op2").toString(">")); layout->addWidget(comparison);
+        auto threshold = new QDoubleSpinBox; threshold->setDecimals(4); threshold->setRange(-10000,100000); threshold->setValue(saved.value("value2").toDouble()); layout->addWidget(threshold);
+        layout->addWidget(label("Threshold uses your selected display units, just like the first condition."));
+        auto buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel); layout->addWidget(buttons); connect(buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept); connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted) return;
+        if (enabled->isChecked()) { saved["metric2"]=field->currentData().toString(); saved["op2"]=comparison->currentText(); saved["value2"]=threshold->value(); }
+        else { saved.remove("metric2"); saved.remove("op2"); saved.remove("value2"); }
+        metric->setProperty("savedRule",saved); compound->setText(enabled->isChecked() ? "Edit AND…" : "Add AND…");
+    });
 }
 void Window::loadSettings() {
     settingsRevision = services.config.value.value("_rev").toDouble();
@@ -366,10 +359,16 @@ void Window::saveSettings() {
     }
     if (!s.value("stationSource").toString().isEmpty() && fingerprint(s) == "none") { settingsMessage->setText("Enter a station ID, Tempest device ID, or Davis host before connecting a station."); return; }
     const auto bound = services.archive.meta("station_fingerprint"), incoming = fingerprint(s);
-    if (!bound.isEmpty() && incoming != "none" && bound != incoming) { settingsMessage->setText("This archive belongs to another station. Use a separate data directory for a different station; export a backup first."); return; }
     next["settings"] = s; next["_rev"] = next.value("_rev").toDouble() + 1;
     QString error;
-    if (!services.config.save(next, &error)) { settingsMessage->setText(error); return; }
+    QString recovery;
+    if (!bound.isEmpty() && incoming != "none" && bound != incoming) {
+        if (QMessageBox::question(this,"Replace station archive","The selected station is different. Save a recovery backup and begin a new archive for this station?") != QMessageBox::Yes) return;
+        recovery=QFileInfo(services.archive.path).dir().filePath("pre-station-replacement-"+QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss-zzz")+".wdbak");
+        if(!services.archive.backup(recovery,services.config.value,&error)||!services.archive.clear(incoming,&error)){settingsMessage->setText(error);return;}
+    }
+    if (!services.config.save(next, &error)) { if(!recovery.isEmpty()){QString restoreError;services.archive.restore(recovery,&restoreError);if(!restoreError.isEmpty())error+="\n"+restoreError+"\nRecovery: "+recovery;} settingsMessage->setText(error); return; }
+    if(!recovery.isEmpty()) services.resetRuntime();
     settingsRevision = services.config.value.value("_rev").toDouble();
     settingsMessage->setText("Changes saved."); services.refresh(); applyTheme(); render();
 }
@@ -381,9 +380,6 @@ void Window::applyScale(double value) {
     // Qt already applies the display pixel ratio; use logical pixels to avoid scaling fonts twice.
     auto font = QApplication::font(); font.setPixelSize(qRound(13 * scaleFactor)); QApplication::setFont(font);
     applyTheme(); arrange();
-#ifdef STORMDESK_RADAR
-    if (radarLoaded) if (auto view = radarPage->findChild<QWebEngineView *>()) view->setZoomFactor(scaleFactor);
-#endif
 }
 void Window::applyTheme() {
     const auto theme = services.config.text("theme", "graphite");
@@ -421,24 +417,35 @@ void Window::arrange() {
     for (auto button : navButtons) button->setVisible(!compact);
     pageSelect->setVisible(compact);
     navigation->removeWidget(scaleBox); navigation->removeWidget(refreshButton); navigation->removeWidget(pageSelect);
-    navigation->setColumnStretch(4, compact ? 0 : 1);
+    navigation->setColumnStretch(5, compact ? 0 : 1);
     if (compact) {
         navigation->addWidget(pageSelect, 0, 0, 1, 2);
         navigation->addWidget(scaleBox, 1, 0); navigation->addWidget(refreshButton, 1, 1);
-    } else { navigation->addWidget(scaleBox, 0, 5); navigation->addWidget(refreshButton, 0, 6); }
+    } else { navigation->addWidget(scaleBox, 0, 6); navigation->addWidget(refreshButton, 0, 7); }
     const int columns = available >= 1280 ? 7 : (available >= 800 ? 4 : (available >= 480 ? 2 : 1));
+    const auto dashboard = services.config.settings().value("nativeDashboard").toObject();
+    const auto hidden = dashboard.value("hidden").toArray(), order = dashboard.value("order").toArray();
+    const QStringList names = {"Rain today", "Lightning", "Wind", "Heat stress / WBGT", "UV index", "Pressure", "Humidity"};
+    QList<int> indices; for (const auto &v : order) { int i = names.indexOf(v.toString()); if (i >= 0 && !indices.contains(i)) indices << i; }
+    for (int i = 0; i < metricCards.size(); ++i) if (!indices.contains(i)) indices << i;
     for (auto widget : metricCards) metrics->removeWidget(widget);
-    for (int i = 0; i < metricCards.size(); ++i) metrics->addWidget(metricCards[i], i / columns, i % columns);
+    int cell = 0; for (int i : indices) { auto widget = metricCards[i]; widget->setVisible(!hidden.contains(names[i])); if (!widget->isHidden()) { metrics->addWidget(widget, cell / columns, cell % columns); ++cell; } }
+    double density = std::clamp(dashboard.value("density").toDouble(1), .6, 1.5);
+    metrics->setSpacing(qRound(12 * scaleFactor * density)); body->setSpacing(qRound(16 * scaleFactor * density));
     if (!currentCard || !forecastCard || !contextCard) return;
     body->removeWidget(currentCard); body->removeWidget(forecastCard); body->removeWidget(contextCard);
+    const QHash<QString,QWidget *> cards{{"Current conditions",currentCard},{"10-day outlook",forecastCard},{"Your local context",contextCard}};
+    QList<QWidget *> arranged; for (const auto &v:order) if (cards.contains(v.toString()) && !arranged.contains(cards.value(v.toString()))) arranged << cards.value(v.toString());
+    for (auto w : {currentCard,forecastCard,contextCard}) if (!arranged.contains(w)) arranged << w;
     for (int i = 0; i < 3; ++i) body->setColumnStretch(i, 0);
     if (available >= 1050) {
-        body->addWidget(currentCard, 0, 0); body->addWidget(forecastCard, 0, 1); body->addWidget(contextCard, 0, 2);
+        for (int i=0;i<3;++i) body->addWidget(arranged[i],0,i);
         body->setColumnStretch(0, 4); body->setColumnStretch(1, 5); body->setColumnStretch(2, 3);
     } else if (available >= 680) {
-        body->addWidget(currentCard, 0, 0); body->addWidget(forecastCard, 0, 1); body->addWidget(contextCard, 1, 0, 1, 2);
+        body->addWidget(arranged[0], 0, 0); body->addWidget(arranged[1], 0, 1); body->addWidget(arranged[2], 1, 0, 1, 2);
         body->setColumnStretch(0, 1); body->setColumnStretch(1, 1);
-    } else { body->addWidget(currentCard, 0, 0); body->addWidget(forecastCard, 1, 0); body->addWidget(contextCard, 2, 0); body->setColumnStretch(0, 1); }
+    } else { for (int i=0;i<3;++i) body->addWidget(arranged[i],i,0); body->setColumnStretch(0, 1); }
+    currentCard->setVisible(!hidden.contains("Current conditions")); forecastCard->setVisible(!hidden.contains("10-day outlook")); contextCard->setVisible(!hidden.contains("Your local context"));
 }
 void Window::resizeEvent(QResizeEvent *event) { QMainWindow::resizeEvent(event); arrange();
     heroTemperature->setStyleSheet("font-size:" + QString::number(qRound(std::min(76 * scaleFactor, std::max(36.0, (width() - 100) / 5.5)))) + "px;font-weight:600;");
@@ -448,7 +455,7 @@ void Window::render() {
     const bool staleForecast = f.contains("_at") && QDateTime::currentSecsSinceEpoch() - f.value("_at").toDouble() > 3600;
     const auto current = staleForecast ? QJsonObject() : f.value("current").toObject(); const auto daily = f.value("daily").toObject();
     const auto obs = services.observation;
-    bool fresh = obs[0] && QDateTime::currentSecsSinceEpoch() - *obs[0] <= 900;
+    bool fresh = obs[0] && QDateTime::currentSecsSinceEpoch() - *obs[0] <= 900 && services.config.settings().value("activePlace").toString().isEmpty();
     bool metric = services.config.text("units") == "metric";
     auto value = [&](int index, const char *forecastKey = nullptr) -> QJsonValue {
         if (fresh && obs[index]) return *obs[index];
@@ -456,7 +463,7 @@ void Window::render() {
     };
     const double tempFactor = metric ? 1 : 1.8, tempShift = metric ? 0 : 32;
     const auto windLabel = services.config.windUnit(); const double windFactor = services.config.windFactor();
-    location->setText(services.config.text("stationName", "Your weather, at a glance"));
+    location->setText(services.config.location().value("name").toString("Your weather, at a glance"));
     heroTemperature->setText(number(value(7, "temperature_2m"), metric ? " °C" : " °F", 1, tempFactor, tempShift));
     heroCondition->setText(current.contains("weather_code") ? condition(current.value("weather_code").toInt()) : "Waiting for weather");
     heroSource->setText(fresh && obs[7] ? "Station temperature · model sky" : staleForecast ? "Forecast is stale · refresh needed" : "Open-Meteo · forecast estimate");

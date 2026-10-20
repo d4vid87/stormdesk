@@ -11,6 +11,7 @@
 #include <QPushButton>
 
 namespace storm {
+class Tools;
 class Plot : public QWidget {
 public:
     explicit Plot(QWidget *parent = nullptr);
@@ -44,6 +45,7 @@ private:
     QGridLayout *metrics = nullptr, *body = nullptr;
     QWidget *forecastCard = nullptr, *currentCard = nullptr, *contextCard = nullptr;
     QWidget *radarPage;
+    Tools *tools;
     bool radarLoaded = false;
     QUrl radarLocation;
     QVBoxLayout *forecastRows;

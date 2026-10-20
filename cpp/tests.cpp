@@ -1,6 +1,7 @@
 #include "core.h"
 #include "http.h"
 #include "integrations.h"
+#include "advanced.h"
 #include <QtTest>
 #include <QTemporaryDir>
 #include <QFile>
@@ -14,6 +15,40 @@ using namespace storm;
 class CoreTest : public QObject {
     Q_OBJECT
 private slots:
+    void legacyImportIsIdempotentAndKeepsSource() {
+        QTemporaryDir dir;QString error;Archive db(dir.filePath("db"));QVERIFY(db.open(&error));QFile source(dir.filePath("2020.jsonl"));QVERIFY(source.open(QIODevice::WriteOnly));source.write("[1600000000,null,null,null,null,null,1000,20,50]\ninvalid\n");source.close();
+        QCOMPARE(db.importJsonl(dir.path(),"tempest:test",&error),1);QCOMPARE(db.importJsonl(dir.path(),"tempest:test",&error),0);QCOMPARE(db.latest()[7].value(),20.0);QVERIFY(source.exists());
+        QCOMPARE(db.importJsonl(dir.path(),"tempest:other",&error),-1);QVERIFY(db.clear("tempest:other",&error));QCOMPARE(db.health().value("rows").toInt(),0);QCOMPARE(db.meta("station_fingerprint"),QString("tempest:other"));
+    }
+    void advancedToolsPreserveMeaningAndTracking() {
+        auto equinox = QDateTime::fromString("2026-03-20T12:00:00Z", Qt::ISODate).toSecsSinceEpoch();
+        QVERIFY(solarAltitude(equinox, 0, 0) > 85);
+        QVERIFY(solarAltitude(equinox + 43200, 0, 0) < -85);
+        auto newMoon = QDateTime::fromString("2000-01-06T18:14:00Z", Qt::ISODate).toSecsSinceEpoch();
+        QCOMPARE(moonPhase(newMoon).value("phase").toString(), QString("New"));
+        QVERIFY(moonPhase(newMoon).value("illumination").toDouble() < .01);
+        auto ring = QJsonArray{QJsonArray{0,0},QJsonArray{10,0},QJsonArray{10,10},QJsonArray{0,10},QJsonArray{0,0}};
+        auto hole = QJsonArray{QJsonArray{2,2},QJsonArray{8,2},QJsonArray{8,8},QJsonArray{2,8},QJsonArray{2,2}};
+        QJsonObject geometry{{"type","Polygon"},{"coordinates",QJsonArray{ring,hole}}};
+        QVERIFY(pointInGeometry(1,1,geometry)); QVERIFY(!pointInGeometry(5,5,geometry)); QVERIFY(!pointInGeometry(15,5,geometry));
+        auto drought = newestDrought(QJsonArray{QJsonObject{{"mapDate","1/2/2026"},{"d1",50}},QJsonObject{{"mapDate","12/30/2025"},{"d1",80}},QJsonObject{{"mapDate","invalid"},{"d1",100}}});
+        QCOMPARE(drought.value("d1").toInt(),50);
+        const auto at = QDateTime::currentSecsSinceEpoch();
+        QJsonObject hourly{{"time",QJsonArray{double(at+3600),double(at+7200),double(at+10800)}},{"temperature_2m",QJsonArray{-2,-1,QJsonValue()}},{"relative_humidity_2m",QJsonArray{80,85,QJsonValue()}},{"precipitation_probability",QJsonArray{60,70,0}},{"weather_code",QJsonArray{71,71,0}}};
+        auto events = weatherTimeline({{"hourly",hourly}}, {}, {}, {}, {}, {}, at);
+        QCOMPARE(events.size(),3); // Consecutive rain, freeze and winter windows merge separately.
+        auto onlyRain = weatherTimeline({{"hourly",hourly}}, {}, {}, {}, {}, {{"categories",QJsonArray{"precip"}}}, at);
+        QCOMPARE(onlyRain.size(),1); QCOMPARE(onlyRain[0].toObject().value("end").toDouble(),double(at+10800));
+        QJsonObject models{{"hourly",QJsonObject{{"time",QJsonArray{double(at)}},{"precipitation_gfs",QJsonArray{0}},{"precipitation_ecmwf",QJsonArray{1}}}}};
+        QCOMPARE(modelConfidence(models,{{"kind","precip"},{"start",double(at)}},at,at).value("level").toString(),QString("Low"));
+        QTemporaryDir dir; Config cfg(dir.filePath("config.json")); QString error; QVERIFY(cfg.load(&error));
+        cfg.value={{"settings",QJsonObject{{"lat",30},{"lon",-97}}}}; Archive db(dir.filePath("db")); QVERIFY(db.open(&error)); Services services(cfg,db); Advanced tools(services);
+        services.forecast={{"daily",QJsonObject()},{"hourly",QJsonObject{{"time",QJsonArray{double(at+90000)}},{"temperature_2m",QJsonArray{20}}}}};
+        tools.recordForecast(); tools.recordForecast(); QCOMPARE(tools.snapshots().size(),1); QCOMPARE(tools.verification().size(),1);
+        services.observation[0]=double(at+90000); services.observation[7]=22; tools.recordForecast();
+        QCOMPARE(tools.verification()[0].toObject().value("observed").toDouble(),22.0);
+        cfg.value["settings"]=QJsonObject{{"lat",31},{"lon",-98}}; QCOMPARE(tools.verification().size(),0);
+    }
     void conversionsAndCounters() {
         Counters m;
         auto f = collectFields("tempf=68&windspeedmph=10&baromin=30&dailyrainin=1&lightning_num=5", {});

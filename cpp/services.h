@@ -15,13 +15,14 @@ public:
     Config &config;
     Archive &archive;
     QNetworkAccessManager network;
-    QJsonObject forecast, packets, diagnostics;
+    QJsonObject forecast, packets, diagnostics, mqttValues;
     QJsonArray warnings;
     Reading observation{};
     QString stationStatus = "Waiting for station", forecastStatus = "Choose a location in Settings";
     QString warningStatus;
     bool start(QString *error, bool udp = true);
     void refresh();
+    void resetRuntime();
     void pollStation();
     void pollForecast();
     void pollWarnings();

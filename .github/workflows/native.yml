@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev libqt6sql6-sqlite libmosquitto-dev mosquitto mosquitto-clients
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSTORMDESK_RADAR=OFF
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --parallel 2
       - run: ctest --test-dir build --output-on-failure
       - run: python3 cpp/integration_smoke.py build/stormdesk
@@ -35,7 +35,7 @@ jobs:
         with:
           version: '6.8.3'
           cache: true
-      - run: cmake -S . -B build -DSTORMDESK_RADAR=OFF
+      - run: cmake -S . -B build
       - run: cmake --build build --config Release --parallel 2
       - run: ctest --test-dir build -C Release --output-on-failure
       - if: always()
