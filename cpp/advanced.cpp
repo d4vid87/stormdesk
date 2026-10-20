@@ -519,11 +519,17 @@ void Advanced::load(const QString &kind, bool force) {
           force, 86400);
     return;
   } else if (kind == "official") {
-    fetch(kind,
-          url("https://api.weather.gov/points/" + QString::number(services.config.location().value("lat").toDouble(),'f',4) + "," +
-                  QString::number(services.config.location().value("lon").toDouble(),'f',4),
-              {}),
-          force, 86400);
+    fetch(
+        kind,
+        url("https://api.weather.gov/points/" +
+                QString::number(
+                    services.config.location().value("lat").toDouble(), 'f',
+                    4) +
+                "," +
+                QString::number(
+                    services.config.location().value("lon").toDouble(), 'f', 4),
+            {}),
+        force, 86400);
     return;
   } else if (kind == "nwsForecast" || kind == "airports") {
     auto p = data.value("official").object().value("properties").toObject();

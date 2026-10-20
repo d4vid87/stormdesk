@@ -16,8 +16,13 @@
 using namespace storm;
 class UiTest : public QObject {
   Q_OBJECT
+  QTemporaryDir preferences;
 private slots:
   void initTestCase() {
+    QVERIFY(preferences.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
+                       preferences.path());
     QStandardPaths::setTestModeEnabled(true);
 #ifdef Q_OS_WIN
     // The offscreen plugin does not load the Windows system font database.
@@ -132,6 +137,20 @@ private slots:
     QCOMPARE(current->rowCount(), 48);
     QCOMPARE(current->columnCount(), 4);
     QCOMPARE(current->item(0, 3)->text(), QString("4.0"));
+    auto area = tools->findChild<QScrollArea *>();
+    QVERIFY(area);
+    QVERIFY(area->verticalScrollBar()->maximum() > 0);
+    auto contents = area->widget();
+    int bottom = -1;
+    for (int i = 0; i < contents->layout()->count(); ++i)
+      if (auto widget = contents->layout()->itemAt(i)->widget()) {
+        QVERIFY(widget->y() >= bottom);
+        bottom = widget->geometry().bottom();
+      }
+    for (auto child : contents->findChildren<QWidget *>(
+             QString(), Qt::FindDirectChildrenOnly))
+      if (child->isVisible())
+        QVERIFY(contents->layout()->indexOf(child) >= 0);
     if (!qEnvironmentVariable("STORMDESK_TOOLS_CAPTURE").isEmpty())
       QVERIFY(
           window.grab().save(qEnvironmentVariable("STORMDESK_TOOLS_CAPTURE")));

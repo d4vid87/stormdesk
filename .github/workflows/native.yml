@@ -39,6 +39,8 @@ jobs:
       - run: cmake -S . -B build
       - run: cmake --build build --config Release --parallel 2
       - run: ctest --test-dir build -C Release --output-on-failure
+      - if: runner.os == 'macOS'
+        run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:5 -R stormdesk_ui
       - if: always()
         run: cat build/native-ui-results.txt
       - if: failure() && runner.os == 'macOS'
