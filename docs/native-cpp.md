@@ -39,7 +39,7 @@ docker build -t stormdesk-native .
 docker run --rm --network host -v stormdesk-native-data:/data stormdesk-native
 ```
 
-Use a **new** volume while validating the migration. The existing Compose file references the published stable image and does not select the local native image automatically.
+Use a **new** volume while validating the migration. The Compose file builds the native image from this checkout and uses `./data-native` so it does not reuse the legacy `./data` directory. Start it with `docker compose up --build -d`.
 
 ## Android / Fire tablets
 

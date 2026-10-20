@@ -730,7 +730,7 @@ QWidget *Window::makeSettings() {
             "muted"));
   text(appearance, "Radar site (optional, e.g. KFWS)", "radarSite");
   auto alert = section("Alerts");
-  check(alert, "Notify on desktop", "nativeNotifications");
+  check(alert, "Local alerts", "nativeNotifications");
   check(alert, "Push warnings", "pushOfficial");
   auto speak = check(alert, "Speak warnings", "speakAlerts");
 #ifndef STORMDESK_SPEECH
@@ -983,7 +983,8 @@ void Window::loadSettings() {
       e->setCurrentIndex(std::max(0, i));
     }
     if (auto e = qobject_cast<QCheckBox *>(it.value()))
-      e->setChecked(v.toBool(it.key() == "nativeNotifications"));
+      e->setChecked(v.toBool(it.key() == "nativeNotifications" ||
+                             it.key() == "pushOfficial"));
   }
 }
 void Window::saveSettings() {
@@ -1652,11 +1653,30 @@ void Window::exportCsv() {
     QMessageBox::warning(this, "Export failed", error);
 }
 void Window::notify(const QString &title, const QString &message) {
+  const bool enabled =
+      services.config.settings().value("nativeNotifications").toBool(true);
+  bool delivered = false;
 #ifndef QT_NO_SYSTEMTRAYICON
-  if (services.config.settings().value("nativeNotifications").toBool(true) &&
-      tray)
+  if (enabled && tray) {
     tray->showMessage(title, message, QSystemTrayIcon::Warning, 15000);
+    delivered = true;
+  }
 #endif
+  if (enabled && !delivered) {
+    auto dialog = findChild<QMessageBox *>("weatherNotification");
+    if (!dialog) {
+      dialog = new QMessageBox(QMessageBox::Warning, title, {}, QMessageBox::Ok,
+                               this);
+      dialog->setObjectName("weatherNotification");
+      dialog->setAttribute(Qt::WA_DeleteOnClose);
+      dialog->setModal(false);
+      dialog->setTextFormat(Qt::PlainText);
+    }
+    dialog->setWindowTitle(title);
+    dialog->setText(message.left(4096));
+    dialog->show();
+    QTimer::singleShot(15000, dialog, &QMessageBox::close);
+  }
 #ifdef STORMDESK_SPEECH
   if (services.config.settings().value("speakAlerts").toBool() &&
       title != "Weather rule") {

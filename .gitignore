@@ -2,6 +2,8 @@ src-tauri/target
 shots/
 .wrangler/
 build*/
+data-native/
+/data/
 .serena/
 __pycache__/
 native-*.png

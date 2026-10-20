@@ -3,6 +3,7 @@
 #include "window.h"
 #include <QFontDatabase>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QNetworkProxy>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -67,6 +68,13 @@ private slots:
                 .value("hidden")
                 .toArray()
                 .contains("Rain today"));
+#ifndef QT_NO_SYSTEMTRAYICON
+    if (!QSystemTrayIcon::isSystemTrayAvailable()) {
+      emit services.notification("Native alert test",
+                                 "Visible without a system tray");
+      QVERIFY(window.findChild<QMessageBox *>("weatherNotification"));
+    }
+#endif
     auto rev = cfg.value.value("_rev");
     QCOMPARE(cfg.merge({{"_rev", rev},
                         {"settings",

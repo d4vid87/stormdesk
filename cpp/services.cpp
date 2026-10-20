@@ -246,7 +246,7 @@ void Services::pollWarnings() {
           const auto title = p.value("event").toString();
           const auto text = p.value("headline").toString();
           emit notification(title, text);
-          if (config.location().value("pushOfficial").toBool())
+          if (config.settings().value("pushOfficial").toBool(true))
             push(title, text);
         }
       }

@@ -646,7 +646,13 @@ void HttpServer::route(QTcpSocket *socket, const HttpRequest &req) {
   }
   if (path == "/history/coverage") {
     auto h = services.archive.health();
-    h["backfill"] = "off";
+    h["backfill"] = !services.archive.meta("backfill_done").isEmpty() ? "done"
+                    : services.config.stationSource() == "tempest" &&
+                            !services.config.text("token").isEmpty() &&
+                            !services.config.text("deviceId").isEmpty()
+                        ? "running"
+                        : "off";
+    h["backfill_error"] = services.archive.meta("backfill_error");
     h["count"] = h.value("rows");
     h["stationFingerprint"] = services.archive.meta("station_fingerprint");
     json(h);
