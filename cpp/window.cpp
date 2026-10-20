@@ -378,7 +378,8 @@ void Window::applyScale(double value) {
     auto index = scaleBox->findData(scaleFactor);
     if (index < 0) { scaleBox->addItem(QString::number(qRound(scaleFactor * 100)) + "%", scaleFactor); index = scaleBox->count() - 1; }
     scaleBox->setCurrentIndex(index);
-    auto font = QApplication::font(); font.setPointSizeF(10 * scaleFactor); QApplication::setFont(font);
+    // Qt already applies the display pixel ratio; use logical pixels to avoid scaling fonts twice.
+    auto font = QApplication::font(); font.setPixelSize(qRound(13 * scaleFactor)); QApplication::setFont(font);
     applyTheme(); arrange();
 #ifdef STORMDESK_RADAR
     if (radarLoaded) if (auto view = radarPage->findChild<QWebEngineView *>()) view->setZoomFactor(scaleFactor);
