@@ -18,6 +18,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QScroller>
 #include <QSqlQuery>
 #include <QTableWidget>
 #include <QUrlQuery>
@@ -51,6 +52,7 @@ static QTableWidget *table(QVBoxLayout *body, const QStringList &headers,
   auto t = new QTableWidget(rows.size(), headers.size());
   t->setHorizontalHeaderLabels(headers);
   t->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  QScroller::grabGesture(t->viewport(), QScroller::TouchGesture);
   t->setWordWrap(true);
   t->verticalHeader()->hide();
   t->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
@@ -76,6 +78,7 @@ class Chart : public QWidget {
 public:
   QList<Line> lines;
   QString unit;
+  int offset = 0;
   bool rose = false;
   explicit Chart(QWidget *p = nullptr) : QWidget(p) {
     setMinimumHeight(320);
@@ -179,10 +182,12 @@ public:
     const auto fmt = width() < 650 ? "MM-dd\nHH:mm" : "ddd d MMM HH:mm";
     p.drawText(QRectF(a.left(), a.bottom() + 8, a.width(), fh * 2 + 4),
                Qt::AlignLeft,
-               QDateTime::fromSecsSinceEpoch(qint64(xmin)).toString(fmt));
+               QDateTime::fromSecsSinceEpoch(qint64(xmin) + offset, Qt::UTC)
+                   .toString(fmt));
     p.drawText(QRectF(a.left(), a.bottom() + 8, a.width(), fh * 2 + 4),
                Qt::AlignRight,
-               QDateTime::fromSecsSinceEpoch(qint64(xmax)).toString(fmt));
+               QDateTime::fromSecsSinceEpoch(qint64(xmax) + offset, Qt::UTC)
+                   .toString(fmt));
   }
 };
 class MapView : public QGraphicsView {
@@ -217,7 +222,7 @@ public:
            props = feature.value("properties").toObject();
       auto polys = g.value("coordinates").toArray();
       if (g.value("type") == "Polygon")
-        polys = QJsonArray{polys};
+        polys = QJsonArray{QJsonValue(polys)};
       else if (g.value("type") == "Point" && polys.size() >= 2) {
         auto item = scene()->addEllipse(
             polys[0].toDouble() - .12, -polys[1].toDouble() - .12, .24, .24,
@@ -257,7 +262,8 @@ public:
     fitInView(scene()->itemsBoundingRect(), Qt::KeepAspectRatio);
   }
 };
-Tools::Tools(Services &s, QWidget *parent) : QWidget(parent), advanced(s) {
+Tools::Tools(Services &s, QWidget *parent)
+    : QWidget(parent), advanced(s, false) {
   auto layout = new QVBoxLayout(this);
   topic = new QComboBox;
   topic->setObjectName("nativeTool");
@@ -305,6 +311,7 @@ Tools::Tools(Services &s, QWidget *parent) : QWidget(parent), advanced(s) {
   scroll->setWidgetResizable(true);
   scroll->setFrameShape(QFrame::NoFrame);
   scroll->setWidget(content);
+  QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
   layout->addWidget(scroll, 1);
   debounce.setSingleShot(true);
   debounce.setInterval(150);
@@ -379,6 +386,7 @@ void Tools::refresh(bool force) {
   }
   for (const auto &kind : providers)
     advanced.load(kind, force);
+  currentProviders = providers;
   render();
 }
 void Tools::render() {
@@ -404,11 +412,18 @@ void Tools::render() {
   const auto at = QDateTime::currentSecsSinceEpoch();
   const int offset = fc.value("utc_offset_seconds").toInt();
   QStringList notices;
-  for (auto it = advanced.errors.begin(); it != advanced.errors.end(); ++it)
-    notices << it.key() + ": " + it.value();
+  for (const auto &kind : currentProviders) {
+    if (advanced.errors.contains(kind))
+      notices << kind + ": " + advanced.errors.value(kind);
+    if (advanced.fetched.contains(kind))
+      notices << kind + " updated " +
+                     stamp(advanced.fetched.value(kind), offset);
+  }
+  if (fc.contains("_at") && at - fc.value("_at").toDouble() > 3600)
+    notices << "Forecast is older than one hour; refresh needed.";
   note->setText(
       notices.isEmpty()
-          ? "Native Qt tools · Open-Meteo / NOAA / US Drought Monitor. "
+          ? "Weather guidance · Open-Meteo / NOAA / US Drought Monitor. "
             "Forecasts are estimates; provider coverage varies."
           : notices.join("\n"));
   auto heading = [this](const QString &title) {
@@ -418,10 +433,12 @@ void Tools::render() {
     l->setFont(f);
     body->addWidget(l);
   };
-  auto chart = [this](const QJsonObject &o, const QStringList &keys,
-                      const QStringList &names, double factor, double shift,
-                      const QString &unit, qint64 begin = 0) {
+  auto chart = [this, offset](const QJsonObject &o, const QStringList &keys,
+                              const QStringList &names, double factor,
+                              double shift, const QString &unit,
+                              qint64 begin = 0) {
     auto c = new Chart;
+    c->offset = offset;
     c->unit = unit;
     auto t = o.value("time").toArray();
     const QStringList colors{"#a0c6f4", "#f3b478", "#94d5a5", "#d9a4f1",
@@ -707,11 +724,14 @@ void Tools::render() {
         {phase.value("next").toString(),
          stamp(qint64(phase.value("nextAt").toDouble()), offset)},
         {"Sun altitude",
-         QString::number(
-             solarAltitude(at, s.config.location().value("lat").toDouble(),
-                           s.config.location().value("lon").toDouble()),
-             'f', 1) +
-             "°"}};
+         !s.config.location().value("lat").isDouble()
+             ? QString("Choose a location")
+             : QString::number(
+                   solarAltitude(at,
+                                 s.config.location().value("lat").toDouble(),
+                                 s.config.location().value("lon").toDouble()),
+                   'f', 1) +
+                   "°"}};
     int today = 0;
     auto dates = d.value("time").toArray();
     const auto date =
@@ -759,13 +779,19 @@ void Tools::render() {
     chart(h, {"uv_index"}, {"UV index"}, 1, 0, "UV", at);
     chart(h, {"shortwave_radiation"}, {"Solar radiation"}, 1, 0, "W/m²", at);
     double energy = 0;
+    int solarHours = 0;
     for (int i = 0; i < times.size(); ++i)
       if (QDateTime::fromSecsSinceEpoch(qint64(times[i].toDouble()) + offset,
                                         Qt::UTC)
-              .date() == date)
+                  .date() == date &&
+          vAt(h, "shortwave_radiation", i).isDouble()) {
         energy += vAt(h, "shortwave_radiation", i).toDouble() / 1000;
-    body->addWidget(text("Forecast solar energy today: " +
-                         QString::number(energy, 'f', 2) + " kWh/m²"));
+        ++solarHours;
+      }
+    body->addWidget(
+        text("Forecast solar energy today: " +
+             (solarHours ? QString::number(energy, 'f', 2) + " kWh/m²"
+                         : "Unavailable")));
   } else if (index == 5) {
     heading("Air quality · US AQI");
     auto air = advanced.data.value("air").object().value("hourly").toObject();
@@ -1301,7 +1327,7 @@ void Tools::render() {
       savedTopics << v.toObject().value("topic").toString();
     topics->setText(savedTopics.join(", "));
     body->addWidget(topics);
-    auto subscribe = new QPushButton("Save subscriptions");
+    auto subscribe = new QPushButton("Save topics");
     body->addWidget(subscribe);
     connect(subscribe, &QPushButton::clicked, this, [this, topics] {
       auto &cfg = advanced.services.config;

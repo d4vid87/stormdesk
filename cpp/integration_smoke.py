@@ -6,6 +6,7 @@ import shlex
 from pathlib import Path
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -80,6 +81,7 @@ def main():
             assert state["api"] == 1 and state["units"] == "si"
             assert state["current"]["temp"] == 20
             assert state["current"]["rain"] == 0
+            assert json.loads(get("/udp"))["obs_st"]["obs"][0][7] == 20
             assert b"test-key" not in get("/config-public")
             assert len(json.loads(get("/history/tuples?hours=1"))["obs"]) == 1
             if mqtt:
@@ -94,7 +96,35 @@ def main():
             assert get("/ingest/test-key?tempf=69&humidity=50&dailyrainin=1.1") == b"success"
             assert math.isclose(json.loads(get("/api/v1"))["current"]["rain"], 2.54)
             assert len(json.loads(get("/history/tuples?hours=1"))["obs"]) == 2
-            print("PASS: native collector, SI API, restart counters" + (", MQTT state and discovery" if mqtt else " (MQTT skipped: tools unavailable)"))
+            with sqlite3.connect(directory / "stormdesk.db") as database:
+                database.execute("INSERT OR REPLACE INTO meta(key,value) VALUES (?,?)", ("smoke-padding", "x" * 400000))
+            backup = get("/backup.wdbak")
+            assert len(backup) > 256 * 1024
+
+            def post(path, data, **headers):
+                request = urllib.request.Request(base + path, data=data, method="POST", headers=headers)
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    return json.loads(response.read())
+
+            staged = post("/restore/inspect", backup)
+            assert staged["ok"] and staged["summary"]["rows"] == 2
+            for path, data, headers, status in [
+                ("/restore/inspect", b"invalid", {}, 400),
+                ("/restore/inspect", backup, {"Origin": "https://example.invalid"}, 401),
+                ("/archive/replace", b'{}', {}, 400),
+            ]:
+                try:
+                    post(path, data, **headers)
+                    raise AssertionError("Unsafe archive request was accepted")
+                except urllib.error.HTTPError as error:
+                    assert error.code == status
+            assert post("/archive/replace", b'{"confirm":"REPLACE"}')["ok"]
+            assert json.loads(get("/history/tuples?hours=1"))["obs"] == []
+            assert get("/backup/station-replacement").startswith(b"SQLite format 3")
+            assert post("/restore/apply?id=" + staged["id"], b"")["ok"]
+            assert len(json.loads(get("/history/tuples?hours=1"))["obs"]) == 2
+            assert list(directory.glob("pre-restore-*.wdbak"))
+            print("PASS: native collector, SI API, restart counters, streamed backup/restore" + (", MQTT state and discovery" if mqtt else " (MQTT skipped: tools unavailable)"))
         finally:
             for child in (process, broker):
                 if child and child.poll() is None:

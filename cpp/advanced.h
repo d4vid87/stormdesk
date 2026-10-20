@@ -1,7 +1,7 @@
 #pragma once
 #include "services.h"
-#include <QJsonDocument>
 #include <QDate>
+#include <QJsonDocument>
 #include <QSet>
 
 namespace storm {
@@ -26,7 +26,7 @@ QJsonObject archiveSummary(const QJsonArray &days);
 class Advanced : public QObject {
   Q_OBJECT
 public:
-  explicit Advanced(Services &services);
+  explicit Advanced(Services &services, bool track = true);
   Services &services;
   QHash<QString, QJsonDocument> data;
   QHash<QString, QString> errors;

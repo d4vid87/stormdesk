@@ -1,6 +1,7 @@
 #include "radar.h"
 #include <QCheckBox>
 #include <QDateTime>
+#include <QGridLayout>
 #include <QJsonDocument>
 #include <QMouseEvent>
 #include <QNetworkDiskCache>
@@ -88,6 +89,14 @@ public:
   void paintEvent(QPaintEvent *) override {
     QPainter p(this);
     p.fillRect(rect(), QColor("#172131"));
+    const auto place = radar.services.config.location();
+    if (!place.value("lat").isDouble() || !place.value("lon").isDouble() ||
+        std::abs(place.value("lat").toDouble()) > 90 ||
+        std::abs(place.value("lon").toDouble()) > 180) {
+      p.setPen(palette().text().color());
+      p.drawText(rect(), Qt::AlignCenter, "Choose a location in Settings");
+      return;
+    }
     int tiles = 1 << zoom;
     auto corner = center - QPointF(width() / 2.0, height() / 2.0);
     int left = int(std::floor(corner.x() / 256)),
@@ -155,11 +164,13 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
   layout->addWidget(status);
   canvas = new Canvas(*this);
   layout->addWidget(canvas, 1);
-  auto controls = new QHBoxLayout;
+  auto controls = new QGridLayout;
+  int cell = 0;
   for (const auto &name :
        {QString("−"), QString("+"), QString("Center"), QString("Update")}) {
     auto button = new QPushButton(name);
-    controls->addWidget(button);
+    controls->addWidget(button, cell / 2, cell % 2);
+    ++cell;
     connect(button, &QPushButton::clicked, this, [this, name] {
       if (name == "−")
         canvas->setZoom(canvas->zoom - 1);
@@ -190,7 +201,8 @@ Radar::Radar(Services &s, QWidget *parent) : QWidget(parent), services(s) {
     if (isVisible() && frames->maximum() > 0)
       frames->setValue((frames->value() + 1) % (frames->maximum() + 1));
   });
-  auto coverage = new QCheckBox("Show radar coverage mask");
+  auto coverage = new QCheckBox("Coverage");
+  coverage->setToolTip("Show areas without radar coverage");
   layout->addWidget(coverage);
   connect(coverage, &QCheckBox::toggled, this, [this](bool enabled) {
     canvas->coverage = enabled;

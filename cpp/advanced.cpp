@@ -85,7 +85,7 @@ bool pointInGeometry(double lon, double lat, const QJsonObject &geometry) {
   const auto type = geometry.value("type").toString();
   auto polys = geometry.value("coordinates").toArray();
   if (type == "Polygon")
-    polys = QJsonArray{polys};
+    polys = QJsonArray{QJsonValue(polys)};
   else if (type != "MultiPolygon")
     return false;
   for (const auto &p : polys) {
@@ -381,9 +381,10 @@ QJsonObject archiveSummary(const QJsonArray &days) {
   out["days"] = days.size();
   return out;
 }
-Advanced::Advanced(Services &s) : QObject(&s), services(s) {
+Advanced::Advanced(Services &s, bool track) : QObject(&s), services(s) {
   locationKey = key();
-  connect(&s, &Services::changed, this, &Advanced::recordForecast);
+  if (track)
+    connect(&s, &Services::changed, this, &Advanced::recordForecast);
 }
 QString Advanced::key() const {
   return QString::number(services.config.location().value("lat").toDouble(999),
@@ -665,8 +666,9 @@ void Advanced::recordForecast() {
   }
   while (scores.size() > 200)
     scores.removeFirst();
-  const auto encoded = QString::fromUtf8(QJsonDocument(scores).toJson(QJsonDocument::Compact));
-  if (services.archive.meta("native_verification:"+key()) != encoded)
-    services.archive.setMeta("native_verification:"+key(),encoded);
+  const auto encoded =
+      QString::fromUtf8(QJsonDocument(scores).toJson(QJsonDocument::Compact));
+  if (services.archive.meta("native_verification:" + key()) != encoded)
+    services.archive.setMeta("native_verification:" + key(), encoded);
 }
 } // namespace storm

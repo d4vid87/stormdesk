@@ -32,6 +32,7 @@ private:
   QPixmap droughtImage;
   qint64 droughtImageAt = 0;
   bool droughtImageBusy = false;
+  QStringList currentProviders;
   void customization();
 };
 } // namespace storm
