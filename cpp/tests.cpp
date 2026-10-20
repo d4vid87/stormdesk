@@ -361,6 +361,42 @@ private slots:
     QVERIFY(output.open(QIODevice::ReadOnly));
     QCOMPARE(output.readAll(), bytes);
   }
+  void tomorrowRulesRequireFreshHomeForecast() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    QString error;
+    QVERIFY(cfg.load(&error));
+    cfg.value = {
+        {"settings",
+         QJsonObject{{"units", "metric"},
+                     {"activePlace", "away"},
+                     {"rules", QJsonArray{QJsonObject{{"metric", "hiTomorrow"},
+                                                      {"op", ">"},
+                                                      {"value", 40}}}}}}};
+    Archive db(dir.filePath("db"));
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    QSignalSpy alerts(&services, &Services::notification);
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    services.observation[0] = double(now);
+    services.observation[7] = 20;
+    services.forecast = {
+        {"_at", double(now)},
+        {"daily", QJsonObject{{"temperature_2m_max", QJsonArray{20, 50}}}}};
+    services.checkRules();
+    QCOMPARE(alerts.size(), 0);
+    auto settings = cfg.settings();
+    settings["activePlace"] = "";
+    cfg.value["settings"] = settings;
+    services.observation[0] = double(now + 1);
+    services.forecast["_at"] = double(now - 7200);
+    services.checkRules();
+    QCOMPARE(alerts.size(), 0);
+    services.observation[0] = double(now + 2);
+    services.forecast["_at"] = double(now);
+    services.checkRules();
+    QCOMPARE(alerts.size(), 1);
+  }
   void rulesLatchAndRearm() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));

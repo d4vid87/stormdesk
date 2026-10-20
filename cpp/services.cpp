@@ -665,7 +665,12 @@ QJsonObject Services::snapshot() const {
                                   {"lat", s.value("lat")},
                                   {"lon", s.value("lon")}}},
           {"current", current.isEmpty() ? QJsonValue() : QJsonValue(current)},
-          {"forecast", QJsonObject{{"days", days}}},
+          {"forecast",
+           QJsonObject{{"days", days},
+                       {"location",
+                        QJsonObject{{"name", config.location().value("name")},
+                                    {"lat", config.location().value("lat")},
+                                    {"lon", config.location().value("lon")}}}}},
           {"health", diagnostics}};
 }
 QUrl Services::radarUrl() const {
@@ -779,7 +784,8 @@ void Services::checkRules() {
   auto tomorrow = item(
       forecast.value("daily").toObject().value("temperature_2m_max").toArray(),
       1);
-  if (tomorrow.isDouble())
+  if (tomorrow.isDouble() && config.text("activePlace").isEmpty() &&
+      forecast.value("_at").toDouble() > now() - 3600)
     metrics["hiTomorrow"] =
         tomorrow.toDouble() * (metric ? 1 : 1.8) + (metric ? 0 : 32);
   if (observation[12] && observation[17] && *observation[17] > 0)
