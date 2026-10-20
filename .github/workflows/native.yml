@@ -1,0 +1,82 @@
+name: native-cpp
+on:
+  pull_request:
+  push:
+    branches: [main, cpp-rework]
+  workflow_dispatch:
+jobs:
+  linux:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev libqt6sql6-sqlite libmosquitto-dev mosquitto mosquitto-clients
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSTORMDESK_RADAR=OFF
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure
+      - run: python3 cpp/integration_smoke.py build/stormdesk
+      - run: cmake -S . -B build-headless -DSTORMDESK_GUI=OFF -DBUILD_TESTING=OFF && cmake --build build-headless --parallel 2
+      - run: ./build-headless/stormdesk --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.runner }}
+          path: build/stormdesk
+  desktop:
+    strategy:
+      matrix:
+        runner: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          cache: true
+      - run: cmake -S . -B build -DSTORMDESK_RADAR=OFF
+      - run: cmake --build build --config Release --parallel 2
+      - run: ctest --test-dir build -C Release --output-on-failure
+      - run: cmake --install build --config Release --prefix dist
+      - if: runner.os == 'Windows'
+        run: windeployqt --no-translations dist/bin/stormdesk.exe
+      - if: runner.os == 'macOS'
+        run: macdeployqt dist/stormdesk.app -always-overwrite
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ runner.os }}
+          path: dist/
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;26.1.10909125'
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          target: android
+          arch: android_arm64_v8a
+          cache: true
+      - uses: actions/checkout@v4
+        with:
+          repository: KDAB/android_openssl
+          ref: b71f1470962019bd89534a2919f5925f93bc5779
+          path: android-openssl
+          persist-credentials: false
+      - name: Configure native Android app
+        run: |
+          "$QT_ROOT_DIR/bin/qt-cmake" -S . -B build-android \
+            -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF \
+            -DANDROID_SDK_ROOT="$ANDROID_HOME" \
+            -DANDROID_NDK_ROOT="$ANDROID_HOME/ndk/26.1.10909125" \
+            -DSTORMDESK_ANDROID_OPENSSL_DIR="$GITHUB_WORKSPACE/android-openssl"
+      - run: cmake --build build-android --target apk --parallel 2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-android-arm64-debug
+          path: build-android/android-build/build/outputs/apk/**/*.apk

@@ -2,6 +2,8 @@
 
 # StormDesk
 
+**C++ / Qt rework:** the native application now builds from the root `CMakeLists.txt`. See the [native build and migration guide](docs/native-cpp.md) for desktop, Raspberry Pi, Android, UI scaling, data migration, and the remaining parity work. The original Rust application below remains available during migration.
+
 **Your weather, at a glance.** StormDesk’s Observatory dashboard opens in Graphite Silver, with a compact current-conditions card, a forecast list showing up to ten days, and HookEcho radar at the center. Local signals, alerts, astronomy, and device health share the right column. A live clock and nearby official warnings sit above the weather.
 
 Choose a location to start. A personal weather station is optional; readings that are unavailable stay visible and clearly labeled. StormDesk supports Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse, and other compatible sources.

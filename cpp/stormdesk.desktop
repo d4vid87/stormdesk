@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=StormDesk
+Comment=Weather dashboard
+Exec=stormdesk
+Icon=stormdesk
+Categories=Utility;
+Terminal=false

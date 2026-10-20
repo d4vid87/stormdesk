@@ -1,20 +1,22 @@
 # The dashboard with no desktop: the LAN server, the hub listener and the archive, for a house
 # whose only always-on machine is a NAS or a Pi.
 #
-# Built without the `gui` feature, so no Tauri, no GTK and no WebKit are anywhere in this image.
-FROM rust:1-slim-bookworm AS build
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
+# Built with the C++ core only; no desktop or browser libraries are needed.
+FROM debian:bookworm AS build
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake pkg-config qt6-base-dev libmosquitto-dev ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY site ./site
-COPY src-tauri ./src-tauri
-WORKDIR /src/src-tauri
-RUN cargo build --release --no-default-features --bin stormdesk
+COPY cpp ./cpp
+COPY CMakeLists.txt app-icon.png ./
+RUN cmake -S . -B build -DSTORMDESK_GUI=OFF -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build --parallel 2 \
+    && cmake --install build --prefix /stage
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libqt6core6 libqt6network6 libqt6sql6 libqt6sql6-sqlite libmosquitto1 util-linux \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=build /src/src-tauri/target/release/stormdesk /usr/local/bin/stormdesk
+COPY --from=build /stage/ /usr/local/
 # The uid is fixed at 1000:1000 so a bind mount can be matched from the host.
 RUN groupadd --gid 1000 stormdesk \
     && useradd --uid 1000 --gid 1000 --home-dir /data --no-create-home stormdesk \
