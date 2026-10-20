@@ -31,12 +31,14 @@
 #include <QScroller>
 #include <QSpinBox>
 #include <QSqlQuery>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
 #include <QUrlQuery>
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #ifdef STORMDESK_SPEECH
@@ -338,6 +340,8 @@ QWidget *Window::makeWeather() {
   alerts = label(
       "Choose a location in Settings to load weather and official warnings.",
       "notice");
+  alerts->setObjectName("nwsAlertBanner");
+  alerts->setAccessibleName("National Weather Service alerts");
   alerts->setTextInteractionFlags(Qt::TextSelectableByMouse);
   metrics = new QGridLayout;
   metrics->setSpacing(12);
@@ -1238,6 +1242,16 @@ void Window::applyTheme() {
       px(24) + "px;font-weight:600;} QLabel[kind=notice] {padding:" + px(12) +
       "px;border:1px solid " + border + ";border-radius:8px;color:" + accent +
       ";}"
+      "QLabel#nwsAlertBanner[severity=Extreme] "
+      "{background:#651b32;border-color:#ff4d6d;color:#fff0f3;}"
+      "QLabel#nwsAlertBanner[severity=Severe] "
+      "{background:#5a261c;border-color:#ff784f;color:#fff1eb;}"
+      "QLabel#nwsAlertBanner[severity=Moderate] "
+      "{background:#4a3a12;border-color:#f5c451;color:#fff3cf;}"
+      "QLabel#nwsAlertBanner[severity=Minor] "
+      "{background:#17364a;border-color:#75c9f1;color:#e5f6ff;}"
+      "QLabel#nwsAlertBanner[severity=Unknown] "
+      "{background:#29313f;border-color:#94a3b8;color:#f1f5f9;}"
       "QPushButton,QComboBox,QLineEdit,QDoubleSpinBox {background:" +
       panel + ";border:1px solid " + border + ";border-radius:6px;padding:" +
       px(8) + "px " + px(12) + "px;min-height:" + px(20) +
@@ -1559,11 +1573,37 @@ void Window::render() {
       services.stationStatus +
       (obs[0] && !fresh ? "\nLast measurement is stale." : "") + "\n" +
       services.warningStatus);
-  QStringList warningText;
+  const QStringList severities{"Unknown", "Minor", "Moderate", "Severe",
+                               "Extreme"};
+  QList<QPair<int, QString>> rankedWarnings;
   for (const auto &v : services.warnings) {
-    auto p = v.toObject().value("properties").toObject();
-    warningText << p.value("headline").toString(p.value("event").toString());
+    const auto p = v.toObject().value("properties").toObject();
+    const int rank =
+        std::max(0, int(severities.indexOf(p.value("severity").toString())));
+    auto headline = p.value("headline").toString().trimmed();
+    if (headline.isEmpty())
+      headline = p.value("event").toString("Weather alert");
+    rankedWarnings.append({rank, severities[rank] + " · " + headline});
   }
+  std::stable_sort(
+      rankedWarnings.begin(), rankedWarnings.end(),
+      [](const auto &a, const auto &b) { return a.first > b.first; });
+  QStringList warningText;
+  for (const auto &warning : rankedWarnings)
+    warningText << warning.second;
+  const auto severity = rankedWarnings.isEmpty()
+                            ? QString()
+                            : severities[rankedWarnings.first().first];
+  if (alerts->property("severity").toString() != severity) {
+    alerts->setProperty("severity", severity);
+    alerts->style()->unpolish(alerts);
+    alerts->style()->polish(alerts);
+    alerts->update();
+  }
+  alerts->setAccessibleName(
+      severity.isEmpty()
+          ? "National Weather Service alerts"
+          : "National Weather Service alerts · Highest severity: " + severity);
   alerts->setText(
       warningText.isEmpty()
           ? (services.warningStatus.isEmpty()

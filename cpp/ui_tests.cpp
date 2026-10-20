@@ -207,6 +207,67 @@ private slots:
     QTest::qWait(5);
     window.applyScale(1);
   }
+  void alertBannerTracksHighestSeverity() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    cfg.value = {{"settings", QJsonObject{{"theme", "graphite"}}}};
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    Window window(services, server);
+    window.applyScale(1);
+    window.show();
+    auto banner = window.findChild<QLabel *>("nwsAlertBanner");
+    QVERIFY(banner);
+    auto alert = [](const QString &severity, const QString &headline) {
+      return QJsonObject{{"properties", QJsonObject{{"severity", severity},
+                                                    {"headline", headline}}}};
+    };
+    const QList<QPair<QString, QString>> colors{{"Extreme", "#651b32"},
+                                                {"Severe", "#5a261c"},
+                                                {"Moderate", "#4a3a12"},
+                                                {"Minor", "#17364a"},
+                                                {"Unexpected", "#29313f"}};
+    for (const auto &color : colors) {
+      services.warnings = QJsonArray{alert(color.first, "Official alert")};
+      window.render();
+      const auto expected =
+          color.first == "Unexpected" ? QString("Unknown") : color.first;
+      QCOMPARE(banner->property("severity").toString(), expected);
+      QVERIFY(banner->text().startsWith(expected + " · "));
+      QVERIFY(banner->accessibleName().contains(expected));
+      QCOMPARE(banner->palette().color(QPalette::Window).name(), color.second);
+    }
+    services.warnings = QJsonArray{alert("Moderate", "Heat advisory"),
+                                   alert("Extreme", "Tornado warning"),
+                                   alert("Severe", "Severe thunderstorm")};
+    window.render();
+    QCOMPARE(banner->property("severity").toString(), QString("Extreme"));
+    QVERIFY(banner->text().startsWith("Extreme · Tornado warning"));
+    QVERIFY(banner->text().contains("Moderate · Heat advisory"));
+    auto settings = cfg.settings();
+    settings["theme"] = "light";
+    cfg.value["settings"] = settings;
+    window.applyScale(1);
+    QCOMPARE(banner->palette().color(QPalette::Window).name(),
+             QString("#651b32"));
+    QCOMPARE(banner->palette().color(QPalette::WindowText).name(),
+             QString("#fff0f3"));
+    services.warnings = {};
+    services.warningStatus = "US National Weather Service";
+    window.render();
+    QVERIFY(banner->property("severity").toString().isEmpty());
+    QVERIFY(banner->text().contains("No active warnings"));
+    QVERIFY(banner->palette().color(QPalette::Window).name() != "#651b32");
+    services.warningStatus = "US official warnings unavailable";
+    window.render();
+    QVERIFY(banner->property("severity").toString().isEmpty());
+    QVERIFY(banner->text().contains("unavailable"));
+    QVERIFY(!banner->text().contains("No active warnings"));
+  }
   void tempestImportDrivesWarningsAndRadar() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));
