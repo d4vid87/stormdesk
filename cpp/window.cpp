@@ -176,7 +176,7 @@ Window::Window(Services &s, HttpServer &http)
   header->addLayout(clockLayout);
   auto updateClock = [this] {
     const auto now = QDateTime::currentDateTime();
-    clock->setText(now.toString("HH:mm:ss"));
+    clock->setText(now.toString("h:mm:ss AP"));
     clockDate->setText(now.toString("ddd d MMM"));
   };
   updateClock();
