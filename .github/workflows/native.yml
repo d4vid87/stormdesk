@@ -38,6 +38,8 @@ jobs:
       - run: cmake -S . -B build -DSTORMDESK_RADAR=OFF
       - run: cmake --build build --config Release --parallel 2
       - run: ctest --test-dir build -C Release --output-on-failure
+      - if: always()
+        run: cat build/native-ui-results.txt
       - run: cmake --install build --config Release --prefix dist
       - if: runner.os == 'Windows'
         run: windeployqt --no-translations dist/bin/stormdesk.exe
