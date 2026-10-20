@@ -16,7 +16,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev libqt6sql6-sqlite libmosquitto-dev mosquitto mosquitto-clients
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev qt6-webengine-dev libqt6sql6-sqlite libmosquitto-dev mosquitto mosquitto-clients
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --parallel 2
       - run: ctest --test-dir build --output-on-failure
@@ -38,6 +38,7 @@ jobs:
       - uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
+          modules: 'qtwebengine qtwebchannel qtpositioning'
           cache: true
       - run: cmake -S . -B build
       - run: cmake --build build --config Release --parallel 2

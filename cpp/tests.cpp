@@ -16,6 +16,34 @@ using namespace storm;
 class CoreTest : public QObject {
   Q_OBJECT
 private slots:
+  void hookEchoFollowsSelectedPlace() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    Archive db(dir.filePath("db"));
+    Services services(cfg, db);
+    QCOMPARE(services.radarUrl().toString(),
+             QString("https://app.hookecho.io/?embed"));
+    cfg.value = {
+        {"settings",
+         QJsonObject{{"lat", 32.6}, {"lon", -97.3}, {"radarSite", "kfws"}}}};
+    QCOMPARE(services.radarUrl().fragment(),
+             QString("goto=KFWS,-97.3,32.6,7,bm:dark"));
+    auto s = cfg.settings();
+    s["activePlace"] = "trip";
+    s["places"] =
+        QJsonArray{QJsonObject{{"id", "trip"}, {"lat", 35.3}, {"lon", -97.2}}};
+    cfg.value["settings"] = s;
+    QCOMPARE(services.radarUrl().fragment(),
+             QString("goto=KTLX,-97.2,35.3,7,bm:dark"));
+    s.remove("activePlace");
+    s["radarSite"] = "KFWS,1,2,3";
+    cfg.value["settings"] = s;
+    QCOMPARE(services.radarUrl().fragment(),
+             QString("goto=KFWS,-97.3,32.6,7,bm:dark"));
+    s["lat"] = 100;
+    cfg.value["settings"] = s;
+    QVERIFY(services.radarUrl().fragment().isEmpty());
+  }
   void nativeCloudConnectionIgnoresUdp() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));

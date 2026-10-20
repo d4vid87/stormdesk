@@ -7,6 +7,7 @@
 #include <QNetworkDatagram>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QRegularExpression>
 #include <QSqlQuery>
 #include <QUrlQuery>
 #include <algorithm>
@@ -674,12 +675,44 @@ QJsonObject Services::snapshot() const {
           {"health", diagnostics}};
 }
 QUrl Services::radarUrl() const {
-  QUrl url("https://hookecho.pages.dev/");
+  QUrl url("https://app.hookecho.io/");
   url.setQuery("embed");
-  if (config.settings().contains("lat"))
-    url.setFragment("goto=" + config.text("radarSite") + "," +
-                    config.text("lon") + "," + config.text("lat") +
-                    ",6.5,bm:dark");
+  const auto place = config.location();
+  const auto lat = place.value("lat"), lon = place.value("lon");
+  if (lat.isDouble() && lon.isDouble() && std::isfinite(lat.toDouble()) &&
+      std::isfinite(lon.toDouble()) && std::abs(lat.toDouble()) <= 90 &&
+      std::abs(lon.toDouble()) <= 180) {
+    auto site = place.value("radarSite").toString().trimmed().toUpper();
+    if (!QRegularExpression("^[A-Z0-9]{4}$").match(site).hasMatch())
+      site.clear();
+    if (site.isEmpty()) {
+      static const QJsonArray sites = [] {
+        QFile file(":/site/sites.json");
+        return file.open(QIODevice::ReadOnly)
+                   ? QJsonDocument::fromJson(file.readAll()).array()
+                   : QJsonArray();
+      }();
+      double best = 2;
+      constexpr double rad = 3.14159265358979323846 / 180;
+      for (const auto &v : sites) {
+        const auto candidate = v.toObject();
+        const double a = lat.toDouble() * rad;
+        const double b = candidate.value("lat").toDouble() * rad;
+        const double dLon =
+            (lon.toDouble() - candidate.value("lon").toDouble()) * rad;
+        const double distance =
+            std::pow(std::sin((a - b) / 2), 2) +
+            std::cos(a) * std::cos(b) * std::pow(std::sin(dLon / 2), 2);
+        if (distance < best) {
+          best = distance;
+          site = candidate.value("id").toString();
+        }
+      }
+    }
+    url.setFragment("goto=" + site + "," +
+                    QString::number(lon.toDouble(), 'g', 12) + "," +
+                    QString::number(lat.toDouble(), 'g', 12) + ",7,bm:dark");
+  }
   return url;
 }
 void Services::push(const QString &title, const QString &message) {

@@ -14,6 +14,7 @@ namespace storm {
 class Tools;
 class InstrumentFace;
 class WeatherGlyph;
+class SunCycle;
 class Plot : public QWidget {
 public:
   explicit Plot(QWidget *parent = nullptr);
@@ -44,27 +45,22 @@ private:
   QList<QPushButton *> navButtons;
   QPushButton *refreshButton;
   QLabel *clock, *location, *heroTemperature, *heroCondition, *heroSource,
-      *status, *alerts, *sun;
-  QLabel *forecastNote;
+      *status, *alerts;
   std::array<QLabel *, 8> metricValues, metricSources;
   std::array<InstrumentFace *, 8> faces;
   WeatherGlyph *weatherGlyph;
   QPushButton *setupButton, *motionButton;
   QGridLayout *heroLayout;
-  QLabel *heroHeading, *dashboardPlotSource;
-  Plot *dashboardPlot;
-  QWidget *dashboardPlotCard = nullptr, *dashboardRadarCard = nullptr;
+  QLabel *heroHeading;
+  SunCycle *sunCycle;
+  QWidget *dashboardRadarCard = nullptr;
   QJsonObject setupChanges;
   void showInstrument(int index);
   QList<QWidget *> metricCards;
   QGridLayout *metrics = nullptr, *body = nullptr;
-  QWidget *forecastCard = nullptr, *currentCard = nullptr,
-          *contextCard = nullptr;
+  QWidget *currentCard = nullptr, *contextCard = nullptr;
   QWidget *radarPage;
   Tools *tools;
-  bool radarLoaded = false;
-  QUrl radarLocation;
-  QVBoxLayout *forecastRows;
   Plot *plot;
   QComboBox *historyMetric, *historyRange;
   QTableWidget *historyTable = nullptr, *ruleTable = nullptr;

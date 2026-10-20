@@ -1,43 +1,36 @@
 #pragma once
 #include "services.h"
-#include <QCache>
 #include <QGridLayout>
-#include <QImage>
 #include <QLabel>
-#include <QSet>
-#include <QSlider>
+#include <QPushButton>
 #include <QWidget>
+#ifdef STORMDESK_WEBENGINE
+class QWebEngineView;
+#endif
 
 namespace storm {
-QPointF mercator(double lat, double lon, int zoom);
 class Radar : public QWidget {
   Q_OBJECT
 public:
   explicit Radar(Services &services, QWidget *parent = nullptr,
                  bool compact = false);
   void refresh();
+  void setScale(double scale);
 signals:
   void warningsRequested();
-
 protected:
   void showEvent(QShowEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
-
 private:
-  class Canvas;
   Services &services;
   bool compact;
-  QNetworkAccessManager tiles;
-  Canvas *canvas;
-  QSlider *frames;
   QLabel *status;
-  QLabel *warnings;
-  QTimer animation, cadence;
-  QJsonArray past;
-  QString host, location;
-  qint64 fetched = 0;
-  bool busy = false;
+  QUrl loadedUrl;
   QGridLayout *controls;
-  QList<QWidget *> buttons;
+  QList<QPushButton *> buttons;
+  double scaleFactor = 1;
+#ifdef STORMDESK_WEBENGINE
+  QWebEngineView *view = nullptr;
+#endif
 };
 } // namespace storm

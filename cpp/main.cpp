@@ -34,9 +34,12 @@ int main(int argc, char **argv) {
   }
   std::unique_ptr<QCoreApplication> app;
 #ifdef STORMDESK_GUI
-  if (!headless)
+  if (!headless) {
+#ifdef STORMDESK_WEBENGINE
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+#endif
     app = std::make_unique<QApplication>(argc, argv);
-  else
+  } else
 #endif
     app = std::make_unique<QCoreApplication>(argc, argv);
   QCoreApplication::setApplicationName("StormDesk");

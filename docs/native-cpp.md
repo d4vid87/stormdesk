@@ -1,6 +1,6 @@
 # Native C++ / Qt app
 
-The `cpp-rework` branch adds a C++17 application built with Qt 6 and CMake. The dashboard and every weather tool are native Qt Widgets. The application does not need Rust, Tauri, WebKit, or Qt WebEngine. The collector and HTTP server also build without desktop libraries for a Raspberry Pi or other server. The existing `site/` dashboard is embedded into the C++ runtime and remains available as a LAN browser companion; native screens do not depend on it.
+The `cpp-rework` branch adds a C++17 application built with Qt 6 and CMake. The dashboard and weather tools are native Qt Widgets, with HookEcho live radar embedded through optional Qt WebEngine on desktop. No Rust or Tauri toolchain is required to build StormDesk. The collector and HTTP server also build without desktop libraries for a Raspberry Pi or other server. The existing `site/` dashboard is embedded into the C++ runtime and remains available as a LAN browser companion; native screens do not depend on it.
 
 This is a migration build pending real-device acceptance. Keep the existing app and a complete backup until your station and target devices have been checked. The old Rust source and release packaging are retained as a rollback path; the legacy Rust release workflow is manual-only. Native CI builds the C++ app for branches, pull requests, and tags.
 
@@ -11,14 +11,14 @@ Install CMake 3.21+, a C++17 compiler, and Qt 6.4+ Core, Network, SQL (including
 Debian / Ubuntu:
 
 ```sh
-sudo apt install build-essential cmake pkg-config qt6-base-dev libqt6sql6-sqlite libmosquitto-dev
+sudo apt install build-essential cmake pkg-config qt6-base-dev qt6-webengine-dev libqt6sql6-sqlite libmosquitto-dev
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ./build/stormdesk
 ```
 
-Radar uses Qt painting and network requests on every platform: RainViewer’s two-hour reflectivity loop over OpenStreetMap tiles, with native pan, zoom, playback, and a coverage mask. Tiles have a bounded memory cache and a 64 MB disk cache. Attribution stays on the map. No browser engine is packaged.
+Radar loads HookEcho's supported `https://app.hookecho.io/?embed` view in Qt WebEngine, centered on the selected location and optional radar site. The full-width radar sits below a native animated sunrise/sunset strip. The dashboard no longer has a ten-day outlook or six-hour temperature chart. HookEcho supplies map controls, playback, attribution, and scan times. Internet access is required; a load failure offers reload and a browser link. Builds without WebEngine (including Android) offer the browser link explicitly. `-DSTORMDESK_WEBENGINE=OFF` builds that fallback intentionally. Synthetic `--demo` mode never loads live radar.
 
 On Windows and macOS, select a Qt desktop kit in Qt Creator, or use its `qt-cmake` wrapper with the same commands. Set `CMAKE_PREFIX_PATH` to the kit directory if CMake cannot find Qt. Deploy Qt libraries and the SQLite platform plugin using `windeployqt` / `macdeployqt`. The CMake configuration is shared across platforms; the desktop CI job collects Qt deployment folders for review; production installers are not produced by this branch yet.
 
@@ -43,17 +43,17 @@ Use a **new** volume while validating the migration. The Compose file builds the
 
 ## Android / Fire tablets
 
-Open `CMakeLists.txt` with a Qt for Android kit and a matching Android SDK, NDK, and JDK. Install the [Qt-recommended Android OpenSSL package](https://github.com/KDAB/android_openssl) and set `STORMDESK_ANDROID_OPENSSL_DIR` to its directory in the CMake configuration. The build packages its SSL libraries so forecast and station HTTPS requests work on devices without a system OpenSSL installation. [Qt’s Android TLS guidance](https://doc.qt.io/qt-6/android-openssl-support.html) explains the dependency. Select an ARM64 device, turn off `BUILD_TESTING`, and build the APK through Qt Creator. Qt's `qt_add_executable` creates the Android library and deployment metadata from the same C++ sources. Android uses the same native radar as the desktop builds. The desktop tray is optional and absent on Android. Background collection and speech depend on the platform's app lifecycle; this build does not install a foreground service.
+Open `CMakeLists.txt` with a Qt for Android kit and a matching Android SDK, NDK, and JDK. Install the [Qt-recommended Android OpenSSL package](https://github.com/KDAB/android_openssl) and set `STORMDESK_ANDROID_OPENSSL_DIR` to its directory in the CMake configuration. The build packages its SSL libraries so forecast and station HTTPS requests work on devices without a system OpenSSL installation. [Qt’s Android TLS guidance](https://doc.qt.io/qt-6/android-openssl-support.html) explains the dependency. Select an ARM64 device, turn off `BUILD_TESTING`, and build the APK through Qt Creator. Qt's `qt_add_executable` creates the Android library and deployment metadata from the same C++ sources. Qt WebEngine is not used on Android; the radar panel opens HookEcho in the system browser. The desktop tray is optional and absent on Android. Background collection and speech depend on the platform's app lifecycle; this build does not install a foreground service.
 
 Android builds and touch behavior need validation on real tablets before distribution. Desktop CMake builds alone do not establish Android support. Qt's setup instructions are at <https://doc.qt.io/qt-6/android-getting-started.html>.
 
 ## UI size and small screens
 
-The default Instrument dashboard draws eight measurement faces and weather icons in Qt. Click an instrument for its value, source and explanation. The temperature chart uses the last six hours of station measurements, or the next six hours of Open-Meteo guidance when no local history is available. Forecast estimates remain labeled. The dashboard radar uses a compact native view; the Radar page retains all controls. Only the base map is darkened in dark themes; radar precipitation colors are preserved.
+The Instrument dashboard draws eight measurement faces and weather icons in Qt. Click an instrument for its value, source and explanation. A native sunrise/sunset strip uses today's timestamps for the selected location; its central daylight marker follows the actual time while the two endpoint icons animate decoratively. Missing sun times stay unavailable. The strip always sits immediately above HookEcho radar, including after dashboard customization. Forecast estimates remain labeled.
 
 First launch offers **Connect my station**, **Find my weather**, and **Restore a backup**. **Connect station** in the toolbar reopens setup. Choose a location, then follow the source-specific connection steps. Tempest offers local UDP (with a serial filter) or WeatherFlow cloud; choosing cloud excludes local UDP packets. **Save & test** writes the connection settings and checks the actual feed. Missing or stale readings cannot produce a successful check. **Finish while waiting** lets you continue without claiming the connection is healthy. Setup resumes after restart if it was saved but left unfinished. The final step saves units, icon motion, warning preferences and interface size. Closing setup after saving a connection keeps those settings.
 
-**Pause icons** stops decorative weather motion. The same choice is available under Settings → Appearance → Animate icons. Radar playback is controlled separately. The bundled Instrument typeface is derived from the existing Barlow Semi Condensed web font; its OFL license is included under `cpp/fonts/`.
+**Pause icons** stops decorative weather and sunrise/sunset motion. The same choice is available under Settings → Appearance → Animate icons. Radar playback is controlled separately. The bundled Instrument typeface is derived from the existing Barlow Semi Condensed web font; its OFL license is included under `cpp/fonts/`.
 
 The toolbar has a saved **70–200%** interface-size selector. It changes text, controls, cards, and charts. Map controls scale with the interface; map zoom is independent. Qt handles the monitor's DPI separately. Each device keeps its own size choice; one tablet does not resize every other screen.
 
@@ -124,4 +124,4 @@ The home network server uses HTTP. Use it on a trusted network or behind an auth
 
 ## Checks
 
-`ctest` runs core data/HTTP tests and native UI layout checks. `python3 cpp/integration_smoke.py build/stormdesk` exercises the real HTTP collector, restart accounting, SI packet shape, a backup over the normal request limit, streamed inspection, restore/recovery, and rejected unsafe archive requests; if `mosquitto` and `mosquitto_sub` are installed, it also checks state publishing and retained Home Assistant discovery against a disposable loopback broker. Linux x86-64/ARM64, desktop Windows/macOS, and Android ARM64 debug-APK build jobs are defined in `.github/workflows/native.yml`. A workflow definition is not evidence that those remote jobs have passed; inspect CI before publishing. Legacy release packaging is retained behind a manual trigger for rollback. Native jobs do not install Rust.
+`ctest` runs core data/HTTP tests and native UI layout checks, including selected-place radar links, missing sun times, pause behavior and panel order. The UI suite uses the no-WebEngine fallback to avoid external network/GPU dependencies; the embedded browser and live scans require a separate live desktop smoke check. `python3 cpp/integration_smoke.py build/stormdesk` exercises the real HTTP collector, restart accounting, SI packet shape, a backup over the normal request limit, streamed inspection, restore/recovery, and rejected unsafe archive requests; if `mosquitto` and `mosquitto_sub` are installed, it also checks state publishing and retained Home Assistant discovery against a disposable loopback broker. Linux x86-64/ARM64, desktop Windows/macOS, and Android ARM64 debug-APK build jobs are defined in `.github/workflows/native.yml`. A workflow definition is not evidence that those remote jobs have passed; inspect CI before publishing. Legacy release packaging is retained behind a manual trigger for rollback. Native jobs do not install Rust.

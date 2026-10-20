@@ -1,4 +1,5 @@
 #include "instruments.h"
+#include <QDateTime>
 #include <QPainter>
 #include <QPainterPath>
 #include <algorithm>
@@ -214,5 +215,140 @@ void WeatherGlyph::paintEvent(QPaintEvent *) {
     }
     p.restore();
   }
+}
+SunCycle::SunCycle(QWidget *parent) : QWidget(parent) {
+  setAccessibleName("Sunrise and sunset");
+  setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  elapsed.start();
+  timer.setInterval(50);
+  connect(&timer, &QTimer::timeout, this, qOverload<>(&QWidget::update));
+  setScale(1);
+}
+void SunCycle::setScale(double value) {
+  scale = value;
+  setFixedHeight(qRound(156 * scale));
+}
+QString SunCycle::time(qint64 seconds) const {
+  return hasTimes() ? QDateTime::fromSecsSinceEpoch(seconds)
+                          .toOffsetFromUtc(offset)
+                          .toString("HH:mm")
+                    : "—";
+}
+void SunCycle::setTimes(qint64 sunrise, qint64 sunset, int utcOffset,
+                        bool animate) {
+  rise = sunrise;
+  set = sunset;
+  offset = utcOffset;
+  motion = animate;
+  setAccessibleDescription(
+      hasTimes()
+          ? "Sunrise " + time(rise) + ", sunset " + time(set) +
+                ". Location local time."
+          : "Sunrise and sunset unavailable for this date and location.");
+  cadence();
+  update();
+}
+void SunCycle::cadence() {
+  if (motion && hasTimes() && isVisible())
+    timer.start();
+  else
+    timer.stop();
+}
+void SunCycle::showEvent(QShowEvent *) { cadence(); }
+void SunCycle::hideEvent(QHideEvent *) { timer.stop(); }
+void SunCycle::paintEvent(QPaintEvent *) {
+  QPainter p(this);
+  p.setRenderHint(QPainter::Antialiasing);
+  p.scale(scale, scale);
+  const double w = width() / scale;
+  const bool wide = w >= 560;
+  const double side = wide ? 180 : w / 2;
+  const QColor ink = palette().color(QPalette::WindowText);
+  const QColor gold("#e5c998"), dusk("#d6a6a0");
+  QColor faint = ink;
+  faint.setAlpha(65);
+  const double t = motion && timer.isActive() ? elapsed.elapsed() / 1000.0 : 0;
+  auto endpoint = [&](bool rising, double x) {
+    const QColor color = rising ? gold : dusk;
+    const double cx = x + side / 2, horizon = 48;
+    // The small icons animate decoratively; the central marker shows actual
+    // time.
+    const double y = horizon - 11 + (rising ? -1 : 1) * std::sin(t * 1.3) * 3;
+    p.save();
+    p.setClipRect(QRectF(x, 0, side, horizon));
+    p.setPen(QPen(hasTimes() ? color : faint, 1.6));
+    p.setBrush(Qt::NoBrush);
+    p.drawEllipse(QPointF(cx, y), 14, 14);
+    for (int i = 0; i < 8; ++i) {
+      const auto a = polar(i * 45 + t * 8, 20);
+      const auto b = polar(i * 45 + t * 8, 25);
+      p.drawLine(QPointF(cx, y) + a, QPointF(cx, y) + b);
+    }
+    p.restore();
+    p.setPen(QPen(faint, 1));
+    p.drawLine(QPointF(cx - 42, horizon), QPointF(cx + 42, horizon));
+    p.setPen(color);
+    auto f = font();
+    f.setPixelSize(11);
+    p.setFont(f);
+    p.drawText(QRectF(x, 60, side, 18), Qt::AlignCenter,
+               rising ? "SUNRISE" : "SUNSET");
+    f.setPixelSize(30);
+    p.setFont(f);
+    p.setPen(ink);
+    p.drawText(QRectF(x, 78, side, 40), Qt::AlignCenter,
+               time(rising ? rise : set));
+    f.setPixelSize(10);
+    p.setFont(f);
+    p.setPen(faint);
+    p.drawText(QRectF(x, 119, side, 18), Qt::AlignCenter,
+               "LOCATION LOCAL TIME");
+  };
+  endpoint(true, 0);
+  endpoint(false, w - side);
+  if (!wide)
+    return;
+  const double left = side + 24, span = w - 2 * side - 48;
+  const double base = 91, height = 63;
+  QPainterPath arc;
+  for (int i = 0; i <= 80; ++i) {
+    double f = i / 80.0;
+    QPointF point(left + span * f,
+                  base - std::sin(f * 3.141592653589793) * height);
+    i == 0 ? arc.moveTo(point) : arc.lineTo(point);
+  }
+  p.setPen(QPen(faint, 1, Qt::DashLine));
+  p.setBrush(Qt::NoBrush);
+  p.drawPath(arc);
+  p.drawLine(QPointF(left, base), QPointF(left + span, base));
+  QString caption = "Sun times unavailable";
+  if (hasTimes()) {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const double fraction =
+        std::clamp(double(now - rise) / double(set - rise), 0.0, 1.0);
+    QPointF point(left + span * fraction,
+                  base - std::sin(fraction * 3.141592653589793) * height);
+    if (now >= rise && now <= set) {
+      QColor glow = gold;
+      glow.setAlpha(35 + qRound(12 * std::sin(t * 2)));
+      p.setPen(Qt::NoPen);
+      p.setBrush(glow);
+      p.drawEllipse(point, 18, 18);
+      p.setBrush(gold);
+      p.drawEllipse(point, 6, 6);
+    }
+    const auto duration = (set - rise) / 60;
+    caption =
+        QString("%1h %2m of daylight").arg(duration / 60).arg(duration % 60);
+    if (now < rise)
+      caption += " · Before sunrise";
+    else if (now > set)
+      caption += " · After sunset";
+  }
+  auto f = font();
+  f.setPixelSize(12);
+  p.setFont(f);
+  p.setPen(ink);
+  p.drawText(QRectF(left, 113, span, 24), Qt::AlignCenter, caption);
 }
 } // namespace storm

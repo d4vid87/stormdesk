@@ -72,6 +72,37 @@ private slots:
     window.show();
     QTest::qWait(10);
     QCOMPARE(window.findChildren<InstrumentFace *>().size(), 8);
+    auto sunCycle = window.findChild<SunCycle *>("sunCycle");
+    QVERIFY(sunCycle);
+    QVERIFY(!sunCycle->hasTimes());
+    sunCycle->setTimes(now - 3600, now + 3600, -18000, true);
+    QVERIFY(sunCycle->hasTimes());
+    QVERIFY(sunCycle->animated());
+    QVERIFY(sunCycle->accessibleDescription().contains("Location local time"));
+    sunCycle->setTimes(0, 0, 0, true);
+    QVERIFY(!sunCycle->hasTimes());
+    QVERIFY(!sunCycle->animated());
+    auto localDay = QDateTime::currentDateTimeUtc()
+                        .date()
+                        .startOfDay(Qt::UTC)
+                        .toSecsSinceEpoch();
+    services.forecast["daily"] = QJsonObject{
+        {"time", QJsonArray{double(localDay - 86400), double(localDay)}},
+        {"sunrise",
+         QJsonArray{double(localDay - 64800), double(localDay + 21600)}},
+        {"sunset",
+         QJsonArray{double(localDay - 21600), double(localDay + 64800)}}};
+    window.render();
+    QVERIFY(sunCycle->hasTimes());
+    QVERIFY(sunCycle->accessibleDescription().contains("06:00"));
+    for (auto label : window.findChildren<QLabel *>()) {
+      QVERIFY(!label->text().contains("10-day outlook", Qt::CaseInsensitive));
+      QVERIFY(!label->text().contains("six hours", Qt::CaseInsensitive));
+    }
+    auto radar = window.findChild<Radar *>("dashboardRadar");
+    QVERIFY(radar);
+    QVERIFY(sunCycle->mapTo(&window, QPoint()).y() <
+            radar->mapTo(&window, QPoint()).y());
     QVERIFY(QFontDatabase::families().contains("Barlow Semi Condensed Medium"));
     auto rain = window.findChild<InstrumentFace *>("instrumentFace0");
     auto wind = window.findChild<InstrumentFace *>("instrumentFace2");
@@ -84,6 +115,7 @@ private slots:
     QVERIFY(glyph && glyph->animated());
     window.findChild<QPushButton *>("weatherMotion")->click();
     QVERIFY(!glyph->animated());
+    QVERIFY(!sunCycle->animated());
     QCOMPARE(cfg.settings().value("nativeMotion").toBool(), false);
     rain->click();
     auto reading = window.findChild<QDialog *>();
@@ -147,8 +179,6 @@ private slots:
     window.applyScale(1);
   }
   void nativeMapsAndCustomization() {
-    QCOMPARE(mercator(0, 0, 2), QPointF(512, 512));
-    QVERIFY(std::isfinite(mercator(90, 0, 7).y()));
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));
     QString error;

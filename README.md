@@ -2,11 +2,11 @@
 
 # StormDesk
 
-A C++17 / Qt 6 weather application for desktop computers, Raspberry Pi, and Android tablets. The dashboard, radar, history, settings, and advanced tools use native Qt widgets. Rust, Tauri, and a browser engine are not required.
+A C++17 / Qt 6 weather application for desktop computers, Raspberry Pi, and Android tablets. The dashboard, history, settings, and advanced tools use native Qt widgets. HookEcho radar embeds through Qt WebEngine on desktop builds; builds without WebEngine open it in the system browser. No Rust or Tauri toolchain is needed to build StormDesk.
 
 Choose a location for forecasts, or connect a personal weather station for measurements. StormDesk supports WeatherFlow Tempest, Ecowitt, Ambient Weather, Davis WeatherLink Live, La Crosse, and compatible Weather Underground upload protocols. Missing readings stay unavailable; forecast estimates are labeled.
 
-The native **Instrument** interface has eight measurement faces, animated weather icons, live radar, and a six-hour station/forecast chart. First-run onboarding guides location selection, station connection, real feed verification, and display preferences. Saved **70–200% scaling**, automatic display DPI, touch scrolling, themes, and dashboard customization support different screens. The same CMake project builds a native GUI or a small headless collector/server.
+The native **Instrument** interface has eight measurement faces, animated weather icons, an animated sunrise/sunset strip with location-local times, and full-width live HookEcho radar. First-run onboarding guides location selection, station connection, real feed verification, and display preferences. Saved **70–200% scaling**, automatic display DPI, touch scrolling, themes, and dashboard customization support different screens. The same CMake project builds a native GUI or a small headless collector/server.
 
 ![Native Qt Instrument dashboard using live provider data; no personal station connected](docs/native-instrument.png)
 
@@ -47,7 +47,7 @@ cmake --build build-headless --parallel 2
 - Nearby sensors, notification history, Home Assistant/MQTT boards, source diagnostics, saved places, and dashboard customization.
 - Native station setup, compound alert rules, notifications/speech, CSV, backup inspection/recovery/restore, legacy JSONL import, and LAN pairing.
 
-Forecast and environmental guidance uses Open-Meteo and regional official sources. Radar tiles are from RainViewer over OpenStreetMap. Data requires an internet connection; archive, settings, and local station collection work locally. The C++ HTTP server also serves the existing browser companion to LAN screens.
+Forecast and environmental guidance uses Open-Meteo and regional official sources. Radar is provided by the live HookEcho application with its own source attribution and scan times. Data requires an internet connection; archive, settings, and local station collection work locally. The C++ HTTP server also serves the existing browser companion to LAN screens.
 
 ## Migration status
 

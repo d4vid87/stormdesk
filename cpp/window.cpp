@@ -414,18 +414,8 @@ QWidget *Window::makeWeather() {
         status->setText("This build has no speech engine. Install Qt TextToSpeech and rebuild to enable system voices.");
 #endif
   });
-  QVBoxLayout *forecastLayout;
-  forecastCard = card("10-day outlook", &forecastLayout);
-  forecastNote = label("Forecast estimates · Open-Meteo", "muted");
-  forecastLayout->addWidget(forecastNote);
-  forecastRows = new QVBoxLayout;
-  forecastRows->setSpacing(8);
-  forecastLayout->addLayout(forecastRows);
-  forecastLayout->addStretch();
   QVBoxLayout *context;
   contextCard = card("Your local context", &context);
-  sun = label("Sunrise and sunset will appear here.");
-  context->addWidget(sun);
   auto source = label({}, "muted");
   source->setObjectName("stationDetail");
   context->addWidget(source);
@@ -462,15 +452,11 @@ QWidget *Window::makeWeather() {
   currentLayout->insertLayout(0, heroLayout);
   currentLayout->setContentsMargins(0, 10, 0, 14);
   layout->insertWidget(1, currentCard);
-  QVBoxLayout *chartLayout;
-  dashboardPlotCard = card("Temperature / six hours", &chartLayout);
-  dashboardPlotSource = label({}, "muted");
-  chartLayout->addWidget(dashboardPlotSource);
-  dashboardPlot = new Plot;
-  dashboardPlot->setObjectName("dashboardTemperature");
-  chartLayout->addWidget(dashboardPlot);
   QVBoxLayout *radarLayout;
-  dashboardRadarCard = card("Local radar / RainViewer", &radarLayout);
+  dashboardRadarCard = card("Sun & radar / HookEcho", &radarLayout);
+  sunCycle = new SunCycle;
+  sunCycle->setObjectName("sunCycle");
+  radarLayout->addWidget(sunCycle);
   auto liveRadar = new Radar(services, nullptr, true);
   liveRadar->setObjectName("dashboardRadar");
   radarLayout->addWidget(liveRadar);
@@ -1214,6 +1200,9 @@ void Window::applyScale(double value) {
   for (auto face : faces)
     face->setScale(scaleFactor);
   weatherGlyph->setScale(scaleFactor);
+  sunCycle->setScale(scaleFactor);
+  for (auto radar : findChildren<Radar *>())
+    radar->setScale(scaleFactor);
   applyTheme();
   arrange();
 }
@@ -1372,7 +1361,7 @@ void Window::arrange() {
   double density = std::clamp(dashboard.value("density").toDouble(1), .6, 1.5);
   metrics->setSpacing(qRound(12 * scaleFactor * density));
   body->setSpacing(qRound(16 * scaleFactor * density));
-  if (!currentCard || !forecastCard || !contextCard || !dashboardPlotCard)
+  if (!currentCard || !contextCard || !dashboardRadarCard)
     return;
   auto detail = currentCard->findChild<QLabel *>("conditionsDetail");
   for (auto widget :
@@ -1392,24 +1381,21 @@ void Window::arrange() {
     heroLayout->addWidget(weatherGlyph, 0, 2, 3, 1);
   }
   const QHash<QString, QWidget *> cards{
-      {"Temperature / six hours", dashboardPlotCard},
       {"Local radar", dashboardRadarCard},
-      {"10-day outlook", forecastCard},
       {"Your local context", contextCard}};
   QList<QWidget *> arranged;
   for (const auto &v : order)
     if (cards.contains(v.toString()) &&
         !arranged.contains(cards.value(v.toString())))
       arranged << cards.value(v.toString());
-  for (auto w :
-       {dashboardPlotCard, dashboardRadarCard, forecastCard, contextCard})
+  for (auto w : {dashboardRadarCard, contextCard})
     if (!arranged.contains(w))
       arranged << w;
   for (auto w : arranged)
     body->removeWidget(w);
   for (int i = 0; i < 3; ++i)
     body->setColumnStretch(i, 0);
-  const int bodyColumns = available >= 800 ? 2 : 1;
+  const int bodyColumns = 1;
   int at = 0;
   for (auto w : arranged) {
     auto key = cards.key(w);
@@ -1585,80 +1571,22 @@ void Window::render() {
           : std::nullopt,
       current.value("is_day").toInt(1) != 0, motion);
   weatherGlyph->setAccessibleDescription(heroCondition->text());
-  dashboardPlot->points.clear();
-  const auto now = QDateTime::currentSecsSinceEpoch();
-  QSqlQuery recent(services.archive.db);
-  recent.prepare("SELECT (ts/60)*60, AVG(temp) FROM obs WHERE ts>=? AND ts<=? "
-                 "AND temp IS NOT NULL GROUP BY 1 ORDER BY 1");
-  recent.addBindValue(now - 21600);
-  recent.addBindValue(now);
-  if (recent.exec())
-    while (recent.next())
-      dashboardPlot->points.append(
-          QPointF(recent.value(0).toDouble(),
-                  recent.value(1).toDouble() * tempFactor + tempShift));
-  if (dashboardPlot->points.isEmpty() ||
-      !services.config.settings().value("activePlace").toString().isEmpty()) {
-    dashboardPlot->points.clear();
-    const auto hourly = f.value("hourly").toObject();
-    const auto hours = hourly.value("time").toArray(),
-               temperatures = hourly.value("temperature_2m").toArray();
-    if (!staleForecast)
-      for (int i = 0; i < std::min(hours.size(), temperatures.size()); ++i)
-        if (hours[i].toDouble() >= now && hours[i].toDouble() <= now + 21600 &&
-            temperatures[i].isDouble())
-          dashboardPlot->points.append(
-              QPointF(hours[i].toDouble(),
-                      temperatures[i].toDouble() * tempFactor + tempShift));
-    dashboardPlotSource->setText(
-        "Next six hours · Open-Meteo forecast estimates");
-  } else
-    dashboardPlotSource->setText(
-        "Last six hours · archived station measurements");
-  dashboardPlot->unit = metric ? "Temperature · °C" : "Temperature · °F";
-  dashboardPlot->setAccessibleDescription(dashboardPlotSource->text());
-  dashboardPlot->update();
-  while (auto item = forecastRows->takeAt(0)) {
-    delete item->widget();
-    delete item;
-  }
-  const auto times = daily.value("time").toArray();
-  auto at = [&daily](const char *key, int i) {
-    const auto a = daily.value(key).toArray();
-    return i < a.size() ? a[i] : QJsonValue();
-  };
-  for (int i = 0; i < times.size(); ++i) {
-    const auto date =
-        QDateTime::fromSecsSinceEpoch(qint64(times[i].toDouble()))
-            .toOffsetFromUtc(f.value("utc_offset_seconds").toInt());
-    QString day = date.date() == QDateTime::currentDateTimeUtc()
-                                     .toOffsetFromUtc(
-                                         f.value("utc_offset_seconds").toInt())
-                                     .date()
-                      ? "Today"
-                      : date.toString("ddd d");
-    auto row = label(
-        day + "   ·   " + condition(at("weather_code", i).toInt()) + "\n" +
-        number(at("temperature_2m_max", i), "°", 0, tempFactor, tempShift) +
-        " / " +
-        number(at("temperature_2m_min", i), "°", 0, tempFactor, tempShift) +
-        "   ·   " +
-        number(at("precipitation_probability_max", i), "% rain", 0));
-    forecastRows->addWidget(row);
-  }
-  forecastNote->setText(services.forecastStatus +
-                        (staleForecast ? "\nOlder forecast · refresh needed"
-                                       : "\nOpen-Meteo · forecast estimates"));
-  auto time = [&at, &f](const char *key) {
-    auto n = at(key, 0);
-    return n.isDouble()
-               ? QDateTime::fromSecsSinceEpoch(qint64(n.toDouble()))
-                     .toOffsetFromUtc(f.value("utc_offset_seconds").toInt())
-                     .toString("HH:mm")
-               : "—";
-  };
-  sun->setText("SUNRISE  " + time("sunrise") + "\nSUNSET   " + time("sunset") +
-               "\nLocation local time");
+  const auto rises = daily.value("sunrise").toArray();
+  const auto sets = daily.value("sunset").toArray();
+  const auto dates = daily.value("time").toArray();
+  const int offset = f.value("utc_offset_seconds").toInt();
+  const auto today =
+      QDateTime::currentDateTimeUtc().toOffsetFromUtc(offset).date();
+  qint64 rise = 0, set = 0;
+  for (int i = 0; i < dates.size(); ++i)
+    if (QDateTime::fromSecsSinceEpoch(qint64(dates[i].toDouble()))
+            .toOffsetFromUtc(offset)
+            .date() == today) {
+      rise = i < rises.size() ? qint64(rises[i].toDouble()) : 0;
+      set = i < sets.size() ? qint64(sets[i].toDouble()) : 0;
+      break;
+    }
+  sunCycle->setTimes(rise, set, offset, motion);
   auto stationDetail = contextCard->findChild<QLabel *>("stationDetail");
   stationDetail->setText(
       services.stationStatus +
