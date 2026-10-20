@@ -22,6 +22,31 @@ Radar loads HookEcho's supported `https://app.hookecho.io/?embed` view in Qt Web
 
 On Windows and macOS, select a Qt desktop kit in Qt Creator, or use its `qt-cmake` wrapper with the same commands. Set `CMAKE_PREFIX_PATH` to the kit directory if CMake cannot find Qt. Deploy Qt libraries and the SQLite platform plugin using `windeployqt` / `macdeployqt`. The CMake configuration is shared across platforms; the desktop CI job collects Qt deployment folders for review; production installers are not produced by this branch yet.
 
+## Install a Linux desktop build
+
+After the Release build and tests above, check the installed executable's collector paths and install it for the current user:
+
+```sh
+cmake --install build --prefix "$PWD/build-artifacts/native-linux"
+python3 cpp/integration_smoke.py build-artifacts/native-linux/bin/stormdesk
+cmake --install build --prefix "$HOME/.local"
+update-desktop-database "$HOME/.local/share/applications"
+"$HOME/.local/bin/stormdesk"
+```
+
+The install includes the executable, desktop-menu entry and icon. The desktop session's PATH must include `$HOME/.local/bin`. If an older StormDesk launcher exists, save a copy before installing; the old AppImage and its archive can remain in place. The native application uses its separate per-user data directory described below.
+
+To package that installation without including settings or station data:
+
+```sh
+tar -C build-artifacts/native-linux -czf build-artifacts/stormdesk-native-linux.tar.gz bin share
+sha256sum build-artifacts/stormdesk-native-linux.tar.gz
+```
+
+This archive uses the system's Qt, WebEngine, SQLite driver and other shared libraries. It targets machines compatible with the build host; it is not a self-contained AppImage. The same CMake install step can be repeated after an update.
+
+## Raspberry Pi collector
+
 Raspberry Pi OS 64-bit uses the same Debian commands. To run without a window or Qt Widgets:
 
 ```sh
@@ -49,7 +74,7 @@ Android builds and touch behavior need validation on real tablets before distrib
 
 ## UI size and small screens
 
-The Instrument dashboard draws eight measurement faces and weather icons in Qt. Click an instrument for its value, source and explanation. A native sunrise/sunset strip uses today's timestamps for the selected location; its central daylight marker follows the actual time while the two endpoint icons animate decoratively. Missing sun times stay unavailable. Eight smaller gauges sit across the top on large displays, with compact current conditions, sunrise/sunset and local context directly below. The strip sits above the radar’s color scale and occupies at most one third of the dashboard area and scrolls independently when its contents need more room. Gauges reflow to four, two or one column on smaller displays. On narrow displays the instrument strip starts collapsed and opens with Show instruments. The map fills the remaining dashboard area without a separate vertical radar scroll. A large clock and smaller date occupy the upper-right header on wide displays. Forecast estimates remain labeled.
+The Instrument dashboard draws eight measurement faces and weather icons in Qt. Click an instrument for its value, source and explanation. A native sunrise/sunset strip uses today's timestamps for the selected location; its central daylight marker follows the actual time while the two endpoint icons animate decoratively. Missing sun times stay unavailable. Eight smaller gauges sit across the top on large displays, with compact current conditions, sunrise/sunset and local context directly below. The strip sits above the radar’s color scale, occupies at most one third of the dashboard area, and scrolls independently when its contents need more room. Gauges reflow to four, two or one column on smaller displays. On narrow displays the instrument strip starts collapsed and opens with Show instruments. The map fills the remaining dashboard area without a separate vertical radar scroll. A large 12-hour clock with AM/PM and a smaller date occupy the upper-right header on wide displays. Forecast estimates remain labeled.
 
 First launch offers **Connect my station**, **Find my weather**, and **Restore a backup**. **Connect station** in the toolbar reopens setup. Choose a location, then follow the source-specific connection steps. Tempest offers local UDP (with a serial filter) or WeatherFlow cloud; choosing cloud excludes local UDP packets. **Save & test** writes the connection settings and checks the actual feed. Missing or stale readings cannot produce a successful check. **Finish while waiting** lets you continue without claiming the connection is healthy. Setup resumes after restart if it was saved but left unfinished. The final step saves units, icon motion, warning preferences and interface size. Closing setup after saving a connection keeps those settings.
 
