@@ -5,6 +5,9 @@ on:
     branches: [main, cpp-rework]
     tags: ["v*"]
   workflow_dispatch:
+concurrency:
+  group: native-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 jobs:
   linux:
     strategy:
@@ -47,6 +50,17 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: lldb --batch -o run -o 'thread backtrace all' -- build/stormdesk_ui_tests nativeMapsAndCustomization -nocrashhandler
+      - if: failure() && runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports -maxdepth 1 -name 'stormdesk_ui_tests*' -type f -print -exec cat {} \;
+      - if: failure() && runner.os == 'macOS'
+        env:
+          QT_QPA_PLATFORM: cocoa
+        run: |
+          for attempt in 1 2 3 4 5; do
+            build/stormdesk_ui_tests nativeMapsAndCustomization -nocrashhandler
+          done
       - run: cmake --install build --config Release --prefix dist
       - if: runner.os == 'Windows'
         run: windeployqt --no-translations dist/bin/stormdesk.exe

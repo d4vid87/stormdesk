@@ -102,6 +102,8 @@ Collectors support Tempest UDP/cloud and resumable backfill, Ecowitt/WU/Ambient 
 
 The C++ server preserves the LAN API, pairing, CSV, backup download, streamed backup inspection/restore, and station archive replacement. Restore uploads are authenticated before temporary files are created, limited to 8 GB and four concurrent/staged backups, and expire after 30 minutes. Native JSONL import keeps source files and skips malformed observations. Replacing a station or restoring a backup keeps a recovery snapshot first. Existing SQLite backups remain format 1.
 
+![Native model comparison with synthetic demonstration guidance](native-tools.png)
+
 ## Distribution and validation limits
 
 Native CI supplies deployed Windows/macOS folders, Linux x86-64/ARM64 executables, and an Android ARM64 debug APK. Production installers, Android signing, and automatic native updates are separate release work; the old Tauri update feed is not used. Speech uses the device’s installed Qt/system voices rather than legacy downloadable voice packs. MQTT requires libmosquitto 2.0+ at build time; builds without it report that the integration is unavailable. Use `mqtt://broker:1883` or `mqtts://broker:8883` and a TCP/TLS listener; a legacy browser WebSocket listener is a different transport. Topic labels and units are editable in the native Home Assistant tool.

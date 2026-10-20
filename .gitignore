@@ -6,4 +6,4 @@ data-native/
 /data/
 .serena/
 __pycache__/
-native-*.png
+/native-*.png

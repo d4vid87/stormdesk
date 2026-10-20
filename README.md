@@ -8,6 +8,8 @@ Choose a location for forecasts, or connect a personal weather station for measu
 
 The interface has saved **70–200% scaling**, automatic display DPI support, responsive navigation/cards, touch scrolling, full screen, themes, and dashboard card customization. The same CMake project builds a native GUI or a small headless collector/server.
 
+![Native Qt dashboard with synthetic demonstration readings](docs/native-dashboard.png)
+
 ## Build
 
 Install CMake 3.21+, a C++17 compiler, and Qt 6.4+ Core, Network, SQL/SQLite, Widgets, and Test. On Debian/Ubuntu:
