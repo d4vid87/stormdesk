@@ -520,8 +520,8 @@ void Advanced::load(const QString &kind, bool force) {
     return;
   } else if (kind == "official") {
     fetch(kind,
-          url("https://api.weather.gov/points/" + args["latitude"] + "," +
-                  args["longitude"],
+          url("https://api.weather.gov/points/" + QString::number(services.config.location().value("lat").toDouble(),'f',4) + "," +
+                  QString::number(services.config.location().value("lon").toDouble(),'f',4),
               {}),
           force, 86400);
     return;

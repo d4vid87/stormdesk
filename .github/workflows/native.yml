@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main, cpp-rework]
+    tags: ["v*"]
   workflow_dispatch:
 jobs:
   linux:
@@ -40,6 +41,10 @@ jobs:
       - run: ctest --test-dir build -C Release --output-on-failure
       - if: always()
         run: cat build/native-ui-results.txt
+      - if: failure() && runner.os == 'macOS'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: lldb --batch -o run -o 'thread backtrace all' -- build/stormdesk_ui_tests nativeMapsAndCustomization -nocrashhandler
       - run: cmake --install build --config Release --prefix dist
       - if: runner.os == 'Windows'
         run: windeployqt --no-translations dist/bin/stormdesk.exe

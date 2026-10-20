@@ -306,6 +306,7 @@ Tools::Tools(Services &s, QWidget *parent)
   layout->addWidget(note);
   content = new QWidget;
   body = new QVBoxLayout(content);
+  body->setSizeConstraint(QLayout::SetMinimumSize);
   body->setContentsMargins(0, 0, 0, 0);
   auto scroll = new QScrollArea;
   scroll->setWidgetResizable(true);
@@ -391,8 +392,10 @@ void Tools::refresh(bool force) {
 }
 void Tools::render() {
   while (auto item = body->takeAt(0)) {
-    if (item->widget())
+    if (item->widget()) {
+      item->widget()->hide();
       item->widget()->deleteLater();
+    }
     delete item;
   }
   const int index = topic->currentIndex();
