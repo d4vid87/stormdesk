@@ -226,7 +226,7 @@ Window::Window(Services &s, HttpServer &http)
   pages->addWidget(makeHistory());
   pages->addWidget(makeSettings());
   tools = new Tools(services);
-  pages->addWidget(tools);
+  pages->addWidget(scrollView(tools));
   connect(tools, &Tools::dashboardChanged, this, [this] {
     arrange();
     render();
@@ -451,8 +451,9 @@ QWidget *Window::makeHistory() {
 QWidget *Window::makeSettings() {
   auto page = new QWidget;
   auto layout = new QVBoxLayout(page);
-  layout->addWidget(label("Make StormDesk yours", "subtitle"));
+  layout->addWidget(label("Settings", "subtitle"));
   auto tabs = new QTabWidget;
+  tabs->setMinimumHeight(360);
   tabs->setUsesScrollButtons(true);
   layout->addWidget(tabs, 1);
   auto section = [tabs](const QString &title) {
@@ -854,7 +855,7 @@ QWidget *Window::makeSettings() {
   connect(save, &QPushButton::clicked, this, &Window::saveSettings);
   layout->addWidget(save);
   loadSettings();
-  return page;
+  return scrollView(page);
 }
 void Window::addRule(const QJsonObject &rule) {
   const int row = ruleTable->rowCount();

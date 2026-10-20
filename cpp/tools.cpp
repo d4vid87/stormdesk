@@ -80,6 +80,15 @@ public:
   QString unit;
   int offset = 0;
   bool rose = false;
+  void fit() {
+    setMinimumHeight(
+        std::max(320, fontMetrics().height() * (int(lines.size()) + 10)));
+  }
+  void changeEvent(QEvent *event) override {
+    QWidget::changeEvent(event);
+    if (event->type() == QEvent::FontChange)
+      fit();
+  }
   explicit Chart(QWidget *p = nullptr) : QWidget(p) {
     setMinimumHeight(320);
     setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -265,6 +274,7 @@ public:
 Tools::Tools(Services &s, QWidget *parent)
     : QWidget(parent), advanced(s, false) {
   auto layout = new QVBoxLayout(this);
+  layout->setSizeConstraint(QLayout::SetMinimumSize);
   topic = new QComboBox;
   topic->setObjectName("nativeTool");
   topic->setAccessibleName("Weather tool");
@@ -305,15 +315,11 @@ Tools::Tools(Services &s, QWidget *parent)
   note = text({});
   layout->addWidget(note);
   content = new QWidget;
+  content->setObjectName("toolBody");
   body = new QVBoxLayout(content);
   body->setSizeConstraint(QLayout::SetMinimumSize);
   body->setContentsMargins(0, 0, 0, 0);
-  auto scroll = new QScrollArea;
-  scroll->setWidgetResizable(true);
-  scroll->setFrameShape(QFrame::NoFrame);
-  scroll->setWidget(content);
-  QScroller::grabGesture(scroll->viewport(), QScroller::TouchGesture);
-  layout->addWidget(scroll, 1);
+  layout->addWidget(content, 1);
   debounce.setSingleShot(true);
   debounce.setInterval(150);
   // A background reading must not replace controls while someone is editing
@@ -456,6 +462,7 @@ void Tools::render() {
       if (!line.points.isEmpty())
         c->lines << line;
     }
+    c->fit();
     body->addWidget(c);
     return c;
   };

@@ -145,10 +145,12 @@ private slots:
     QCOMPARE(current->rowCount(), 48);
     QCOMPARE(current->columnCount(), 4);
     QCOMPARE(current->item(0, 3)->text(), QString("4.0"));
-    auto area = tools->findChild<QScrollArea *>();
+    auto area = qobject_cast<QScrollArea *>(
+        window.findChild<QStackedWidget *>()->currentWidget());
     QVERIFY(area);
     QVERIFY(area->verticalScrollBar()->maximum() > 0);
-    auto contents = area->widget();
+    auto contents = tools->findChild<QWidget *>("toolBody");
+    QVERIFY(contents);
     int bottom = -1;
     for (int i = 0; i < contents->layout()->count(); ++i)
       if (auto widget = contents->layout()->itemAt(i)->widget()) {
@@ -220,6 +222,7 @@ private slots:
         window.resize(size);
         QTest::qWait(10);
         QCOMPARE(window.scale(), scale);
+        QVERIFY(window.height() <= size.height());
         QVERIFY2(window.width() <= size.width(),
                  qPrintable("Window cannot fit width " +
                             QString::number(size.width()) + " at " +
