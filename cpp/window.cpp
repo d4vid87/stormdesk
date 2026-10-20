@@ -787,7 +787,8 @@ QWidget *Window::makeSettings() {
   text(alert, "Quiet hours start (HH:mm)", "quietStart");
   text(alert, "Quiet hours end (HH:mm)", "quietEnd");
   auto integrations = section("Integrations");
-  text(integrations, "MQTT broker", "mqttUrl");
+  text(integrations, "MQTT broker", "mqttUrl")
+      ->setPlaceholderText("mqtt://broker:1883 or mqtts://broker:8883");
   text(integrations, "MQTT username", "mqttUser");
   text(integrations, "MQTT password", "mqttPass", true);
   text(integrations, "Discovery prefix", "haDiscoveryPrefix");

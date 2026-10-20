@@ -1389,42 +1389,89 @@ void Tools::render() {
     }
     table(body, {"Entity", "Name", "State", "Updated"}, rows);
     heading("MQTT sensor subscriptions");
+    body->addWidget(
+        text(s.diagnostics.value("mqtt").toObject().value("what").toString(
+            "Configure a native MQTT broker in Settings → Integrations.")));
+    const auto saved = s.config.settings().value("mqttSubs").toArray();
     QList<QStringList> sensors;
     for (auto it = s.mqttValues.begin(); it != s.mqttValues.end(); ++it) {
       auto p = it.value().toObject();
-      sensors << QStringList{it.key(), p.value("value").toString(),
+      QJsonObject spec;
+      for (const auto &v : saved)
+        if (v.toObject().value("topic").toString() == it.key())
+          spec = v.toObject();
+      sensors << QStringList{spec.value("label").toString().isEmpty()
+                                 ? it.key()
+                                 : spec.value("label").toString(),
+                             it.key(),
+                             p.value("value").toString() + " " +
+                                 spec.value("unit").toString(),
                              stamp(qint64(p.value("at").toDouble()), offset)};
     }
-    table(body, {"Topic", "Value", "Received"}, sensors);
-    auto topics = new QLineEdit;
-    topics->setAccessibleName("MQTT subscription topics (comma separated)");
-    QStringList savedTopics;
-    for (const auto &v : s.config.settings().value("mqttSubs").toArray())
-      savedTopics << v.toObject().value("topic").toString();
-    topics->setText(savedTopics.join(", "));
-    body->addWidget(topics);
+    table(body, {"Sensor", "Topic", "Value", "Received"}, sensors);
+    QList<QStringList> subscriptions;
+    for (const auto &v : saved) {
+      auto p = v.toObject();
+      subscriptions << QStringList{p.value("topic").toString(),
+                                   p.value("label").toString(),
+                                   p.value("unit").toString()};
+    }
+    auto edits = table(body, {"Topic", "Label", "Unit"}, subscriptions);
+    edits->setObjectName("mqttSubscriptions");
+    edits->setAccessibleName("MQTT topic labels and units");
+    edits->setEditTriggers(QAbstractItemView::DoubleClicked |
+                           QAbstractItemView::SelectedClicked |
+                           QAbstractItemView::EditKeyPressed);
+    for (int i = 0; i < saved.size(); ++i)
+      edits->item(i, 0)->setData(Qt::UserRole, saved[i].toObject());
+    auto add = new QPushButton("Add topic");
+    body->addWidget(add);
+    connect(add, &QPushButton::clicked, this, [edits] {
+      int row = edits->rowCount();
+      if (row >= 30)
+        return;
+      edits->insertRow(row);
+      for (int i = 0; i < 3; ++i)
+        edits->setItem(row, i, new QTableWidgetItem);
+      edits->setCurrentCell(row, 0);
+      edits->editItem(edits->item(row, 0));
+    });
+    auto remove = new QPushButton("Remove topic");
+    body->addWidget(remove);
+    connect(remove, &QPushButton::clicked, this, [edits] {
+      if (edits->currentRow() >= 0)
+        edits->removeRow(edits->currentRow());
+    });
     auto subscribe = new QPushButton("Save topics");
     body->addWidget(subscribe);
-    connect(subscribe, &QPushButton::clicked, this, [this, topics] {
+    connect(subscribe, &QPushButton::clicked, this, [this, edits] {
       auto &cfg = advanced.services.config;
       QJsonArray subs;
-      auto old = cfg.settings().value("mqttSubs").toArray();
-      for (const auto &topic : topics->text().split(',', Qt::SkipEmptyParts)) {
-        auto value = topic.trimmed();
-        if (value.size() > 256 || subs.size() >= 30) {
-          note->setText("Use at most 30 topics, each under 256 characters");
+      if (edits->rowCount() > 30) {
+        note->setText("Use at most 30 topics");
+        return;
+      }
+      for (int i = 0; i < edits->rowCount(); ++i) {
+        auto topic = edits->item(i, 0)->text().trimmed();
+        if (topic.isEmpty() || topic.toUtf8().size() > 256 ||
+            topic.contains(QChar::Null)) {
+          note->setText("Each row needs a topic under 256 characters");
           return;
         }
-        QJsonObject entry{{"topic", value}, {"label", value}};
-        for (const auto &v : old)
-          if (v.toObject().value("topic") == value)
-            entry = v.toObject();
+        auto entry = edits->item(i, 0)->data(Qt::UserRole).toJsonObject();
+        entry["topic"] = topic;
+        entry["label"] = edits->item(i, 1)->text();
+        entry["unit"] = edits->item(i, 2)->text();
         subs.append(entry);
       }
       QString error;
       cfg.merge({{"_rev", cfg.value.value("_rev")},
                  {"settings", QJsonObject{{"mqttSubs", subs}}}},
                 &error);
+      if (error.isEmpty()) {
+        topic->setFocus();
+        render();
+      }
       note->setText(error.isEmpty()
                         ? "Subscriptions saved; reconnecting within 10 seconds"
                         : error);

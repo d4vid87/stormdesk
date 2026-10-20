@@ -90,6 +90,31 @@ private slots:
              200);
     QCOMPARE(cfg.location().value("lat").toInt(), 40);
     QCOMPARE(cfg.number("lat"), 30.0);
+    QCOMPARE(cfg.merge({{"_rev", cfg.value.value("_rev")},
+                        {"settings",
+                         QJsonObject{{"mqttSubs", QJsonArray{QJsonObject{
+                                                      {"topic", "garden/temp"},
+                                                      {"label", "Garden"},
+                                                      {"unit", "°C"},
+                                                      {"future", 17}}}}}}},
+                       &error),
+             200);
+    tool->setCurrentIndex(10);
+    QTest::qWait(10);
+    auto subscriptions = window.findChild<QTableWidget *>("mqttSubscriptions");
+    QVERIFY(subscriptions);
+    QCOMPARE(subscriptions->item(0, 2)->text(), QString("°C"));
+    subscriptions->item(0, 1)->setText("Backyard");
+    QPushButton *saveTopics = nullptr;
+    for (auto button : window.findChildren<QPushButton *>())
+      if (button->text() == "Save topics")
+        saveTopics = button;
+    QVERIFY(saveTopics);
+    saveTopics->click();
+    auto saved = cfg.settings().value("mqttSubs").toArray()[0].toObject();
+    QCOMPARE(saved.value("label").toString(), QString("Backyard"));
+    QCOMPARE(saved.value("unit").toString(), QString("°C"));
+    QCOMPARE(saved.value("future").toInt(), 17);
   }
   void nativeModelFixture() {
     QTemporaryDir dir;
