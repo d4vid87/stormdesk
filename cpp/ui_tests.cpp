@@ -105,8 +105,14 @@ private slots:
     auto shelf = window.findChild<QScrollArea *>("instrumentShelf");
     auto toggle = window.findChild<QPushButton *>("toggleInstruments");
     QVERIFY(stage && shelf && toggle);
-    QCOMPARE(radar->geometry(), stage->rect());
     QVERIFY(shelf->isVisible());
+    QCOMPARE(shelf->y(), 0);
+    QVERIFY(radar->y() > shelf->geometry().bottom());
+    QCOMPARE(radar->width(), stage->width());
+    QCOMPARE(radar->geometry().bottom(), stage->rect().bottom());
+    auto clock = window.findChild<QLabel *>("dashboardClock");
+    QVERIFY(clock && !clock->text().isEmpty());
+    QVERIFY(clock->font().pixelSize() >= 30);
     QVERIFY(shelf->width() > stage->width() * .9);
     QVERIFY(shelf->height() <= stage->height() / 3);
     QVERIFY(shelf->isAncestorOf(sunCycle));
@@ -447,11 +453,14 @@ private slots:
             auto toggle = window.findChild<QPushButton *>("toggleInstruments");
             auto shelf = window.findChild<QScrollArea *>("instrumentShelf");
             QVERIFY(stage && radar && toggle && shelf);
-            QCOMPARE(radar->geometry(), stage->rect());
             if (!toggle->isChecked())
               toggle->click();
-            if (shelf->isVisible())
+            if (shelf->isVisible()) {
               QVERIFY(stage->rect().contains(shelf->geometry()));
+              QVERIFY(radar->y() > shelf->geometry().bottom());
+            }
+            QCOMPARE(radar->width(), stage->width());
+            QCOMPARE(radar->geometry().bottom(), stage->rect().bottom());
           }
           auto tabs = window.findChild<QTabWidget *>();
           auto tool = window.findChild<QComboBox *>("nativeTool");

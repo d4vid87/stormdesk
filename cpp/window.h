@@ -45,8 +45,8 @@ private:
   QGridLayout *navigation;
   QList<QPushButton *> navButtons;
   QPushButton *refreshButton;
-  QLabel *clock, *location, *heroTemperature, *heroCondition, *heroSource,
-      *status, *alerts;
+  QLabel *clock, *clockDate, *location, *heroTemperature, *heroCondition,
+      *heroSource, *status, *alerts;
   std::array<QLabel *, 8> metricValues, metricSources;
   std::array<InstrumentFace *, 8> faces;
   WeatherGlyph *weatherGlyph;

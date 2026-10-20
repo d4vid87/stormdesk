@@ -164,15 +164,25 @@ Window::Window(Services &s, HttpServer &http)
   location = label("Your weather, at a glance", "muted");
   brand->addWidget(location);
   header->addLayout(brand, 1);
+  auto clockLayout = new QVBoxLayout;
+  clockLayout->setSpacing(0);
   clock = label({}, "clock");
+  clock->setObjectName("dashboardClock");
   clock->setAlignment(Qt::AlignRight);
-  header->addWidget(clock);
+  clockDate = label({}, "muted");
+  clockDate->setAlignment(Qt::AlignRight);
+  clockLayout->addWidget(clock);
+  clockLayout->addWidget(clockDate);
+  header->addLayout(clockLayout);
+  auto updateClock = [this] {
+    const auto now = QDateTime::currentDateTime();
+    clock->setText(now.toString("HH:mm:ss"));
+    clockDate->setText(now.toString("ddd d MMM"));
+  };
+  updateClock();
   auto timer = new QTimer(this);
   timer->start(1000);
-  connect(timer, &QTimer::timeout, this, [this] {
-    clock->setText(
-        QDateTime::currentDateTime().toString("ddd d MMM  •  HH:mm:ss"));
-  });
+  connect(timer, &QTimer::timeout, this, updateClock);
   layout->addLayout(header);
   navigation = new QGridLayout;
 #ifdef STORMDESK_SPEECH
@@ -1265,6 +1275,10 @@ void Window::applyTheme() {
       "QFrame#card {background:" +
       panel + ";border:1px solid " + border + ";border-radius:" + px(7) +
       "px;} QFrame#card QLabel {background:transparent;border:none;}"
+      "QLabel[kind=clock] {font-family:'Barlow Semi Condensed "
+      "Medium';font-size:" +
+      px(34) +
+      "px;font-weight:600;}"
       "QLabel[kind=brand] {font-size:" +
       px(21) +
       "px;font-weight:800;letter-spacing:2px;} QLabel[kind=eyebrow] {color:" +
@@ -1328,6 +1342,7 @@ void Window::arrange() {
   const double available = (width() - 60) / scaleFactor;
   const bool compact = available < 1050;
   clock->setVisible(!compact);
+  clockDate->setVisible(!compact);
   if (pages)
     for (auto form : pages->findChildren<QFormLayout *>()) {
       form->setRowWrapPolicy(compact ? QFormLayout::WrapAllRows
