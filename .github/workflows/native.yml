@@ -17,10 +17,12 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev qt6-webengine-dev libqt6sql6-sqlite libmosquitto-dev mosquitto mosquitto-clients libfuse2t64 patchelf desktop-file-utils
+      - run: sudo apt-get update && sudo apt-get install -y cmake g++ qt6-base-dev qt6-webengine-dev libqt6sql6-sqlite libmosquitto-dev mosquitto mosquitto-clients qt6-wayland libfuse2t64 patchelf desktop-file-utils
       - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build --parallel 2
       - run: ctest --test-dir build --output-on-failure
+      - if: always()
+        run: cat build/native-core-results.txt build/native-ui-results.txt
       - run: python3 cpp/integration_smoke.py build/stormdesk
       - run: cmake -S . -B build-headless -DSTORMDESK_GUI=OFF -DBUILD_TESTING=OFF && cmake --build build-headless --parallel 2
       - run: ./build-headless/stormdesk --version

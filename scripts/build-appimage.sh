@@ -32,6 +32,8 @@ DESTDIR="$appdir" cmake --install "$build" --prefix /usr
 export PATH="$tool_dir:$PATH"
 export APPIMAGE_EXTRACT_AND_RUN=1
 export QMAKE=${QMAKE:-$(command -v qmake6)}
+platforms=$("$QMAKE" -query QT_INSTALL_PLUGINS)/platforms
+export EXTRA_PLATFORM_PLUGINS=$(find "$platforms" -maxdepth 1 -name 'libqwayland*.so' -printf '%f\n' | sort | paste -sd ';')
 export VERSION=${STORMDESK_PACKAGE_VERSION:-5.0.0-preview.1}
 export OUTPUT="StormDesk_${VERSION}_${arch}.AppImage"
 cd "$output"
