@@ -73,6 +73,7 @@ int main(int argc, char **argv) {
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 #endif
 #ifdef STORMDESK_ANDROID_WEBVIEW
+    QCoreApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
     QtWebView::initialize();
 #endif
     app = std::make_unique<NativeApplication>(argc, argv);

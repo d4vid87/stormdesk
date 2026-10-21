@@ -25,7 +25,7 @@ namespace storm {
 static void fitDashboardWebView(int width) {
   QNativeInterface::QAndroidApplication::runOnAndroidMainThread([width]() -> QVariant {
     if (!QNativeInterface::QAndroidApplication::isActivityContext()) return {};
-    const auto activity = QNativeInterface::QAndroidApplication::context();
+    const QJniObject activity = QNativeInterface::QAndroidApplication::context();
     const auto decor = activity.callObjectMethod("getWindow", "()Landroid/view/Window;")
                                   .callObjectMethod("getDecorView", "()Landroid/view/View;");
     QJniEnvironment env;
