@@ -3,6 +3,7 @@ on:
   pull_request:
   push:
     branches: [main, cpp-rework]
+    paths: ['cpp/**', 'site/**', 'CMakeLists.txt', 'scripts/build-appimage.sh', 'scripts/AppImage.Dockerfile', '.github/workflows/native.yml', 'app-icon.png', 'LICENSE']
     tags: ["v*"]
   workflow_dispatch:
 concurrency:

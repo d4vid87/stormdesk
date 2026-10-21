@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 WORKDIR /src
 COPY site ./site
 COPY cpp ./cpp
-COPY CMakeLists.txt app-icon.png ./
+COPY CMakeLists.txt app-icon.png LICENSE ./
 RUN cmake -S . -B build -DSTORMDESK_GUI=OFF -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release \
     && cmake --build build --parallel 2 \
     && cmake --install build --prefix /stage
