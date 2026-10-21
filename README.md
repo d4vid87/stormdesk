@@ -51,7 +51,7 @@ Forecast and environmental guidance uses Open-Meteo and regional official source
 
 ## Migration status
 
-This branch is a native migration build. Windows, macOS, Linux x86-64/ARM64, and Android ARM64 builds are checked in [native CI](.github/workflows/native.yml). Build success does not establish physical-device acceptance. The native preview packages include a signed Android APK; Windows/macOS vendor signing and automatic native updates are not included yet; see the guide for current validation limits and optional integrations.
+This branch is a native migration build. Windows, macOS, Linux x86-64/ARM64, and Android ARM64 builds are checked in [native CI](.github/workflows/native.yml). Build success does not establish physical-device acceptance. The native preview packages include a signed Android APK, tested with actual Tempest readings on a Galaxy S24 Ultra running Android 16. Settings → App updates checks for official native releases automatically; installation remains explicit. Windows/macOS vendor signing is prepared but requires accounts/certificates, and physical Windows/Mac/Pi acceptance remains pending. See [release acceptance](docs/native-release-readiness.md) for the remaining checks.
 
 Keep a complete backup and the old app until your station and devices are verified. The native app uses its own data directory by default, preserves the SQLite observation schema and format-1 backups, and creates recovery backups before replacing data. The old `src-tauri/` source and manual legacy release workflow remain for rollback.
 
