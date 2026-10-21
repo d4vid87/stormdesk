@@ -160,9 +160,14 @@ void RadarStage::arrange() {
   const int radarTop =
       expanded ? std::min(height(), panelHeight + qRound(6 * scaleFactor)) : 0;
   radar->setGeometry(0, radarTop, width(), std::max(0, height() - radarTop));
+#ifdef STORMDESK_WEBENGINE
   const int buttonTop =
       radarTop +
       (radar->height() > 300 * scaleFactor ? qRound(96 * scaleFactor) : margin);
+#else
+  const int buttonTop = radarTop + margin;
+  radar->layout()->setContentsMargins(0, buttonHeight + 2 * margin, 0, 0);
+#endif
   toggle->setGeometry(margin, buttonTop,
                       std::min(panelWidth, toggle->sizeHint().width()),
                       buttonHeight);

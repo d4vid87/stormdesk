@@ -376,7 +376,7 @@ QWidget *Window::makeWeather() {
     heading->addWidget(title->widget(), 1);
     delete title;
     auto handle = new QToolButton;
-    handle->setText("⠿");
+    handle->setText("::");
     handle->setObjectName("gaugeHandle" + QString::number(i));
     handle->setProperty("gaugeIndex", i);
     handle->setAccessibleName("Move " + names[i]);
