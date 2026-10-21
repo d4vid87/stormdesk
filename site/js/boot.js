@@ -918,6 +918,9 @@ $('wiz-token').oninput = () => $('wiz-list').replaceChildren();
 function closeWizard() {
   $('wizard').close();
   $('wizard').hidden = true;
+  const frame = $('desk-radar-frame');
+  if (frame.src) frame.src = radarUrl(6.5);
+  loadDeskRadar();
 }
 $('btn-wiz-close').onclick = closeWizard;
 $('wizard').addEventListener('cancel', (event) => { event.preventDefault(); closeWizard(); });

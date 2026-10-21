@@ -21,8 +21,11 @@ const fs=require('node:fs');
   const saved=await page.evaluate(()=>{const s=JSON.parse(localStorage.getItem('wd.settings'));return {id:s.stationId,lat:s.lat,lon:s.lon,elevation:s.elevationM,active:s.activePlace}});
   assert.deepEqual(saved,{id:'123',lat:32.9,lon:-97.03,elevation:187,active:null});
   const site=await page.evaluate(async()=>{const b=await import('./js/boot.js');const s=await (await fetch('sites.json')).json();return b.nearestSite(32.9,-97.03,s).id});assert.equal(site,'KFWS');
+  await page.waitForFunction(()=>document.getElementById('wizard').hidden);
+  await page.waitForFunction(()=>document.getElementById('desk-radar-frame').src.includes('#goto=KFWS,'));
+  await page.locator('#instrument-connect').click();
   await page.locator('#wiz-token').fill('edited-fixture-token');assert.equal(await page.locator('#wiz-list button').count(),0);
   assert.deepEqual(errors,[]);await context.close();
  }
- await browser.close();console.log('PASS: single-station auto import, multiple-station choice, sensor/location/elevation, KFWS excluding TDWR, token edit invalidation');
+ await browser.close();console.log('PASS: single-station auto import, multiple-station choice, sensor/location/elevation, KFWS excluding TDWR, automatic radar startup, token edit invalidation');
 })().catch(e=>{console.error(e);process.exit(1)});
