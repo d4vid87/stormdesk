@@ -268,10 +268,7 @@ Window::Window(Services &s, HttpServer &http)
   tools = new Tools(services);
   pages->addWidget(scrollView(tools));
   connect(radarPage->findChild<Radar *>(), &Radar::warningsRequested, this,
-          [this] {
-            tools->findChild<QComboBox *>("nativeTool")->setCurrentIndex(6);
-            pages->setCurrentIndex(4);
-          });
+          &Window::openWarnings);
   connect(tools, &Tools::dashboardChanged, this, [this] {
     arrange();
     render();
@@ -342,7 +339,28 @@ QWidget *Window::makeWeather() {
       "notice");
   alerts->setObjectName("nwsAlertBanner");
   alerts->setAccessibleName("National Weather Service alerts");
-  alerts->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  alerts->setTextInteractionFlags(Qt::NoTextInteraction);
+  alerts->setAttribute(Qt::WA_TransparentForMouseEvents);
+  alertButton = new QPushButton;
+  alertButton->setObjectName("openNwsAlerts");
+  alertButton->setAccessibleName("View National Weather Service alert details");
+  alertButton->setToolTip(
+      "Read affected areas, expiration and official instructions");
+  alertButton->setCursor(Qt::PointingHandCursor);
+  auto bannerPolicy =
+      QSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+  bannerPolicy.setHeightForWidth(true);
+  alertButton->setSizePolicy(bannerPolicy);
+  alertButton->setMinimumWidth(0);
+  alertButton->setStyleSheet(
+      "QPushButton#openNwsAlerts "
+      "{border:0;padding:0;min-height:0;background:transparent;}"
+      "QPushButton#openNwsAlerts:focus {border:2px solid "
+      "palette(highlight);border-radius:8px;}");
+  auto bannerLayout = new QVBoxLayout(alertButton);
+  bannerLayout->setContentsMargins(0, 0, 0, 0);
+  bannerLayout->addWidget(alerts);
+  connect(alertButton, &QPushButton::clicked, this, &Window::openWarnings);
   metrics = new QGridLayout;
   metrics->setSpacing(12);
   layout->addLayout(metrics);
@@ -475,21 +493,22 @@ QWidget *Window::makeWeather() {
   auto liveRadar = new Radar(services, nullptr, true);
   liveRadar->setObjectName("dashboardRadar");
   dashboardRadarCard = liveRadar;
-  connect(liveRadar, &Radar::warningsRequested, this, [this] {
-    tools->findChild<QComboBox *>("nativeTool")->setCurrentIndex(6);
-    pages->setCurrentIndex(4);
-  });
+  connect(liveRadar, &Radar::warningsRequested, this, &Window::openWarnings);
   layout->addStretch();
   radarStage = new RadarStage(liveRadar, scrollView(page));
   auto dashboard = new QWidget;
   auto dashboardLayout = new QVBoxLayout(dashboard);
   dashboardLayout->setContentsMargins(0, 0, 0, 0);
-  dashboardLayout->addWidget(alerts);
+  dashboardLayout->addWidget(alertButton);
   dashboardLayout->addWidget(radarStage, 1);
   arrange();
   return dashboard;
 }
 QWidget *Window::makeRadar() { return scrollView(new Radar(services)); }
+void Window::openWarnings() {
+  tools->findChild<QComboBox *>("nativeTool")->setCurrentIndex(6);
+  pages->setCurrentIndex(4);
+}
 void Window::openRadar() {
   if (auto radar = radarPage->findChild<Radar *>())
     radar->refresh();
@@ -1612,6 +1631,8 @@ void Window::render() {
                  ? services.warningStatus + " · No active warnings returned"
                  : services.warningStatus)
           : warningText.join("\n"));
+  alerts->setText(alerts->text() + "   ·   View details →");
+  alertButton->setAccessibleDescription(alerts->text());
   status->setText(services.forecastStatus + "   ·   Home network port " +
                   QString::number(server.serverPort()));
   if (pages->currentIndex() == 2)

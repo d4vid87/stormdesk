@@ -44,7 +44,7 @@ private:
   QComboBox *scaleBox, *pageSelect;
   QGridLayout *navigation;
   QList<QPushButton *> navButtons;
-  QPushButton *refreshButton;
+  QPushButton *refreshButton, *alertButton;
   QLabel *clock, *clockDate, *location, *heroTemperature, *heroCondition,
       *heroSource, *status, *alerts;
   std::array<QLabel *, 8> metricValues, metricSources;
@@ -83,6 +83,7 @@ private:
   void saveSettings();
   void loadSettings();
   void openRadar();
+  void openWarnings();
   void backup();
   void restore();
   void exportCsv();

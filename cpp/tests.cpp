@@ -15,9 +15,188 @@
 #include <limits>
 
 using namespace storm;
+class ScriptedServices : public Services {
+public:
+  using Services::Services;
+  QList<QPair<QJsonDocument, QString>> replies;
+  QList<QUrl> requested;
+  int completed = 0;
+  void request(const QUrl &url,
+               std::function<void(QJsonDocument, QString)> callback,
+               const QByteArray & = {}, const QByteArray & = {},
+               const QByteArray & = "GET") override {
+    requested << url;
+    const auto reply = replies.isEmpty()
+                           ? QPair<QJsonDocument, QString>{{}, "Offline"}
+                           : replies.takeFirst();
+    QTimer::singleShot(0, this, [this, callback, reply] {
+      ++completed;
+      callback(reply.first, reply.second);
+    });
+  }
+};
+static QJsonDocument forecastFixture(double temperature = 19) {
+  const auto now = QDateTime::currentSecsSinceEpoch();
+  const auto day = now - now % 86400;
+  return QJsonDocument(QJsonObject{
+      {"current",
+       QJsonObject{{"temperature_2m", temperature}, {"weather_code", 0}}},
+      {"utc_offset_seconds", 0},
+      {"daily", QJsonObject{{"time", QJsonArray{double(day)}},
+                            {"sunrise", QJsonArray{double(day + 21600)}},
+                            {"sunset", QJsonArray{double(day + 64800)}}}}});
+}
 class CoreTest : public QObject {
   Q_OBJECT
 private slots:
+  void forecastRetriesAndRestoresSavedData() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    cfg.value = {{"settings", QJsonObject{{"lat", 32.6}, {"lon", -97.3}}}};
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    ScriptedServices services(cfg, db);
+    services.replies = {{{}, "Offline"}, {forecastFixture(), {}}};
+    services.pollForecast();
+    QTRY_COMPARE(services.completed, 1);
+    auto timer = services.findChild<QTimer *>("forecastRefresh");
+    QVERIFY(timer && timer->isActive());
+    QCOMPARE(timer->interval(), 30000);
+    QVERIFY(services.forecast.isEmpty());
+    QVERIFY(services.forecastStatus.contains("retrying in 30 seconds"));
+    timer->start(1);
+    QTRY_COMPARE(services.completed, 2);
+    QCOMPARE(services.forecast.value("current")
+                 .toObject()
+                 .value("temperature_2m")
+                 .toDouble(),
+             19.0);
+    QCOMPARE(timer->interval(), 900000);
+    QVERIFY(!db.meta("native_forecast:32.6,-97.3").isEmpty());
+    ScriptedServices resumed(cfg, db);
+    resumed.pollForecast();
+    QCOMPARE(resumed.forecast.value("current")
+                 .toObject()
+                 .value("temperature_2m")
+                 .toDouble(),
+             19.0);
+    QTRY_COMPARE(resumed.completed, 1);
+    QVERIFY(resumed.forecastStatus.contains("saved data from"));
+    QCOMPARE(
+        resumed.snapshot().value("forecast").toObject().value("updated_at"),
+        resumed.forecast.value("_at"));
+    auto retry = resumed.findChild<QTimer *>("forecastRefresh");
+    for (int interval : {60000, 120000, 240000, 300000, 300000}) {
+      const int next = resumed.completed + 1;
+      retry->start(1);
+      QTRY_COMPARE(resumed.completed, next);
+      QCOMPARE(retry->interval(), interval);
+    }
+    resumed.replies = {{forecastFixture(21), {}}};
+    retry->start(1);
+    QTRY_COMPARE(resumed.forecast.value("current")
+                     .toObject()
+                     .value("temperature_2m")
+                     .toDouble(),
+                 21.0);
+    QCOMPARE(retry->interval(), 900000);
+    cfg.value = {{"settings", QJsonObject{{"lat", 35.3}, {"lon", -97.2}}}};
+    resumed.pollForecast();
+    QVERIFY(resumed.forecast.isEmpty());
+    QTRY_VERIFY(resumed.forecastStatus.contains("retrying in 30 seconds"));
+  }
+  void forecastRejectsInvalidSavedResponses() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    cfg.value = {{"settings", QJsonObject{{"lat", 32.6}, {"lon", -97.3}}}};
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    auto cached = forecastFixture().object();
+    cached["_location"] = "32.6,-97.3";
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    for (qint64 at : {now - 86401, now + 3600}) {
+      cached["_at"] = double(at);
+      QVERIFY(db.setMeta("native_forecast:32.6,-97.3",
+                         QString::fromUtf8(QJsonDocument(cached).toJson())));
+      ScriptedServices services(cfg, db);
+      services.pollForecast();
+      QVERIFY(services.forecast.isEmpty());
+      QTRY_COMPARE(services.completed, 1);
+    }
+    cached["_at"] = double(now);
+    cached["_location"] = "40,-105";
+    QVERIFY(db.setMeta("native_forecast:32.6,-97.3",
+                       QString::fromUtf8(QJsonDocument(cached).toJson())));
+    ScriptedServices services(cfg, db);
+    services.replies = {
+        {QJsonDocument(QJsonObject{{"current", QJsonObject()}}), {}}};
+    services.pollForecast();
+    QVERIFY(services.forecast.isEmpty());
+    QTRY_COMPARE(services.completed, 1);
+    QVERIFY(services.forecastStatus.contains("Forecast unavailable"));
+  }
+  void tempestCloudRecoversAndRestarts() {
+    QTemporaryDir dir;
+    const auto configPath = dir.filePath("config.json");
+    const auto dbPath = dir.filePath("db");
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    auto observation = [](qint64 at, double temperature) {
+      Reading reading{};
+      reading[0] = double(at);
+      reading[7] = temperature;
+      return QJsonDocument(QJsonObject{{"obs", QJsonArray{toJson(reading)}}});
+    };
+    QString error;
+    {
+      Config cfg(configPath);
+      QVERIFY(cfg.save(
+          {{"settings", QJsonObject{{"stationSource", "tempest"},
+                                    {"stationId", "123"},
+                                    {"deviceId", "456"},
+                                    {"token", "fixture-token"},
+                                    {"nativeTempestConnection", "cloud"}}}},
+          &error));
+      Archive db(dbPath);
+      QVERIFY(db.open(&error));
+      QVERIFY(db.setMeta("backfill_done", "1"));
+      ScriptedServices services(cfg, db);
+      services.replies = {{observation(now - 120, 20), {}},
+                          {{}, "Offline"},
+                          {observation(now - 60, 21), {}}};
+      QVERIFY(services.start(&error, false));
+      QTRY_COMPARE(services.completed, 1);
+      QCOMPARE(*services.observation[7], 20.0);
+      auto timer = services.findChild<QTimer *>("stationRefresh");
+      QVERIFY(timer && timer->isActive());
+      QCOMPARE(timer->interval(), 10000);
+      QVERIFY(QMetaObject::invokeMethod(timer, "timeout"));
+      QTRY_COMPARE(services.completed, 2);
+      QVERIFY(services.stationStatus.contains("Offline"));
+      QCOMPARE(*services.observation[7], 20.0);
+      QVERIFY(QMetaObject::invokeMethod(timer, "timeout"));
+      QTRY_COMPARE(services.completed, 3);
+      QCOMPARE(*services.observation[7], 21.0);
+      QVERIFY(services.stationStatus.startsWith("Live"));
+      QCOMPARE(services.requested.last().path(),
+               QString("/swd/rest/observations/device/456"));
+      QCOMPARE(db.health().value("rows").toInt(), 2);
+    }
+    {
+      Config cfg(configPath);
+      QVERIFY(cfg.load(&error));
+      Archive db(dbPath);
+      QVERIFY(db.open(&error));
+      ScriptedServices resumed(cfg, db);
+      resumed.replies = {{observation(now, 22), {}}};
+      QVERIFY(resumed.start(&error, false));
+      QCOMPARE(*resumed.observation[7], 21.0);
+      QTRY_COMPARE(resumed.completed, 1);
+      QCOMPARE(*resumed.observation[7], 22.0);
+      QCOMPARE(db.health().value("rows").toInt(), 3);
+    }
+  }
   void hookEchoFollowsSelectedPlace() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));

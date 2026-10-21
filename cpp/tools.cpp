@@ -48,6 +48,12 @@ static QString stamp(qint64 at, int offset) {
   return QDateTime::fromSecsSinceEpoch(at + offset, Qt::UTC)
       .toString("ddd d MMM HH:mm");
 }
+static QString alertTime(const QJsonValue &value) {
+  const auto time = QDateTime::fromString(value.toString(), Qt::ISODate);
+  return time.isValid()
+             ? time.toLocalTime().toString("ddd d MMM yyyy, h:mm AP t")
+             : "Not supplied";
+}
 static QTableWidget *table(QVBoxLayout *body, const QStringList &headers,
                            const QList<QStringList> &rows) {
   auto t = new QTableWidget(rows.size(), headers.size());
@@ -917,15 +923,42 @@ void Tools::render() {
                  : fire.join("\n")));
   } else if (index == 6) {
     heading("Official warnings");
-    for (const auto &v : s.warnings) {
-      auto p = v.toObject().value("properties").toObject();
-      body->addWidget(text(p.value("headline").toString() + "\n" +
-                           p.value("description").toString() + "\n" +
-                           p.value("instruction").toString()));
+    QList<QJsonObject> warnings;
+    for (const auto &v : s.warnings)
+      warnings << v.toObject().value("properties").toObject();
+    const QStringList severityOrder{"Unknown", "Minor", "Moderate", "Severe",
+                                    "Extreme"};
+    std::stable_sort(
+        warnings.begin(), warnings.end(),
+        [&severityOrder](const auto &a, const auto &b) {
+          return severityOrder.indexOf(a.value("severity").toString()) >
+                 severityOrder.indexOf(b.value("severity").toString());
+        });
+    for (const auto &p : warnings) {
+      heading(p.value("event").toString("Weather alert"));
+      body->addWidget(text(p.value("headline").toString()));
+      auto metadata = text(
+          "Severity: " + p.value("severity").toString("Unknown") +
+          "\nAffected areas: " + p.value("areaDesc").toString("Not supplied") +
+          "\nIssued (device time): " + alertTime(p.value("sent")) +
+          "\nEffective (device time): " + alertTime(p.value("effective")) +
+          "\nExpires (device time): " + alertTime(p.value("expires")) +
+          "\nEvent ends (device time): " + alertTime(p.value("ends")));
+      metadata->setObjectName("nwsAlertMetadata");
+      body->addWidget(metadata);
+      body->addWidget(
+          text(p.value("description").toString("No description supplied.")));
+      body->addWidget(
+          text("Instructions\n" +
+               p.value("instruction")
+                   .toString("No additional instructions supplied.")));
     }
     if (s.warnings.isEmpty())
-      body->addWidget(
-          text(s.warningStatus + " · no active warnings in the current feed"));
+      body->addWidget(text(s.warningStatus == "US National Weather Service"
+                               ? "No active warnings in the current NWS feed."
+                           : s.warningStatus.isEmpty()
+                               ? "Waiting for official warnings…"
+                               : s.warningStatus));
     for (int day = 1; day <= 3; ++day) {
       auto geo = advanced.data.value("spc" + QString::number(day)).object();
       auto risk = outlookRisk(geo, s.config.location().value("lat").toDouble(),

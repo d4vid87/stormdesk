@@ -34,11 +34,11 @@ public:
   void receivePacket(QJsonObject packet);
   QJsonObject snapshot() const;
   QUrl radarUrl() const;
-  void request(const QUrl &url,
-               std::function<void(QJsonDocument, QString)> callback,
-               const QByteArray &body = {},
-               const QByteArray &authorization = {},
-               const QByteArray &method = "GET");
+  virtual void request(const QUrl &url,
+                       std::function<void(QJsonDocument, QString)> callback,
+                       const QByteArray &body = {},
+                       const QByteArray &authorization = {},
+                       const QByteArray &method = "GET");
   void push(const QString &title, const QString &message);
 signals:
   void discoveryRequested();
@@ -56,6 +56,7 @@ private:
   QHash<QString, bool> latched;
   QString rulesRevision, warningLocation;
   bool forecastBusy = false, stationBusy = false, warningsBusy = false;
+  int forecastRetryMs = 30000;
   void takeFields(const QJsonObject &fields, qint64 rawTime, int source,
                   const QString &origin);
   void pollLaCrosse();

@@ -268,6 +268,61 @@ private slots:
     QVERIFY(banner->text().contains("unavailable"));
     QVERIFY(!banner->text().contains("No active warnings"));
   }
+  void alertBannerOpensOfficialDetails() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    services.warningStatus = "US National Weather Service";
+    services.warnings = QJsonArray{QJsonObject{
+        {"properties",
+         QJsonObject{
+             {"event", "Severe Thunderstorm Warning"},
+             {"severity", "Severe"},
+             {"headline", "Thunderstorm warning for Test County"},
+             {"areaDesc", "Test County; Neighbor County"},
+             {"sent", "2030-06-01T12:00:00Z"},
+             {"effective", "2030-06-01T12:01:00Z"},
+             {"expires", "2030-06-01T13:00:00Z"},
+             {"ends", "2030-06-01T12:45:00Z"},
+             {"description", "Large hail and damaging wind are possible."},
+             {"instruction", "Move indoors to an interior room."}}}}};
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    Window window(services, server);
+    window.applyScale(1);
+    window.show();
+    auto banner = window.findChild<QPushButton *>("openNwsAlerts");
+    QVERIFY(banner && banner->isVisible());
+    QVERIFY(banner->accessibleDescription().contains("Severe"));
+    banner->setFocus();
+    QTest::keyClick(banner, Qt::Key_Space);
+    auto pages = window.findChild<QStackedWidget *>();
+    QCOMPARE(pages->currentIndex(), 4);
+    QCOMPARE(window.findChild<QComboBox *>("nativeTool")->currentIndex(), 6);
+    QTRY_VERIFY(window.findChild<QLabel *>("nwsAlertMetadata") &&
+                window.findChild<QLabel *>("nwsAlertMetadata")->isVisible());
+    auto metadata = window.findChild<QLabel *>("nwsAlertMetadata");
+    QVERIFY(metadata->text().contains(
+        "Affected areas: Test County; Neighbor County"));
+    const auto expires =
+        QDateTime::fromString("2030-06-01T13:00:00Z", Qt::ISODate)
+            .toLocalTime()
+            .toString("ddd d MMM yyyy, h:mm AP t");
+    QVERIFY(metadata->text().contains("Expires (device time): " + expires));
+    bool description = false, instructions = false;
+    for (auto label : window.findChildren<QLabel *>()) {
+      description |= label->text().contains("Large hail and damaging wind");
+      instructions |=
+          label->text().contains("Move indoors to an interior room");
+    }
+    QVERIFY(description && instructions);
+    pages->setCurrentIndex(0);
+    QTest::mouseClick(banner, Qt::LeftButton);
+    QCOMPARE(pages->currentIndex(), 4);
+  }
   void tempestImportDrivesWarningsAndRadar() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));
@@ -543,12 +598,14 @@ private slots:
       QVERIFY(
           window.grab().save(qEnvironmentVariable("STORMDESK_TOOLS_CAPTURE")));
     Reading invalid{};
-    invalid[0] = double(now);
+    const auto windTime = QDateTime(QDate::currentDate(), QTime(12, 0), Qt::UTC)
+                              .toSecsSinceEpoch();
+    invalid[0] = double(windTime - 1);
     invalid[2] = 1;
     invalid[4] = -999;
     invalid[7] = 20;
     QVERIFY(db.insert(invalid, 0, "tempest:fixture", &error));
-    invalid[0] = double(now + 1);
+    invalid[0] = double(windTime);
     invalid[4] = 90;
     QVERIFY(db.insert(invalid, 0, "tempest:fixture", &error));
     tools->advanced.fetched["normals"] = now;

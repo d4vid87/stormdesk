@@ -41,6 +41,10 @@ Services::Services(Config &cfg, Archive &db, QObject *parent)
                             QString::fromUtf8(QJsonDocument(log).toJson(
                                 QJsonDocument::Compact)));
           });
+  forecastTimer.setParent(this);
+  forecastTimer.setObjectName("forecastRefresh");
+  stationTimer.setParent(this);
+  stationTimer.setObjectName("stationRefresh");
   connect(&stationTimer, &QTimer::timeout, this, &Services::pollStation);
   connect(&forecastTimer, &QTimer::timeout, this, &Services::pollForecast);
   connect(&warningTimer, &QTimer::timeout, this, &Services::pollWarnings);
@@ -146,6 +150,7 @@ void Services::resetRuntime() {
   lastRulesAt = 0;
   backfillEmpty = 0;
   forecast = {};
+  forecastRetryMs = 30000;
   warnings = {};
   warningLocation.clear();
   warningStatus.clear();
@@ -160,15 +165,33 @@ void Services::pollForecast() {
     return;
   const double lat = config.location().value("lat").toDouble(999),
                lon = config.location().value("lon").toDouble(999);
-  if (std::abs(lat) > 90 || std::abs(lon) > 180) {
+  if (!std::isfinite(lat) || !std::isfinite(lon) || std::abs(lat) > 90 ||
+      std::abs(lon) > 180) {
     forecastStatus = "Invalid location";
     emit changed();
     return;
   }
   const auto location =
       QString::number(lat, 'g', 12) + "," + QString::number(lon, 'g', 12);
+  if (forecast.contains("_location") && forecast.value("_location") != location)
+    forecast = {};
+  if (forecast.isEmpty()) {
+    const auto saved = QJsonDocument::fromJson(
+                           archive.meta("native_forecast:" + location).toUtf8())
+                           .object();
+    const auto at = saved.value("_at").toDouble();
+    if (saved.value("_location") == location && at > now() - 86400 &&
+        at <= now() + 60 &&
+        saved.value("current").toObject().value("temperature_2m").isDouble())
+      forecast = saved;
+  }
   forecastBusy = true;
-  forecastStatus = "Updating forecast…";
+  forecastStatus = forecast.isEmpty()
+                       ? "Updating forecast…"
+                       : "Updating forecast… · saved data from " +
+                             QDateTime::fromSecsSinceEpoch(
+                                 qint64(forecast.value("_at").toDouble()))
+                                 .toString("ddd h:mm AP");
   emit changed();
   auto url = queryUrl(
       "https://api.open-meteo.com/v1/forecast",
@@ -200,14 +223,33 @@ void Services::pollForecast() {
       pollForecast();
       return;
     }
-    if (!error.isEmpty() || !doc.object().contains("current"))
-      forecastStatus = error.isEmpty() ? "Forecast unavailable" : error;
-    else {
+    if (!error.isEmpty() || !doc.object()
+                                 .value("current")
+                                 .toObject()
+                                 .value("temperature_2m")
+                                 .isDouble()) {
+      forecastStatus = (error.isEmpty() ? "Forecast unavailable" : error) +
+                       " · retrying in " +
+                       QString::number(forecastRetryMs / 1000) + " seconds";
+      if (!forecast.isEmpty())
+        forecastStatus += " · saved data from " +
+                          QDateTime::fromSecsSinceEpoch(
+                              qint64(forecast.value("_at").toDouble()))
+                              .toString("ddd h:mm AP");
+      forecastTimer.start(forecastRetryMs);
+      forecastRetryMs = std::min(forecastRetryMs * 2, 300000);
+    } else {
       forecast = doc.object();
       forecast["_at"] = double(now());
       forecast["_location"] = location;
-      forecastStatus =
-          "Forecast updated " + QDateTime::currentDateTime().toString("HH:mm");
+      forecastRetryMs = 30000;
+      forecastTimer.start(900000);
+      forecastStatus = "Forecast updated " +
+                       QDateTime::currentDateTime().toString("h:mm AP");
+      if (!archive.setMeta("native_forecast:" + location,
+                           QString::fromUtf8(QJsonDocument(forecast).toJson(
+                               QJsonDocument::Compact))))
+        forecastStatus += " · offline copy unavailable";
     }
     emit changed();
   });
@@ -680,6 +722,8 @@ QJsonObject Services::snapshot() const {
           {"current", current.isEmpty() ? QJsonValue() : QJsonValue(current)},
           {"forecast",
            QJsonObject{{"days", days},
+                       {"updated_at", forecast.value("_at")},
+                       {"status", forecastStatus},
                        {"location",
                         QJsonObject{{"name", config.location().value("name")},
                                     {"lat", config.location().value("lat")},
