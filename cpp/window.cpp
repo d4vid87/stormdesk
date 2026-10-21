@@ -18,9 +18,11 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QJsonDocument>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QNetworkReply>
 #include <QPainter>
 #include <QPainterPath>
@@ -37,6 +39,7 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
+#include <QTouchEvent>
 #include <QUrlQuery>
 #include <algorithm>
 #include <cmath>
@@ -150,7 +153,7 @@ Window::Window(Services &s, HttpServer &http)
   static const int condensedFont = QFontDatabase::addApplicationFont(
       ":/fonts/barlow-semi-condensed-500.ttf");
   Q_UNUSED(condensedFont);
-  setWindowTitle("StormDesk · Instrument");
+  setWindowTitle("STORMDESK");
   setWindowIcon(QIcon(":/app-icon.png"));
   setMinimumSize(240, 240);
   auto root = new QWidget;
@@ -162,9 +165,10 @@ Window::Window(Services &s, HttpServer &http)
   auto header = new QHBoxLayout;
   auto brand = new QVBoxLayout;
   brand->setSpacing(2);
-  brand->addWidget(label("STORMDESK / INSTRUMENT", "brand"));
+  brand->addWidget(label("STORMDESK", "brand"));
   location = label("Your weather, at a glance", "muted");
   brand->addWidget(location);
+  location->hide();
   header->addLayout(brand, 1);
   auto clockLayout = new QVBoxLayout;
   clockLayout->setSpacing(0);
@@ -192,7 +196,7 @@ Window::Window(Services &s, HttpServer &http)
 #endif
   pages = new QStackedWidget;
   pages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-  const QStringList titles = {"Weather", "Radar", "History", "Settings",
+  const QStringList titles = {"Dashboard", "Radar", "History", "Settings",
                               "Tools"};
   for (int i = 0; i < titles.size(); ++i) {
     auto button = new QPushButton(titles[i]);
@@ -237,28 +241,14 @@ Window::Window(Services &s, HttpServer &http)
     scaleBox->addItem(QString::number(percent) + "%", percent / 100.0);
   connect(scaleBox, &QComboBox::activated, this,
           [this](int i) { applyScale(scaleBox->itemData(i).toDouble()); });
-  navigation->addWidget(scaleBox, 0, 6);
+  navigation->addWidget(scaleBox, 0, 7);
   refreshButton = new QPushButton("Refresh");
   connect(refreshButton, &QPushButton::clicked, &services, &Services::refresh);
-  navigation->addWidget(refreshButton, 0, 7);
+  navigation->addWidget(refreshButton, 0, 6);
   setupButton = new QPushButton("Connect station");
   setupButton->setObjectName("connectStation");
   connect(setupButton, &QPushButton::clicked, this, &Window::setup);
-  motionButton = new QPushButton("Pause icons");
-  motionButton->setObjectName("weatherMotion");
-  connect(motionButton, &QPushButton::clicked, this, [this] {
-    QString error;
-    const bool enabled =
-        services.config.settings().value("nativeMotion").toBool(true);
-    if (services.config.merge(
-            {{"_rev", services.config.value.value("_rev").toDouble()},
-             {"settings", QJsonObject{{"nativeMotion", !enabled}}}},
-            &error) >= 400)
-      status->setText(error);
-    render();
-  });
-  navigation->addWidget(setupButton, 0, 8);
-  navigation->addWidget(motionButton, 0, 9);
+
   layout->addLayout(navigation);
   pages->addWidget(makeWeather());
   radarPage = makeRadar();
@@ -369,8 +359,23 @@ QWidget *Window::makeWeather() {
                              "Humidity",           "Dew point"};
   for (int i = 0; i < names.size(); ++i) {
     QVBoxLayout *box;
-    auto widget = card(
-        QString::number(i + 1).rightJustified(2, '0') + " / " + names[i], &box);
+    auto widget = card(names[i], &box);
+    auto title = box->takeAt(0);
+    auto heading = new QHBoxLayout;
+    heading->addWidget(title->widget(), 1);
+    delete title;
+    auto handle = new QToolButton;
+    handle->setText("⠿");
+    handle->setObjectName("gaugeHandle" + QString::number(i));
+    handle->setProperty("gaugeIndex", i);
+    handle->setAccessibleName("Move " + names[i]);
+    handle->setToolTip("Drag within the gauge row, or use Alt + Left / Right");
+    handle->setFocusPolicy(Qt::StrongFocus);
+    handle->setCursor(Qt::OpenHandCursor);
+    handle->setAttribute(Qt::WA_AcceptTouchEvents);
+    handle->installEventFilter(this);
+    heading->addWidget(handle);
+    box->insertLayout(0, heading);
     widget->setMinimumWidth(0);
     box->setSpacing(2);
     box->setContentsMargins(8, 5, 8, 5);
@@ -686,6 +691,9 @@ QWidget *Window::makeSettings() {
         ->setText(place.value("name").toString());
   });
   auto station = section("My station");
+  station->addRow(setupButton);
+  body->removeWidget(contextCard);
+  station->addRow(contextCard);
   choice(station, "Station source", "stationSource",
          {{"Forecast only", ""},
           {"WeatherFlow Tempest", "tempest"},
@@ -768,7 +776,8 @@ QWidget *Window::makeSettings() {
   auto themes = qobject_cast<QComboBox *>(editors.value("theme"));
   themes->addItem("Follow daylight", "auto");
   text(appearance, "Accent color (optional)", "accent");
-  check(appearance, "Animate icons", "nativeMotion");
+  check(appearance, "Icon animation", "nativeMotion")
+      ->setObjectName("iconAnimation");
 #ifdef STORMDESK_SPEECH
   QList<QPair<QString, QString>> voices{{"System default", ""}};
   for (const auto &voice : findChild<QTextToSpeech *>()->availableVoices())
@@ -1182,8 +1191,8 @@ void Window::applyScale(double value) {
   QApplication::setFont(font);
   for (auto face : faces)
     face->setScale(scaleFactor * .48);
-  weatherGlyph->setScale(scaleFactor * .42);
-  sunCycle->setScale(scaleFactor * .60);
+  weatherGlyph->setScale(scaleFactor * .8);
+  sunCycle->setScale(scaleFactor);
   radarStage->setScale(scaleFactor);
   for (auto radar : findChildren<Radar *>())
     radar->setScale(scaleFactor);
@@ -1255,22 +1264,17 @@ void Window::applyTheme() {
       "px;font-family:'Barlow Semi Condensed Medium','Arial Narrow','DejaVu "
       "Sans "
       "Condensed';font-weight:500;} QLabel[kind=temperature] {font-size:" +
-      px(42) +
+      px(64) +
       "px;font-weight:600;}"
       "QLabel[kind=subtitle] {font-size:" +
       px(24) + "px;font-weight:600;} QLabel[kind=notice] {padding:" + px(12) +
       "px;border:1px solid " + border + ";border-radius:8px;color:" + accent +
       ";}"
-      "QLabel#nwsAlertBanner[severity=Extreme] "
-      "{background:#651b32;border-color:#ff4d6d;color:#fff0f3;}"
-      "QLabel#nwsAlertBanner[severity=Severe] "
-      "{background:#5a261c;border-color:#ff784f;color:#fff1eb;}"
-      "QLabel#nwsAlertBanner[severity=Moderate] "
-      "{background:#4a3a12;border-color:#f5c451;color:#fff3cf;}"
-      "QLabel#nwsAlertBanner[severity=Minor] "
-      "{background:#17364a;border-color:#75c9f1;color:#e5f6ff;}"
-      "QLabel#nwsAlertBanner[severity=Unknown] "
-      "{background:#29313f;border-color:#94a3b8;color:#f1f5f9;}"
+      "QToolButton "
+      "{background:transparent;border:0;padding:2px;min-height:24px;}"
+      "QFrame#card[gaugeDrop=true] {border:2px solid " +
+      accent +
+      ";}"
       "QPushButton,QComboBox,QLineEdit,QDoubleSpinBox {background:" +
       panel + ";border:1px solid " + border + ";border-radius:6px;padding:" +
       px(8) + "px " + px(12) + "px;min-height:" + px(20) +
@@ -1311,6 +1315,25 @@ void Window::applyTheme() {
       ";border-radius:8px;}"
       "QScrollArea#instrumentShelf>QWidget>QWidget {background:" +
       background + ";}");
+  styleAlerts();
+}
+void Window::styleAlerts() {
+  if (!alerts)
+    return;
+  const QColor event(alerts->property("eventColor").toString());
+  if (!event.isValid()) {
+    alerts->setStyleSheet({});
+    return;
+  }
+  const auto base = palette().color(QPalette::Window);
+  QColor tint(qRound(base.red() * .92 + event.red() * .08),
+              qRound(base.green() * .92 + event.green() * .08),
+              qRound(base.blue() * .92 + event.blue() * .08));
+  alerts->setStyleSheet(
+      QString("background:%1;color:%2;border:1px solid %3;border-left:4px "
+              "solid %3;border-radius:6px;padding:8px;")
+          .arg(tint.name(), palette().color(QPalette::WindowText).name(),
+               event.name()));
 }
 void Window::arrange() {
   if (!metrics || !body)
@@ -1334,20 +1357,14 @@ void Window::arrange() {
   navigation->removeWidget(scaleBox);
   navigation->removeWidget(refreshButton);
   navigation->removeWidget(pageSelect);
-  navigation->removeWidget(setupButton);
-  navigation->removeWidget(motionButton);
   navigation->setColumnStretch(5, compact ? 0 : 1);
   if (compact) {
     navigation->addWidget(pageSelect, 0, 0, 1, 2);
-    navigation->addWidget(scaleBox, 1, 0);
-    navigation->addWidget(refreshButton, 1, 1);
-    navigation->addWidget(setupButton, 2, 0);
-    navigation->addWidget(motionButton, 2, 1);
+    navigation->addWidget(refreshButton, 1, 0);
+    navigation->addWidget(scaleBox, 1, 1);
   } else {
-    navigation->addWidget(scaleBox, 0, 6);
-    navigation->addWidget(refreshButton, 0, 7);
-    navigation->addWidget(setupButton, 0, 8);
-    navigation->addWidget(motionButton, 0, 9);
+    navigation->addWidget(refreshButton, 0, 6);
+    navigation->addWidget(scaleBox, 0, 7);
   }
   const int columns = available >= 1200  ? 8
                       : available >= 650 ? 4
@@ -1361,7 +1378,10 @@ void Window::arrange() {
                              "Heat stress / WBGT", "UV index",  "Pressure",
                              "Humidity",           "Dew point"};
   QList<int> indices;
-  for (const auto &v : order) {
+  const auto savedOrder = local.value("gaugeOrder").toStringList();
+  const auto preferred =
+      savedOrder.isEmpty() ? order : QJsonArray::fromStringList(savedOrder);
+  for (const auto &v : preferred) {
     int i = names.indexOf(v.toString());
     if (i >= 0 && !indices.contains(i))
       indices << i;
@@ -1369,6 +1389,7 @@ void Window::arrange() {
   for (int i = 0; i < metricCards.size(); ++i)
     if (!indices.contains(i))
       indices << i;
+  gaugeOrder = indices;
   for (auto widget : metricCards)
     metrics->removeWidget(widget);
   int cell = 0;
@@ -1392,27 +1413,137 @@ void Window::arrange() {
        QList<QWidget *>{heroHeading, heroSource, detail, heroTemperature,
                         heroCondition, weatherGlyph})
     heroLayout->removeWidget(widget);
-  heroHeading->hide();
-  heroLayout->addWidget(heroTemperature, 0, 0);
-  heroLayout->addWidget(weatherGlyph, 0, 1, 2, 1);
-  heroLayout->addWidget(heroCondition, 1, 0);
-  heroLayout->addWidget(heroSource, 2, 0, 1, 2);
-  heroLayout->addWidget(detail, 3, 0, 1, 2);
-  for (auto widget :
-       {currentCard, static_cast<QWidget *>(sunCycle), contextCard})
+  heroHeading->show();
+  heroHeading->setProperty("kind", "eyebrow");
+  heroLayout->addWidget(heroHeading, 0, 0);
+  heroLayout->addWidget(heroTemperature, 1, 0);
+  heroLayout->addWidget(weatherGlyph, 0, 1, 3, 1);
+  heroLayout->addWidget(heroCondition, 2, 0);
+  heroLayout->addWidget(heroSource, 3, 0, 1, 2);
+  heroLayout->addWidget(detail, 4, 0, 1, 2);
+  for (auto widget : {currentCard, static_cast<QWidget *>(sunCycle)})
     body->removeWidget(widget);
   contextCard->findChild<QHBoxLayout *>("contextActions")
       ->setDirection(available < 650 ? QBoxLayout::TopToBottom
                                      : QBoxLayout::LeftToRight);
-  const int contextColumns = available >= 1050 ? 3 : 1;
+  const int contextColumns = available >= 850 ? 2 : 1;
   body->addWidget(currentCard, 0, 0);
   body->addWidget(sunCycle, 1 / contextColumns, 1 % contextColumns);
-  body->addWidget(contextCard, 2 / contextColumns, 2 % contextColumns);
   for (int col = 0; col < 3; ++col)
-    body->setColumnStretch(col, col < contextColumns ? 1 : 0);
-  contextCard->setVisible(!hidden.contains("Your local context"));
+    body->setColumnStretch(col, col < contextColumns ? (col == 1 ? 2 : 1) : 0);
   dashboardRadarCard->setVisible(!hidden.contains("Local radar"));
   currentCard->setVisible(!hidden.contains("Current conditions"));
+}
+void Window::moveGauge(int source, int target) {
+  const int from = gaugeOrder.indexOf(source), to = gaugeOrder.indexOf(target);
+  if (from < 0 || to < 0 || from == to)
+    return;
+  gaugeOrder.move(from, to);
+  const QStringList names = {"Rain today",         "Lightning", "Wind",
+                             "Heat stress / WBGT", "UV index",  "Pressure",
+                             "Humidity",           "Dew point"};
+  QStringList saved;
+  for (int index : gaugeOrder)
+    saved << names[index];
+  local.setValue("gaugeOrder", saved);
+  arrange();
+  auto handle =
+      findChild<QToolButton *>("gaugeHandle" + QString::number(source));
+  handle->setAccessibleDescription(
+      QString("Position %1 of 8. Alt + Left / Right moves this gauge.")
+          .arg(to + 1));
+  handle->setFocus();
+}
+bool Window::eventFilter(QObject *watched, QEvent *event) {
+  auto handle = qobject_cast<QToolButton *>(watched);
+  if (!handle || !handle->property("gaugeIndex").isValid())
+    return QMainWindow::eventFilter(watched, event);
+  const int index = handle->property("gaugeIndex").toInt();
+  auto clear = [this] {
+    movingGauge = -1;
+    for (auto card : metricCards) {
+      card->setProperty("gaugeDrop", false);
+      card->style()->unpolish(card);
+      card->style()->polish(card);
+      card->update();
+    }
+  };
+  if (event->type() == QEvent::KeyPress) {
+    auto key = static_cast<QKeyEvent *>(event);
+    if (key->key() == Qt::Key_Escape && movingGauge >= 0) {
+      clear();
+      handle->setDown(false);
+      return true;
+    }
+    if (key->modifiers().testFlag(Qt::AltModifier) &&
+        (key->key() == Qt::Key_Left || key->key() == Qt::Key_Right)) {
+      int target =
+          gaugeOrder.indexOf(index) + (key->key() == Qt::Key_Left ? -1 : 1);
+      if (target >= 0 && target < gaugeOrder.size())
+        moveGauge(index, gaugeOrder[target]);
+      event->accept();
+      return true;
+    }
+  }
+  const bool touch = event->type() == QEvent::TouchBegin ||
+                     event->type() == QEvent::TouchUpdate ||
+                     event->type() == QEvent::TouchEnd;
+  const bool mouse = event->type() == QEvent::MouseButtonPress ||
+                     event->type() == QEvent::MouseMove ||
+                     event->type() == QEvent::MouseButtonRelease;
+  if (event->type() == QEvent::TouchCancel) {
+    clear();
+    return true;
+  }
+  if (!touch && !mouse)
+    return QMainWindow::eventFilter(watched, event);
+  QPoint point;
+  if (touch) {
+    const auto points = static_cast<QTouchEvent *>(event)->points();
+    if (points.isEmpty())
+      return true;
+    point = points.first().globalPosition().toPoint();
+  } else {
+    auto mouseEvent = static_cast<QMouseEvent *>(event);
+    if (event->type() != QEvent::MouseMove &&
+        mouseEvent->button() != Qt::LeftButton)
+      return false;
+    point = mouseEvent->globalPosition().toPoint();
+  }
+  if (event->type() == QEvent::MouseButtonPress ||
+      event->type() == QEvent::TouchBegin) {
+    movingGauge = index;
+    gaugeDragStart = point;
+    gaugeDragged = false;
+    handle->setFocus();
+    if (!touch)
+      return false;
+  } else if (movingGauge == index) {
+    gaugeDragged |= (point - gaugeDragStart).manhattanLength() >=
+                    QApplication::startDragDistance();
+    int target = -1;
+    for (int i = 0; i < metricCards.size(); ++i) {
+      auto card = metricCards[i];
+      const bool hit = card->isVisible() &&
+                       card->rect().contains(card->mapFromGlobal(point));
+      if (hit)
+        target = i;
+      card->setProperty("gaugeDrop", gaugeDragged && hit && i != movingGauge);
+      card->style()->unpolish(card);
+      card->style()->polish(card);
+      card->update();
+    }
+    if (event->type() == QEvent::MouseButtonRelease ||
+        event->type() == QEvent::TouchEnd) {
+      const int source = movingGauge;
+      clear();
+      handle->setDown(false);
+      if (gaugeDragged && target >= 0)
+        moveGauge(source, target);
+    }
+  }
+  event->accept();
+  return true;
 }
 void Window::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
@@ -1564,7 +1695,6 @@ void Window::render() {
   }
   const bool motion =
       services.config.settings().value("nativeMotion").toBool(true);
-  motionButton->setText(motion ? "Pause icons" : "Play icons");
   weatherGlyph->setWeather(
       current.value("weather_code").isDouble()
           ? std::optional<int>(current.value("weather_code").toInt())
@@ -1586,7 +1716,12 @@ void Window::render() {
       set = i < sets.size() ? qint64(sets[i].toDouble()) : 0;
       break;
     }
-  sunCycle->setTimes(rise, set, offset, motion);
+  qint64 nextRise = 0;
+  for (const auto &value : rises)
+    if (value.toDouble() > QDateTime::currentSecsSinceEpoch() &&
+        (!nextRise || value.toDouble() < nextRise))
+      nextRise = qint64(value.toDouble());
+  sunCycle->setTimes(rise, set, offset, motion, nextRise);
   auto stationDetail = contextCard->findChild<QLabel *>("stationDetail");
   stationDetail->setText(
       services.stationStatus +
@@ -1594,22 +1729,47 @@ void Window::render() {
       services.warningStatus);
   const QStringList severities{"Unknown", "Minor", "Moderate", "Severe",
                                "Extreme"};
-  QList<QPair<int, QString>> rankedWarnings;
+  QList<QPair<int, QJsonObject>> rankedWarnings;
   for (const auto &v : services.warnings) {
     const auto p = v.toObject().value("properties").toObject();
     const int rank =
         std::max(0, int(severities.indexOf(p.value("severity").toString())));
-    auto headline = p.value("headline").toString().trimmed();
-    if (headline.isEmpty())
-      headline = p.value("event").toString("Weather alert");
-    rankedWarnings.append({rank, severities[rank] + " · " + headline});
+    rankedWarnings.append({rank, p});
   }
   std::stable_sort(
       rankedWarnings.begin(), rankedWarnings.end(),
       [](const auto &a, const auto &b) { return a.first > b.first; });
   QStringList warningText;
-  for (const auto &warning : rankedWarnings)
-    warningText << warning.second;
+  for (const auto &warning : rankedWarnings) {
+    auto headline = warning.second.value("headline").toString().trimmed();
+    if (headline.isEmpty())
+      headline = warning.second.value("event").toString("Weather alert");
+    warningText << "National Weather Service · " + headline;
+  }
+  const QHash<QString, QString> colors{
+      {"Tornado Warning", "#ff0000"},
+      {"Severe Thunderstorm Warning", "#ffa500"},
+      {"Flash Flood Warning", "#00c800"},
+      {"Flood Warning", "#00a05a"},
+      {"Snow Squall Warning", "#c71585"},
+      {"Tornado Watch", "#ffff00"},
+      {"Severe Thunderstorm Watch", "#db7093"},
+      {"Special Weather Statement", "#ffe4b5"},
+      {"Flood Advisory", "#00b478"},
+      {"Air Quality Alert", "#ffffff"}};
+  const auto event =
+      rankedWarnings.isEmpty()
+          ? QString()
+          : rankedWarnings.first().second.value("event").toString();
+  const auto fallback =
+      event.contains("warning", Qt::CaseInsensitive)    ? "#e63c3c"
+      : event.contains("watch", Qt::CaseInsensitive)    ? "#c8b43c"
+      : event.contains("advisory", Qt::CaseInsensitive) ? "#78b4c8"
+                                                        : "#ffffff";
+  alerts->setProperty("eventColor", rankedWarnings.isEmpty()
+                                        ? QString()
+                                        : colors.value(event, fallback));
+  styleAlerts();
   const auto severity = rankedWarnings.isEmpty()
                             ? QString()
                             : severities[rankedWarnings.first().first];

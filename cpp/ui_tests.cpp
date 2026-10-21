@@ -17,6 +17,7 @@
 #include <QStandardPaths>
 #include <QTabWidget>
 #include <QTemporaryDir>
+#include <QToolButton>
 #include <QUrlQuery>
 #include <QtTest>
 #include <cmath>
@@ -96,7 +97,7 @@ private slots:
          QJsonArray{double(localDay - 21600), double(localDay + 64800)}}};
     window.render();
     QVERIFY(sunCycle->hasTimes());
-    QVERIFY(sunCycle->accessibleDescription().contains("06:00"));
+    QVERIFY(sunCycle->accessibleDescription().contains("6:00 AM"));
     for (auto label : window.findChildren<QLabel *>()) {
       QVERIFY(!label->text().contains("10-day outlook", Qt::CaseInsensitive));
       QVERIFY(!label->text().contains("six hours", Qt::CaseInsensitive));
@@ -116,7 +117,7 @@ private slots:
     QVERIFY(clock && !clock->text().isEmpty());
     QVERIFY(clock->font().pixelSize() >= 30);
     QVERIFY(shelf->width() > stage->width() * .9);
-    QVERIFY(shelf->height() <= stage->height() / 3);
+    QVERIFY(shelf->height() <= qRound(stage->height() * .46));
     QVERIFY(shelf->isAncestorOf(sunCycle));
     auto hit = stage->childAt(QPoint(stage->width() - 30, stage->height() / 2));
     QVERIFY(hit == radar || radar->isAncestorOf(hit));
@@ -141,7 +142,12 @@ private slots:
     QVERIFY(rain->mapTo(shelf, QPoint()).x() < dew->mapTo(shelf, QPoint()).x());
     auto glyph = window.findChild<WeatherGlyph *>();
     QVERIFY(glyph && glyph->animated());
-    window.findChild<QPushButton *>("weatherMotion")->click();
+    auto animation = window.findChild<QCheckBox *>("iconAnimation");
+    QVERIFY(animation);
+    animation->setChecked(false);
+    for (auto button : window.findChildren<QPushButton *>())
+      if (button->text() == "Save changes")
+        button->click();
     QVERIFY(!glyph->animated());
     QVERIFY(!sunCycle->animated());
     QCOMPARE(cfg.settings().value("nativeMotion").toBool(), false);
@@ -207,6 +213,86 @@ private slots:
     QTest::qWait(5);
     window.applyScale(1);
   }
+  void gaugeMovesStayLocalAndPersist() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    QString error;
+    QVERIFY(cfg.load(&error));
+    Archive db(dir.filePath("db"));
+    QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    QSettings local(QSettings::defaultFormat(), QSettings::UserScope,
+                    "StormDesk", "Native");
+    local.setValue("gaugeOrder",
+                   QStringList{"Rain today", "Rain today", "Invalid"});
+    Window window(services, server);
+    window.applyScale(1);
+    window.resize(1600, 1100);
+    window.show();
+    QTest::qWait(10);
+    QCOMPARE(window.windowTitle(), QString("STORMDESK"));
+    QVERIFY(!window.findChild<QPushButton *>("weatherMotion"));
+    auto connection = window.findChild<QPushButton *>("connectStation");
+    QVERIFY(connection &&
+            window.findChild<QTabWidget *>()->isAncestorOf(connection));
+    QVERIFY(window.findChild<QTabWidget *>()->isAncestorOf(
+        window.findChild<QCheckBox *>("iconAnimation")));
+    QVERIFY(!window.findChild<QScrollArea *>("instrumentShelf")
+                 ->isAncestorOf(connection));
+    auto rain = window.findChild<QToolButton *>("gaugeHandle0");
+    auto wind = window.findChild<QToolButton *>("gaugeHandle2");
+    auto lightning = window.findChild<QToolButton *>("gaugeHandle1");
+    QVERIFY(rain && wind && lightning);
+    auto x = [&window](QWidget *w) { return w->mapTo(&window, QPoint()).x(); };
+    QVERIFY(x(rain) < x(lightning));
+    QTest::keyClick(rain, Qt::Key_Right, Qt::AltModifier);
+    QTRY_VERIFY(x(rain) > x(lightning));
+    QVERIFY(!window.findChild<QDialog *>());
+    QCOMPARE(local.value("gaugeOrder").toStringList().at(1),
+             QString("Rain today"));
+    window.render();
+    window.applyScale(1);
+    QVERIFY(x(rain) > x(lightning));
+    QTest::keyClick(rain, Qt::Key_Left, Qt::AltModifier);
+    QTest::keyClick(rain, Qt::Key_Left, Qt::AltModifier);
+    QTRY_VERIFY(x(rain) < x(lightning));
+    QPoint target =
+        rain->mapFromGlobal(wind->mapToGlobal(wind->rect().center()));
+    QTest::mousePress(rain, Qt::LeftButton, {}, rain->rect().center());
+    QTest::mouseMove(rain, target);
+    QTest::mouseRelease(rain, Qt::LeftButton, {}, target);
+    QTRY_VERIFY(x(rain) > x(wind));
+    QCOMPARE(local.value("gaugeOrder").toStringList().at(2),
+             QString("Rain today"));
+    auto touch = QTest::createTouchDevice();
+    target = rain->mapFromGlobal(wind->mapToGlobal(wind->rect().center()));
+    QTest::touchEvent(rain, touch)
+        .press(0, rain->rect().center(), rain)
+        .commit();
+    QTest::touchEvent(rain, touch).move(0, target, rain).commit();
+    QTest::touchEvent(rain, touch).release(0, target, rain).commit();
+    QTRY_VERIFY(x(rain) < x(wind));
+    QTest::keyClick(rain, Qt::Key_Right, Qt::AltModifier);
+    QTRY_VERIFY(x(rain) > x(wind));
+    const auto before = local.value("gaugeOrder");
+    QTest::mousePress(rain, Qt::LeftButton, {}, rain->rect().center());
+    QTest::mouseMove(rain, QPoint(0, 600));
+    QTest::mouseRelease(rain, Qt::LeftButton, {}, QPoint(0, 600));
+    QCOMPARE(local.value("gaugeOrder"), before);
+    Window reopened(services, server);
+    reopened.applyScale(1);
+    reopened.resize(1600, 1100);
+    reopened.show();
+    QTest::qWait(10);
+    auto reopenedRain = reopened.findChild<QToolButton *>("gaugeHandle0");
+    auto reopenedWind = reopened.findChild<QToolButton *>("gaugeHandle2");
+    QVERIFY(reopenedRain->mapTo(&reopened, QPoint()).x() >
+            reopenedWind->mapTo(&reopened, QPoint()).x());
+    QVERIFY(!cfg.settings().contains("gaugeOrder"));
+    local.remove("gaugeOrder");
+  }
   void alertBannerTracksHighestSeverity() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));
@@ -222,46 +308,49 @@ private slots:
     window.show();
     auto banner = window.findChild<QLabel *>("nwsAlertBanner");
     QVERIFY(banner);
-    auto alert = [](const QString &severity, const QString &headline) {
+    auto alert = [](const QString &severity, const QString &event) {
       return QJsonObject{{"properties", QJsonObject{{"severity", severity},
-                                                    {"headline", headline}}}};
+                                                    {"event", event},
+                                                    {"headline", event}}}};
     };
-    const QList<QPair<QString, QString>> colors{{"Extreme", "#651b32"},
-                                                {"Severe", "#5a261c"},
-                                                {"Moderate", "#4a3a12"},
-                                                {"Minor", "#17364a"},
-                                                {"Unexpected", "#29313f"}};
+    const QList<QPair<QString, QString>> colors{
+        {"Tornado Warning", "#ff0000"},
+        {"Severe Thunderstorm Warning", "#ffa500"},
+        {"Flash Flood Warning", "#00c800"},
+        {"Tornado Watch", "#ffff00"},
+        {"Air Quality Alert", "#ffffff"},
+        {"Test Advisory", "#78b4c8"}};
     for (const auto &color : colors) {
-      services.warnings = QJsonArray{alert(color.first, "Official alert")};
+      services.warnings = QJsonArray{alert("Unknown", color.first)};
       window.render();
-      const auto expected =
-          color.first == "Unexpected" ? QString("Unknown") : color.first;
-      QCOMPARE(banner->property("severity").toString(), expected);
-      QVERIFY(banner->text().startsWith(expected + " · "));
-      QVERIFY(banner->accessibleName().contains(expected));
-      QCOMPARE(banner->palette().color(QPalette::Window).name(), color.second);
+      QCOMPARE(banner->property("eventColor").toString(), color.second);
+      QVERIFY(banner->text().startsWith("National Weather Service · "));
+      QVERIFY(!banner->text().contains("Unknown"));
+      QVERIFY(banner->styleSheet().contains(color.second));
     }
-    services.warnings = QJsonArray{alert("Moderate", "Heat advisory"),
-                                   alert("Extreme", "Tornado warning"),
-                                   alert("Severe", "Severe thunderstorm")};
+    services.warnings =
+        QJsonArray{alert("Moderate", "Air Quality Alert"),
+                   alert("Extreme", "Tornado Warning"),
+                   alert("Severe", "Severe Thunderstorm Warning")};
     window.render();
     QCOMPARE(banner->property("severity").toString(), QString("Extreme"));
-    QVERIFY(banner->text().startsWith("Extreme · Tornado warning"));
-    QVERIFY(banner->text().contains("Moderate · Heat advisory"));
+    QCOMPARE(banner->property("eventColor").toString(), QString("#ff0000"));
+    QVERIFY(banner->text().startsWith(
+        "National Weather Service · Tornado Warning"));
     auto settings = cfg.settings();
     settings["theme"] = "light";
     cfg.value["settings"] = settings;
     window.applyScale(1);
-    QCOMPARE(banner->palette().color(QPalette::Window).name(),
-             QString("#651b32"));
-    QCOMPARE(banner->palette().color(QPalette::WindowText).name(),
-             QString("#fff0f3"));
+    QVERIFY(banner->styleSheet().contains("#ff0000"));
+    QCOMPARE(banner->palette().color(QPalette::WindowText),
+             window.palette().color(QPalette::WindowText));
     services.warnings = {};
     services.warningStatus = "US National Weather Service";
     window.render();
     QVERIFY(banner->property("severity").toString().isEmpty());
     QVERIFY(banner->text().contains("No active warnings"));
-    QVERIFY(banner->palette().color(QPalette::Window).name() != "#651b32");
+    QVERIFY(banner->property("eventColor").toString().isEmpty());
+    QVERIFY(banner->styleSheet().isEmpty());
     services.warningStatus = "US official warnings unavailable";
     window.render();
     QVERIFY(banner->property("severity").toString().isEmpty());
@@ -296,7 +385,8 @@ private slots:
     window.show();
     auto banner = window.findChild<QPushButton *>("openNwsAlerts");
     QVERIFY(banner && banner->isVisible());
-    QVERIFY(banner->accessibleDescription().contains("Severe"));
+    QVERIFY(
+        banner->accessibleDescription().contains("National Weather Service"));
     banner->setFocus();
     QTest::keyClick(banner, Qt::Key_Space);
     auto pages = window.findChild<QStackedWidget *>();

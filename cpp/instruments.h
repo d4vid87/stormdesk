@@ -28,7 +28,7 @@ public:
   explicit WeatherGlyph(QWidget *parent = nullptr);
   void setWeather(std::optional<int> code, bool day, bool motion);
   void setScale(double scale);
-  bool animated() const { return timer.isActive(); }
+  bool animated() const { return motion && timer.isActive(); }
   QSize sizeHint() const override { return {maximumWidth(), minimumHeight()}; }
 
 protected:
@@ -47,10 +47,11 @@ class SunCycle : public QWidget {
   Q_OBJECT
 public:
   explicit SunCycle(QWidget *parent = nullptr);
-  void setTimes(qint64 sunrise, qint64 sunset, int utcOffset, bool motion);
+  void setTimes(qint64 sunrise, qint64 sunset, int utcOffset, bool motion,
+                qint64 nextSunrise = 0);
   void setScale(double scale);
   bool hasTimes() const { return rise > 0 && set > rise; }
-  bool animated() const { return timer.isActive(); }
+  bool animated() const { return motion && timer.isActive(); }
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -58,7 +59,7 @@ protected:
   void hideEvent(QHideEvent *) override;
 
 private:
-  qint64 rise = 0, set = 0;
+  qint64 rise = 0, set = 0, nextRise = 0;
   int offset = 0;
   bool motion = true;
   double scale = 1;

@@ -146,7 +146,7 @@ void RadarStage::arrange() {
     toggle->setChecked(width() / scaleFactor >= 900);
   const int buttonHeight = toggle->sizeHint().height();
   const int panelHeight =
-      std::max(0, std::min(qRound(236 * scaleFactor), height() / 3));
+      std::max(0, std::min(qRound(330 * scaleFactor), qRound(height() * .46)));
   instruments->setGeometry(margin, 0, panelWidth, panelHeight);
   const bool expanded = toggle->isChecked() && panelHeight > 0;
   instruments->setVisible(expanded);

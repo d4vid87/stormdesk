@@ -46,11 +46,17 @@ private:
   QList<QPushButton *> navButtons;
   QPushButton *refreshButton, *alertButton;
   QLabel *clock, *clockDate, *location, *heroTemperature, *heroCondition,
-      *heroSource, *status, *alerts;
+      *heroSource, *status, *alerts = nullptr;
   std::array<QLabel *, 8> metricValues, metricSources;
   std::array<InstrumentFace *, 8> faces;
   WeatherGlyph *weatherGlyph;
-  QPushButton *setupButton, *motionButton;
+  QPushButton *setupButton;
+  QList<int> gaugeOrder;
+  int movingGauge = -1;
+  QPoint gaugeDragStart;
+  bool gaugeDragged = false;
+  void moveGauge(int source, int target);
+  bool eventFilter(QObject *watched, QEvent *event) override;
   QGridLayout *heroLayout;
   QLabel *heroHeading;
   SunCycle *sunCycle;
@@ -80,6 +86,7 @@ private:
   void renderHistory();
   void arrange();
   void applyTheme();
+  void styleAlerts();
   void saveSettings();
   void loadSettings();
   void openRadar();

@@ -157,6 +157,14 @@ void WeatherGlyph::paintEvent(QPaintEvent *) {
   p.translate((width() - size) / 2, (height() - size) / 2);
   p.scale(size / 130, size / 130);
   const double t = motion ? elapsed.elapsed() / 1000.0 : 0;
+  QRadialGradient aura(QPointF(65, 60), 62);
+  QColor glow = day ? QColor("#efbd67") : QColor("#9bbce8");
+  glow.setAlpha(qRound(25 + 6 * std::sin(t)));
+  aura.setColorAt(0, glow);
+  aura.setColorAt(1, Qt::transparent);
+  p.setPen(Qt::NoPen);
+  p.setBrush(aura);
+  p.drawEllipse(QPointF(65, 60), 62, 62);
   const bool wet = *code >= 51, snow = *code >= 71 && *code <= 86;
   QColor silver = palette().color(QPalette::Highlight);
   if (*code <= 2) {
@@ -167,15 +175,46 @@ void WeatherGlyph::paintEvent(QPaintEvent *) {
     p.setBrush(Qt::NoBrush);
     if (day) {
       p.rotate(std::fmod(t * 5, 360));
-      p.drawEllipse(QPointF(), 15, 15);
+      QRadialGradient sun(QPointF(-4, -5), 22);
+      sun.setColorAt(0, QColor("#fff2cb"));
+      sun.setColorAt(1, QColor("#f3b56b"));
+      p.setBrush(sun);
+      p.drawEllipse(QPointF(), 19, 19);
       for (int i = 0; i < 8; ++i)
         p.drawLine(polar(i * 45, 23), polar(i * 45, 30));
     } else {
-      QPainterPath moon;
-      moon.moveTo(7, -18);
-      moon.cubicTo(-30, -23, -26, 26, 8, 18);
-      moon.cubicTo(-9, 14, -11, -4, 7, -18);
-      p.drawPath(moon);
+      p.translate(17, 20);
+      QPainterPath moon, cutout;
+      moon.addEllipse(QPointF(), 34, 34);
+      cutout.addEllipse(QPointF(19, -18), 31, 31);
+      moon = moon.subtracted(cutout);
+      QLinearGradient shade(-28, -25, 26, 30);
+      shade.setColorAt(0, QColor("#f2f1dd"));
+      shade.setColorAt(1, QColor("#9daedc"));
+      p.setPen(Qt::NoPen);
+      p.fillPath(moon, shade);
+      p.save();
+      p.setClipPath(moon);
+      p.setBrush(QColor(111, 133, 184, 65));
+      p.drawEllipse(QPointF(-20, 4), 5, 7);
+      p.drawEllipse(QPointF(-10, 21), 7, 5);
+      p.restore();
+      for (const QPointF star :
+           {QPointF(-32, -30), QPointF(33, -34), QPointF(39, 17)}) {
+        QColor gold("#f6e7c3");
+        gold.setAlpha(qRound(150 + 80 * std::sin(t + star.x())));
+        p.setBrush(gold);
+        QPainterPath glint;
+        glint.moveTo(star + QPointF(0, -4));
+        glint.lineTo(star + QPointF(1, -1));
+        glint.lineTo(star + QPointF(4, 0));
+        glint.lineTo(star + QPointF(1, 1));
+        glint.lineTo(star + QPointF(0, 4));
+        glint.lineTo(star + QPointF(-1, 1));
+        glint.lineTo(star + QPointF(-4, 0));
+        glint.lineTo(star + QPointF(-1, -1));
+        p.drawPath(glint);
+      }
     }
     p.restore();
   }
@@ -231,11 +270,12 @@ void SunCycle::setScale(double value) {
 QString SunCycle::time(qint64 seconds) const {
   return hasTimes() ? QDateTime::fromSecsSinceEpoch(seconds)
                           .toOffsetFromUtc(offset)
-                          .toString("HH:mm")
+                          .toString("h:mm AP")
                     : "—";
 }
 void SunCycle::setTimes(qint64 sunrise, qint64 sunset, int utcOffset,
-                        bool animate) {
+                        bool animate, qint64 nextSunrise) {
+  nextRise = nextSunrise;
   rise = sunrise;
   set = sunset;
   offset = utcOffset;
@@ -249,8 +289,8 @@ void SunCycle::setTimes(qint64 sunrise, qint64 sunset, int utcOffset,
   update();
 }
 void SunCycle::cadence() {
-  if (motion && hasTimes() && isVisible())
-    timer.start();
+  if (hasTimes() && isVisible())
+    timer.start(motion ? 50 : 60000);
   else
     timer.stop();
 }
@@ -260,95 +300,141 @@ void SunCycle::paintEvent(QPaintEvent *) {
   QPainter p(this);
   p.setRenderHint(QPainter::Antialiasing);
   p.scale(scale, scale);
-  const double w = width() / scale;
-  const bool wide = w >= 560;
-  const double side = wide ? 180 : w / 2;
+  const double w = width() / scale, h = height() / scale;
+  const bool wide = w >= 440;
+  const double side = wide ? 104 : w / 2;
   const QColor ink = palette().color(QPalette::WindowText);
-  const QColor gold("#e5c998"), dusk("#d6a6a0");
+  const QColor gold("#ffbc67"), dusk("#dc86a4");
   QColor faint = ink;
-  faint.setAlpha(65);
+  faint.setAlpha(70);
   const double t = motion && timer.isActive() ? elapsed.elapsed() / 1000.0 : 0;
+  QLinearGradient wash(0, 0, w, h);
+  QColor warm = gold, rose = dusk;
+  warm.setAlpha(20);
+  rose.setAlpha(16);
+  wash.setColorAt(0, warm);
+  wash.setColorAt(1, rose);
+  p.setBrush(wash);
+  p.setPen(QPen(faint, .7));
+  p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 10, 10);
+  for (int i = 0; i < 6; ++i) {
+    QColor star = ink;
+    star.setAlpha(qRound(25 + 18 * (1 + std::sin(t + i))));
+    p.setBrush(star);
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(QPointF(w * (.16 + i * .13), 18 + (i % 3) * 12), 1, 1);
+  }
   auto endpoint = [&](bool rising, double x) {
     const QColor color = rising ? gold : dusk;
-    const double cx = x + side / 2, horizon = 48;
-    // The small icons animate decoratively; the central marker shows actual
-    // time.
-    const double y = horizon - 11 + (rising ? -1 : 1) * std::sin(t * 1.3) * 3;
+    const double cx = x + side / 2, horizon = 62;
+    const double cy = horizon - 8 + std::sin(t * 1.2) * (rising ? -2 : 2);
+    QRadialGradient glow(QPointF(cx, cy), 34);
+    QColor light = color;
+    light.setAlpha(50);
+    glow.setColorAt(0, light);
+    glow.setColorAt(1, Qt::transparent);
+    p.setBrush(glow);
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(QPointF(cx, cy), 34, 34);
     p.save();
-    p.setClipRect(QRectF(x, 0, side, horizon));
-    p.setPen(QPen(hasTimes() ? color : faint, 1.6));
-    p.setBrush(Qt::NoBrush);
-    p.drawEllipse(QPointF(cx, y), 14, 14);
-    for (int i = 0; i < 8; ++i) {
-      const auto a = polar(i * 45 + t * 8, 20);
-      const auto b = polar(i * 45 + t * 8, 25);
-      p.drawLine(QPointF(cx, y) + a, QPointF(cx, y) + b);
-    }
+    p.setClipRect(QRectF(x, 8, side, horizon - 8));
+    QLinearGradient orb(0, cy - 15, 0, cy + 15);
+    orb.setColorAt(0, QColor("#fff2cb"));
+    orb.setColorAt(1, color);
+    p.setBrush(hasTimes() ? QBrush(orb) : QBrush(faint));
+    p.drawEllipse(QPointF(cx, cy), 15, 15);
+    p.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap));
+    for (int i = 0; i < 8; ++i)
+      p.drawLine(QPointF(cx, cy) + polar(i * 45, 21),
+                 QPointF(cx, cy) + polar(i * 45, 27));
     p.restore();
-    p.setPen(QPen(faint, 1));
-    p.drawLine(QPointF(cx - 42, horizon), QPointF(cx + 42, horizon));
-    p.setPen(color);
+    p.setPen(QPen(color, 1, Qt::SolidLine, Qt::RoundCap));
+    for (int i = 0; i < 3; ++i)
+      p.drawLine(QPointF(cx - 28 + i * 7, horizon + i * 5),
+                 QPointF(cx + 28 - i * 7, horizon + i * 5));
     auto f = font();
-    f.setPixelSize(11);
-    p.setFont(f);
-    p.drawText(QRectF(x, 60, side, 18), Qt::AlignCenter,
-               rising ? "SUNRISE" : "SUNSET");
-    f.setPixelSize(30);
-    p.setFont(f);
-    p.setPen(ink);
-    p.drawText(QRectF(x, 78, side, 40), Qt::AlignCenter,
-               time(rising ? rise : set));
     f.setPixelSize(10);
     p.setFont(f);
     p.setPen(faint);
-    p.drawText(QRectF(x, 119, side, 18), Qt::AlignCenter,
-               "LOCATION LOCAL TIME");
+    p.drawText(QRectF(x, 79, side, 15), Qt::AlignCenter,
+               rising ? "SUNRISE" : "SUNSET");
+    f.setPixelSize(wide ? 24 : 22);
+    p.setFont(f);
+    p.setPen(ink);
+    p.drawText(QRectF(x, 98, side, 30), Qt::AlignCenter,
+               time(rising ? rise : set));
   };
   endpoint(true, 0);
   endpoint(false, w - side);
-  if (!wide)
-    return;
-  const double left = side + 24, span = w - 2 * side - 48;
-  const double base = 91, height = 63;
-  QPainterPath arc;
-  for (int i = 0; i <= 80; ++i) {
-    double f = i / 80.0;
-    QPointF point(left + span * f,
-                  base - std::sin(f * 3.141592653589793) * height);
-    i == 0 ? arc.moveTo(point) : arc.lineTo(point);
-  }
-  p.setPen(QPen(faint, 1, Qt::DashLine));
-  p.setBrush(Qt::NoBrush);
-  p.drawPath(arc);
-  p.drawLine(QPointF(left, base), QPointF(left + span, base));
-  QString caption = "Sun times unavailable";
+  const auto now = QDateTime::currentSecsSinceEpoch();
+  QString caption = "Sun times unavailable", next = "Your daylight";
   if (hasTimes()) {
-    const auto now = QDateTime::currentSecsSinceEpoch();
-    const double fraction =
-        std::clamp(double(now - rise) / double(set - rise), 0.0, 1.0);
-    QPointF point(left + span * fraction,
-                  base - std::sin(fraction * 3.141592653589793) * height);
-    if (now >= rise && now <= set) {
-      QColor glow = gold;
-      glow.setAlpha(35 + qRound(12 * std::sin(t * 2)));
-      p.setPen(Qt::NoPen);
-      p.setBrush(glow);
-      p.drawEllipse(point, 18, 18);
-      p.setBrush(gold);
-      p.drawEllipse(point, 6, 6);
-    }
-    const auto duration = (set - rise) / 60;
-    caption =
-        QString("%1h %2m of daylight").arg(duration / 60).arg(duration % 60);
-    if (now < rise)
-      caption += " · Before sunrise";
-    else if (now > set)
-      caption += " · After sunset";
+    const auto duration = qRound64(double(set - rise) / 60);
+    caption = QString("%1h %2m daylight · %3")
+                  .arg(duration / 60)
+                  .arg(duration % 60)
+                  .arg(now < rise  ? "Before sunrise"
+                       : now > set ? "After sunset"
+                                   : "Daylight");
+    const qint64 nextAt = now < rise ? rise : now < set ? set : nextRise;
+    if (nextAt > now) {
+      const qint64 remaining = (nextAt - now + 59) / 60;
+      next = QString("%1 in %2h %3m")
+                 .arg(now < rise || now > set ? "Sunrise" : "Sunset")
+                 .arg(remaining / 60)
+                 .arg(remaining % 60);
+    } else if (now > set)
+      next = "After sunset";
   }
   auto f = font();
-  f.setPixelSize(12);
+  if (wide) {
+    const double left = side + 12, span = w - 2 * side - 24, base = 111;
+    QPainterPath arc;
+    arc.moveTo(left, base);
+    arc.quadTo(left + span / 2, -9, left + span, base);
+    QLinearGradient colors(left, 0, left + span, 0);
+    colors.setColorAt(0, gold);
+    colors.setColorAt(.5, QColor("#f6df9c"));
+    colors.setColorAt(1, dusk);
+    auto fill = arc;
+    fill.lineTo(left + span, 130);
+    fill.lineTo(left, 130);
+    fill.closeSubpath();
+    QLinearGradient fade(0, 45, 0, 132);
+    fade.setColorAt(0, QColor(248, 189, 98, 40));
+    fade.setColorAt(1, Qt::transparent);
+    p.fillPath(fill, fade);
+    p.setPen(QPen(faint, 1, Qt::DotLine));
+    p.drawLine(QPointF(left, base), QPointF(left + span, base));
+    p.setPen(QPen(QBrush(colors), 1.8));
+    p.drawPath(arc);
+    if (hasTimes()) {
+      const double fraction =
+          std::clamp(double(now - rise) / double(set - rise), 0.0, 1.0);
+      const QPointF point(left + span * fraction,
+                          base - 240 * fraction * (1 - fraction));
+      const QColor marker = now > set ? QColor("#d7dffa") : gold;
+      QRadialGradient glow(point, 20);
+      QColor soft = marker;
+      soft.setAlpha(qRound(65 + 12 * std::sin(t * 2)));
+      glow.setColorAt(0, soft);
+      glow.setColorAt(1, Qt::transparent);
+      p.setPen(Qt::NoPen);
+      p.setBrush(glow);
+      p.drawEllipse(point, 20, 20);
+      p.setPen(QPen(QColor("#f1ecff"), 1.5));
+      p.setBrush(marker);
+      p.drawEllipse(point, 5, 5);
+    }
+    f.setPixelSize(15);
+    p.setFont(f);
+    p.setPen(ink);
+    p.drawText(QRectF(left, 14, span, 24), Qt::AlignLeft, next);
+  }
+  f.setPixelSize(10);
   p.setFont(f);
   p.setPen(ink);
-  p.drawText(QRectF(left, 113, span, 24), Qt::AlignCenter, caption);
+  p.drawText(QRectF(8, 133, w - 16, 17), Qt::AlignCenter,
+             wide ? caption : next);
 }
 } // namespace storm

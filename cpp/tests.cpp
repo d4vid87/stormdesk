@@ -146,7 +146,8 @@ private slots:
       Reading reading{};
       reading[0] = double(at);
       reading[7] = temperature;
-      return QJsonDocument(QJsonObject{{"obs", QJsonArray{toJson(reading)}}});
+      return QJsonDocument(
+          QJsonObject{{"obs", QJsonArray{QJsonValue(toJson(reading))}}});
     };
     QString error;
     {
