@@ -7,6 +7,9 @@
 #ifdef STORMDESK_WEBENGINE
 class QWebEngineView;
 #endif
+#ifdef STORMDESK_ANDROID_WEBVIEW
+class QQuickView;
+#endif
 
 namespace storm {
 class Radar : public QWidget {
@@ -22,6 +25,9 @@ signals:
 protected:
   void showEvent(QShowEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
+  void hideEvent(QHideEvent *event) override;
+private slots:
+  void pageLoaded(bool ok);
 private:
   Services &services;
   bool compact, immersive = false;
@@ -30,6 +36,9 @@ private:
   QGridLayout *controls;
   QList<QPushButton *> buttons;
   double scaleFactor = 1;
+#ifdef STORMDESK_ANDROID_WEBVIEW
+  QQuickView *mobileView = nullptr;
+#endif
 #ifdef STORMDESK_WEBENGINE
   QWebEngineView *view = nullptr;
 #endif
@@ -37,7 +46,8 @@ private:
 class RadarStage : public QWidget {
   Q_OBJECT
 public:
-  RadarStage(Radar *radar, QWidget *instruments, QWidget *parent = nullptr);
+  RadarStage(Radar *radar, QWidget *instruments, QWidget *parent = nullptr,
+             bool mobile = false);
   void setScale(double scale);
 
 protected:
@@ -48,7 +58,7 @@ private:
   QWidget *instruments;
   QPushButton *toggle;
   double scaleFactor = 1;
-  bool userToggled = false;
+  bool userToggled = false, mobile = false;
   void arrange();
 };
 } // namespace storm

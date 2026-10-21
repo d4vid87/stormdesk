@@ -26,7 +26,7 @@ public:
 class Window : public QMainWindow {
   Q_OBJECT
 public:
-  Window(Services &services, HttpServer &server);
+  Window(Services &services, HttpServer &server, bool mobile = false);
   void render();
   void applyScale(double scale);
   void setup();
@@ -38,6 +38,9 @@ protected:
 private:
   Services &services;
   HttpServer &server;
+  bool mobile;
+  QLabel *mobileStationSummary = nullptr;
+  void arrangeInstruments();
   QSettings local;
   double scaleFactor = 1, settingsRevision = 0;
   QStackedWidget *pages;

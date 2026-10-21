@@ -139,6 +139,7 @@ jobs:
           version: '6.10.2'
           target: android
           arch: android_arm64_v8a
+          modules: 'qtwebview'
           cache: true
       - uses: actions/checkout@v4
         with:

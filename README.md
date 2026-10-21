@@ -2,7 +2,7 @@
 
 # StormDesk
 
-A C++17 / Qt 6 weather application for desktop computers, Raspberry Pi, and Android tablets. The dashboard, history, settings, and advanced tools use native Qt widgets. HookEcho radar embeds through Qt WebEngine on desktop builds; builds without WebEngine open it in the system browser. No Rust or Tauri toolchain is needed to build StormDesk.
+A C++17 / Qt 6 weather application for desktop computers, Raspberry Pi, and Android phones/tablets. The dashboard, history, settings, and advanced tools use native Qt widgets. HookEcho radar embeds through Qt WebEngine on desktop and Qt WebView on Android. Desktop builds without WebEngine open it in the system browser. No Rust or Tauri toolchain is needed to build StormDesk.
 
 Choose a location for forecasts, or connect a personal weather station for measurements. StormDesk supports WeatherFlow Tempest, Ecowitt, Ambient Weather, Davis WeatherLink Live, La Crosse, and compatible Weather Underground upload protocols. Missing readings stay unavailable; forecast estimates are labeled.
 

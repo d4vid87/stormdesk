@@ -265,7 +265,7 @@ SunCycle::SunCycle(QWidget *parent) : QWidget(parent) {
 }
 void SunCycle::setScale(double value) {
   scale = value;
-  setFixedHeight(qRound(156 * scale));
+  setFixedHeight(qRound((compact ? 48 : 156) * scale));
 }
 QString SunCycle::time(qint64 seconds) const {
   return hasTimes() ? QDateTime::fromSecsSinceEpoch(seconds)
@@ -301,6 +301,37 @@ void SunCycle::paintEvent(QPaintEvent *) {
   p.setRenderHint(QPainter::Antialiasing);
   p.scale(scale, scale);
   const double w = width() / scale, h = height() / scale;
+  if (compact) {
+    const QColor ink = palette().color(QPalette::WindowText);
+    const QColor gold("#ffc45d"), dusk("#dc9ab4");
+    const double side = std::min(82.0, w * .28);
+    auto f = font(); f.setPixelSize(10); p.setFont(f);
+    p.setPen(palette().color(QPalette::PlaceholderText));
+    p.drawText(QRectF(0, 1, side, 15), Qt::AlignLeft, "SUNRISE");
+    p.drawText(QRectF(w - side, 1, side, 15), Qt::AlignRight, "SUNSET");
+    f.setPixelSize(14); p.setFont(f); p.setPen(ink);
+    p.drawText(QRectF(0, 20, side, 22), Qt::AlignLeft, time(rise));
+    p.drawText(QRectF(w - side, 20, side, 22), Qt::AlignRight, time(set));
+    const double left = side + 5, right = w - side - 5;
+    QPainterPath path;
+    path.moveTo(left, 34); path.quadTo(w / 2, 0, right, 34);
+    QLinearGradient colors(left, 0, right, 0);
+    colors.setColorAt(0, gold); colors.setColorAt(1, dusk);
+    p.setPen(QPen(QBrush(colors), 1.5)); p.drawPath(path);
+    if (hasTimes()) {
+      const double fraction = std::clamp(
+          double(QDateTime::currentSecsSinceEpoch() - rise) / double(set - rise), 0.0, 1.0);
+      const QPointF point(left + (right - left) * fraction,
+                          34 - 68 * fraction * (1 - fraction));
+      QRadialGradient glow(point, 12);
+      QColor soft = gold;
+      soft.setAlpha(motion ? qRound(65 + 15 * std::sin(elapsed.elapsed() / 500.0)) : 65);
+      glow.setColorAt(0, soft); glow.setColorAt(1, Qt::transparent);
+      p.setPen(Qt::NoPen); p.setBrush(glow); p.drawEllipse(point, 12, 12);
+      p.setBrush(ink); p.drawEllipse(point, 3, 3);
+    }
+    return;
+  }
   const bool wide = w >= 440;
   const double side = wide ? 104 : w / 2;
   const QColor ink = palette().color(QPalette::WindowText);

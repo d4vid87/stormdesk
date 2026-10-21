@@ -3,6 +3,13 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QHideEvent>
+#include <QScrollArea>
+#ifdef STORMDESK_ANDROID_WEBVIEW
+#include <QQuickView>
+#include <QQuickItem>
+#include <QQmlError>
+#endif
 #include <QVBoxLayout>
 #include <algorithm>
 #ifdef STORMDESK_WEBENGINE
@@ -58,12 +65,46 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
     });
   } else
     status->setText("Synthetic demo mode · Live HookEcho radar is disabled.");
+#elif defined(STORMDESK_ANDROID_WEBVIEW)
+  if (services.config.text("stationSource") != "demo") {
+    mobileView = new QQuickView;
+    mobileView->setResizeMode(QQuickView::SizeRootObjectToView);
+    mobileView->setColor(QColor("#101214"));
+    mobileView->setSource(QUrl("qrc:/native/AndroidRadar.qml"));
+    auto container = QWidget::createWindowContainer(mobileView, this);
+    container->setObjectName("hookEchoMobileView");
+    container->setMinimumSize(0, 0);
+    layout->insertWidget(1, container, 1);
+    if (mobileView->rootObject()) {
+      mobileView->rootObject()->setVisible(false);
+      connect(mobileView->rootObject(), SIGNAL(pageLoaded(bool)), this, SLOT(pageLoaded(bool)));
+    } else {
+      status->setText("Radar view could not start. Open HookEcho or retry.");
+      setProperty("hookEchoLoaded", false);
+    }
+  } else {
+    status->setText("Synthetic demo mode · Live HookEcho radar is disabled.");
+  }
 #else
   status->setText("Open live HookEcho radar in your browser. Your selected "
                   "station and radar site carry over.");
   reload->hide();
 #endif
   setScale(1);
+}
+void Radar::pageLoaded(bool ok) {
+  setProperty("hookEchoLoaded", ok);
+  status->setText(ok ? "HookEcho · Check the scan time on the map"
+                     : "Radar could not load. Check your connection and retry.");
+  status->setVisible(!immersive || !ok);
+  for (auto button : buttons) button->setVisible(!immersive || !ok);
+}
+void Radar::hideEvent(QHideEvent *event) {
+#ifdef STORMDESK_ANDROID_WEBVIEW
+  if (mobileView && mobileView->rootObject())
+    mobileView->rootObject()->setVisible(false);
+#endif
+  QWidget::hideEvent(event);
 }
 void Radar::setScale(double scale) {
   scaleFactor = scale;
@@ -90,6 +131,10 @@ void Radar::setImmersive(bool enabled) {
 }
 void Radar::showEvent(QShowEvent *event) {
   QWidget::showEvent(event);
+#ifdef STORMDESK_ANDROID_WEBVIEW
+  if (mobileView && mobileView->rootObject())
+    mobileView->rootObject()->setVisible(true);
+#endif
   refresh();
 }
 void Radar::resizeEvent(QResizeEvent *event) {
@@ -101,6 +146,19 @@ void Radar::resizeEvent(QResizeEvent *event) {
     controls->addWidget(buttons[i], i / columns, i % columns);
 }
 void Radar::refresh() {
+#ifdef STORMDESK_ANDROID_WEBVIEW
+  if (!mobileView || !mobileView->rootObject() || !isVisible()) return;
+  const auto url = services.radarUrl();
+  if (loadedUrl == url) return;
+  loadedUrl = url;
+  status->setText("HookEcho · Loading live radar…");
+  setProperty("hookEchoLoaded", false);
+  status->show();
+  if (mobileView->rootObject()->property("url").toUrl() == url)
+    QMetaObject::invokeMethod(mobileView->rootObject(), "reload");
+  else
+    mobileView->rootObject()->setProperty("url", url);
+#endif
 #ifdef STORMDESK_WEBENGINE
   if (!view || !isVisible())
     return;
@@ -113,8 +171,8 @@ void Radar::refresh() {
   view->setUrl(url);
 #endif
 }
-RadarStage::RadarStage(Radar *background, QWidget *panel, QWidget *parent)
-    : QWidget(parent), radar(background), instruments(panel) {
+RadarStage::RadarStage(Radar *background, QWidget *panel, QWidget *parent, bool mobileUi)
+    : QWidget(parent), radar(background), instruments(panel), mobile(mobileUi) {
   setObjectName("radarStage");
   setMinimumSize(0, 0);
   radar->setParent(this);
@@ -140,6 +198,19 @@ void RadarStage::resizeEvent(QResizeEvent *event) {
   arrange();
 }
 void RadarStage::arrange() {
+  if (mobile) {
+    toggle->hide();
+    const auto scroll = qobject_cast<QScrollArea *>(instruments);
+    const int wanted = scroll && scroll->widget()
+        ? scroll->widget()->sizeHint().height() : qRound(220 * scaleFactor);
+    const int panelHeight = std::min(wanted, qRound(height() * .52));
+    instruments->setGeometry(0, 0, width(), panelHeight);
+    instruments->show();
+    const int top = std::min(height(), panelHeight + 6);
+    radar->setGeometry(0, top, width(), std::max(0, height() - top));
+    radar->layout()->setContentsMargins(0, 0, 0, 0);
+    return;
+  }
   const int margin = qRound(12 * scaleFactor);
   const int panelWidth = std::max(1, width() - 2 * margin);
   if (!userToggled) {

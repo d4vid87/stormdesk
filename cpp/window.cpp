@@ -22,6 +22,7 @@
 #include <QJsonDocument>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -148,8 +149,8 @@ void Plot::paintEvent(QPaintEvent *) {
              QDateTime::fromSecsSinceEpoch(qint64(end)).toString(dateFormat));
   p.drawText(QRectF(area.left(), 0, area.width(), 20), Qt::AlignLeft, unit);
 }
-Window::Window(Services &s, HttpServer &http)
-    : services(s), server(http),
+Window::Window(Services &s, HttpServer &http, bool mobileUi)
+    : services(s), server(http), mobile(mobileUi),
       local(QSettings::defaultFormat(), QSettings::UserScope, "StormDesk",
             "Native") {
   static const int condensedFont = QFontDatabase::addApplicationFont(
@@ -160,9 +161,11 @@ Window::Window(Services &s, HttpServer &http)
   setMinimumSize(240, 240);
   auto root = new QWidget;
   auto layout = new QVBoxLayout(root);
+  root->setObjectName(mobile ? "instrumentPocket" : "desktopShell");
   layout->setSizeConstraint(QLayout::SetNoConstraint);
-  layout->setContentsMargins(20, 18, 20, 18);
-  layout->setSpacing(16);
+  layout->setContentsMargins(mobile ? 10 : 20, mobile ? 8 : 18,
+                            mobile ? 10 : 20, mobile ? 4 : 18);
+  layout->setSpacing(mobile ? 6 : 16);
   auto shell = new QStackedWidget;
   shell->setObjectName("appShell");
   shell->addWidget(root);
@@ -185,6 +188,17 @@ Window::Window(Services &s, HttpServer &http)
   clockLayout->addWidget(clock);
   clockLayout->addWidget(clockDate);
   header->addLayout(clockLayout);
+  if (mobile) {
+    location->show();
+    auto settings = new QPushButton("Settings");
+    settings->setObjectName("mobileSettings");
+    settings->setMinimumHeight(48);
+    header->addWidget(settings);
+    connect(settings, &QPushButton::clicked, this, [this] {
+      pages->setCurrentIndex(3);
+      loadSettings();
+    });
+  }
   auto updateClock = [this] {
     const auto now = QDateTime::currentDateTime();
     clock->setText(now.toString("h:mm:ss AP"));
@@ -277,6 +291,47 @@ Window::Window(Services &s, HttpServer &http)
   status = label({}, "muted");
   status->setTextInteractionFlags(Qt::TextSelectableByMouse);
   layout->addWidget(status);
+  if (mobile) {
+    status->hide();
+    auto station = new QWidget;
+    station->setObjectName("mobileStation");
+    auto stationLayout = new QVBoxLayout(station);
+    stationLayout->addWidget(label("My station", "subtitle"));
+    mobileStationSummary = label({}, "muted");
+    mobileStationSummary->setObjectName("mobileStationSummary");
+    stationLayout->addWidget(mobileStationSummary);
+    auto connectStation = new QPushButton("Connect or change station");
+    connectStation->setMinimumHeight(48);
+    connect(connectStation, &QPushButton::clicked, this, &Window::setup);
+    stationLayout->addWidget(connectStation);
+    stationLayout->addStretch();
+    pages->addWidget(scrollView(station));
+    auto mobileNavigation = new QFrame;
+    mobileNavigation->setObjectName("mobileNavigation");
+    auto tabs = new QHBoxLayout(mobileNavigation);
+    tabs->setContentsMargins(0, 4, 0, 0);
+    tabs->setSpacing(4);
+    const QList<int> destinations{0, 1, 5, 3};
+    const QStringList labels{"Dashboard", "Radar", "Station", "Settings"};
+    for (int j = 0; j < destinations.size(); ++j) {
+      const int page = destinations[j];
+      auto button = new QPushButton(labels[j]);
+      button->setObjectName("mobileTab" + QString::number(page));
+      button->setMinimumSize(0, 52);
+      button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+      button->setCheckable(true);
+      button->setChecked(page == 0);
+      tabs->addWidget(button, 1);
+      connect(button, &QPushButton::clicked, this, [this, page] {
+        pages->setCurrentIndex(page);
+        if (page == 1) openRadar();
+        if (page == 3) loadSettings();
+      });
+      connect(pages, &QStackedWidget::currentChanged, button,
+              [button, page](int selected) { button->setChecked(selected == page); });
+    }
+    layout->addWidget(mobileNavigation);
+  }
   connect(&services, &Services::changed, this, &Window::render);
   connect(&services, &Services::notification, this, &Window::notify);
 #ifdef STORMDESK_SPEECH
@@ -314,8 +369,8 @@ Window::Window(Services &s, HttpServer &http)
     if (isFullScreen())
       showNormal();
   });
-  applyScale(
-      local.value("scale", services.config.number("fontScale", 1)).toDouble());
+  applyScale(local.value(mobile ? "mobileScale" : "scale",
+                         mobile ? 1.0 : services.config.number("fontScale", 1)).toDouble());
   auto initialSize = local.value("size", QSize(1440, 950)).toSize();
   if (auto screen = QGuiApplication::primaryScreen())
     initialSize = initialSize.boundedTo(screen->availableGeometry().size() -
@@ -386,6 +441,12 @@ QWidget *Window::makeWeather() {
     handle->setAttribute(Qt::WA_AcceptTouchEvents);
     handle->installEventFilter(this);
     heading->addWidget(handle);
+    if (mobile) {
+      const QStringList shortNames{"Rain", "Lightning", "Wind", "WBGT",
+                                   "UV index", "Pressure", "Humidity", "Dew point"};
+      qobject_cast<QLabel *>(heading->itemAt(0)->widget())->setText(shortNames[i]);
+      handle->hide();
+    }
     box->insertLayout(0, heading);
     widget->setMinimumWidth(0);
     box->setSpacing(2);
@@ -398,9 +459,21 @@ QWidget *Window::makeWeather() {
             [this, i] { showInstrument(i); });
     metricValues[i] = label("—", "metric");
     metricValues[i]->setAccessibleName(names[i]);
-    box->addWidget(metricValues[i]);
+    if (mobile) {
+      auto reading = new QHBoxLayout;
+      reading->setSpacing(3);
+      reading->addWidget(metricValues[i], 1);
+      auto unit = label({}, "muted");
+      unit->setObjectName("mobileUnit" + QString::number(i));
+      unit->setWordWrap(false);
+      reading->addWidget(unit);
+      box->addLayout(reading);
+    } else {
+      box->addWidget(metricValues[i]);
+    }
     metricSources[i] = label("Unavailable", "muted");
     box->addWidget(metricSources[i]);
+    if (mobile) metricSources[i]->hide();
     metricCards << widget;
   }
   body = new QGridLayout;
@@ -511,7 +584,17 @@ QWidget *Window::makeWeather() {
   dashboardRadarCard = liveRadar;
   connect(liveRadar, &Radar::warningsRequested, this, &Window::openWarnings);
   layout->addStretch();
-  radarStage = new RadarStage(liveRadar, scrollView(page));
+  if (mobile) {
+    layout->removeItem(metrics);
+    layout->removeItem(body);
+    body->removeWidget(currentCard);
+    body->removeWidget(sunCycle);
+    layout->insertWidget(0, currentCard);
+    layout->insertLayout(1, metrics);
+    layout->insertWidget(2, sunCycle);
+    sunCycle->setCompact(true);
+  }
+  radarStage = new RadarStage(liveRadar, scrollView(page), nullptr, mobile);
   auto dashboard = new QWidget;
   auto dashboardLayout = new QVBoxLayout(dashboard);
   dashboardLayout->setContentsMargins(0, 0, 0, 0);
@@ -520,7 +603,16 @@ QWidget *Window::makeWeather() {
   arrange();
   return dashboard;
 }
-QWidget *Window::makeRadar() { return scrollView(new Radar(services)); }
+QWidget *Window::makeRadar() {
+  if (!mobile) return scrollView(new Radar(services));
+  auto page = new QWidget;
+  auto layout = new QVBoxLayout(page);
+  layout->setContentsMargins(0, 0, 0, 0);
+  auto radar = new Radar(services);
+  radar->setImmersive(true);
+  layout->addWidget(radar);
+  return page;
+}
 void Window::openWarnings() {
   tools->findChild<QComboBox *>("nativeTool")->setCurrentIndex(6);
   pages->setCurrentIndex(4);
@@ -772,6 +864,22 @@ QWidget *Window::makeSettings() {
                 "to protect the archive from mixed stations.",
             "muted"));
   auto appearance = section("Appearance");
+  if (mobile) {
+    appearance->addRow("Interface size", scaleBox);
+    appearance->addRow(refreshButton);
+    auto instruments = new QPushButton("Arrange instruments");
+    instruments->setObjectName("arrangeInstruments");
+    appearance->addRow(instruments);
+    connect(instruments, &QPushButton::clicked, this, &Window::arrangeInstruments);
+    auto history = new QPushButton("Weather history");
+    auto more = new QPushButton("All weather tools");
+    appearance->addRow(history);
+    appearance->addRow(more);
+    connect(history, &QPushButton::clicked, this, [this] {
+      pages->setCurrentIndex(2); renderHistory();
+    });
+    connect(more, &QPushButton::clicked, this, [this] { pages->setCurrentIndex(4); });
+  }
   choice(appearance, "Theme", "theme",
          {{"Graphite Silver", "graphite"},
           {"Midnight Violet", "violet"},
@@ -1272,7 +1380,7 @@ void Window::saveSettings() {
 }
 void Window::applyScale(double value) {
   scaleFactor = uiScale(value);
-  local.setValue("scale", scaleFactor);
+  local.setValue(mobile ? "mobileScale" : "scale", scaleFactor);
   auto index = scaleBox->findData(scaleFactor);
   if (index < 0) {
     scaleBox->addItem(QString::number(qRound(scaleFactor * 100)) + "%",
@@ -1286,8 +1394,8 @@ void Window::applyScale(double value) {
   font.setPixelSize(qRound(13 * scaleFactor));
   QApplication::setFont(font);
   for (auto face : faces)
-    face->setScale(scaleFactor * .48);
-  weatherGlyph->setScale(scaleFactor * .8);
+    face->setScale(scaleFactor * (mobile ? .25 : .48));
+  weatherGlyph->setScale(scaleFactor * (mobile ? .48 : .8));
   sunCycle->setScale(scaleFactor);
   radarStage->setScale(scaleFactor);
   for (auto radar : findChildren<Radar *>())
@@ -1324,6 +1432,10 @@ void Window::applyTheme() {
           muted = light ? "#506177" : "#a6b2c5",
           border =
               light ? "#cbd4df" : (theme == "contrast" ? "#ffffff" : "#30394a");
+  if (mobile && theme == "graphite") {
+    background = "#101214"; panel = "#1b1f22";
+    foreground = "#f4f1e7"; muted = "#b6bec3"; border = "#353c41";
+  }
   QPalette palette;
   palette.setColor(QPalette::Window, QColor(background));
   palette.setColor(QPalette::WindowText, QColor(foreground));
@@ -1411,6 +1523,19 @@ void Window::applyTheme() {
       ";border-radius:8px;}"
       "QScrollArea#instrumentShelf>QWidget>QWidget {background:" +
       background + ";}");
+  if (mobile) {
+    qApp->setStyleSheet(qApp->styleSheet() +
+        "QWidget#instrumentPocket QLabel[kind=brand] {font-size:" + px(18) + "px;}"
+        "QWidget#instrumentPocket QPushButton {min-height:" + px(30) + "px;}"
+        "QFrame#mobileNavigation QPushButton {font-size:" + px(11) + "px;padding:6px 2px;}"
+        "QFrame#mobileNavigation QPushButton:checked {background:#293c45;color:#cce8f3;}"
+        "QWidget#instrumentPocket QScrollArea#instrumentShelf {border:0;}"
+        "QWidget#instrumentPocket QScrollArea#instrumentShelf QLabel[kind=temperature] {font-size:" + px(44) + "px;}"
+        "QWidget#instrumentPocket QScrollArea#instrumentShelf QLabel[kind=subtitle] {font-size:" + px(14) + "px;}"
+        "QWidget#instrumentPocket QScrollArea#instrumentShelf QLabel[kind=metric] {font-size:" + px(21) + "px;}"
+        "QWidget#instrumentPocket QScrollArea#instrumentShelf QLabel[kind=eyebrow] {font-size:" + px(10) + "px;}"
+        "QWidget#instrumentPocket QScrollArea#instrumentShelf QLabel[kind=muted] {font-size:" + px(11) + "px;}");
+  }
   styleAlerts();
 }
 void Window::styleAlerts() {
@@ -1440,8 +1565,8 @@ void Window::arrange() {
                                        : "Connect station");
   if (auto import = findChild<QPushButton *>("importTempest"))
     import->setText(available < 260 ? "Import\nTempest" : "Import Tempest");
-  clock->setVisible(!compact);
-  clockDate->setVisible(!compact);
+  clock->setVisible(!compact && !mobile);
+  clockDate->setVisible(!compact && !mobile);
   if (pages)
     for (auto form : pages->findChildren<QFormLayout *>()) {
       form->setRowWrapPolicy(compact ? QFormLayout::WrapAllRows
@@ -1452,21 +1577,24 @@ void Window::arrange() {
             label->setWordWrap(true);
     }
   for (auto button : navButtons)
-    button->setVisible(!compact);
-  pageSelect->setVisible(compact);
-  navigation->removeWidget(scaleBox);
-  navigation->removeWidget(refreshButton);
-  navigation->removeWidget(pageSelect);
-  navigation->setColumnStretch(5, compact ? 0 : 1);
-  if (compact) {
-    navigation->addWidget(pageSelect, 0, 0, 1, 2);
-    navigation->addWidget(refreshButton, 1, 0);
-    navigation->addWidget(scaleBox, 1, 1);
-  } else {
-    navigation->addWidget(refreshButton, 0, 6);
-    navigation->addWidget(scaleBox, 0, 7);
+    button->setVisible(!compact && !mobile);
+  pageSelect->setVisible(compact && !mobile);
+  if (!mobile) {
+    navigation->removeWidget(scaleBox);
+    navigation->removeWidget(refreshButton);
+    navigation->removeWidget(pageSelect);
+    navigation->setColumnStretch(5, compact ? 0 : 1);
+    if (compact) {
+      navigation->addWidget(pageSelect, 0, 0, 1, 2);
+      navigation->addWidget(refreshButton, 1, 0);
+      navigation->addWidget(scaleBox, 1, 1);
+    } else {
+      navigation->addWidget(refreshButton, 0, 6);
+      navigation->addWidget(scaleBox, 0, 7);
+    }
   }
-  const int columns = available >= 1200  ? 8
+  const int columns = mobile ? (width() / scaleFactor >= 280 ? 4 : 2)
+                      : available >= 1200  ? 8
                       : available >= 650 ? 4
                       : available >= 360 ? 2
                                          : 1;
@@ -1479,8 +1607,10 @@ void Window::arrange() {
                              "Humidity",           "Dew point"};
   QList<int> indices;
   const auto savedOrder = local.value("gaugeOrder").toStringList();
-  const auto preferred =
-      savedOrder.isEmpty() ? order : QJsonArray::fromStringList(savedOrder);
+  const auto preferred = !savedOrder.isEmpty() ? QJsonArray::fromStringList(savedOrder)
+      : !order.isEmpty() ? order
+      : mobile ? QJsonArray{"Rain today", "Wind", "Humidity", "Pressure"}
+               : QJsonArray();
   for (const auto &v : preferred) {
     int i = names.indexOf(v.toString());
     if (i >= 0 && !indices.contains(i))
@@ -1495,7 +1625,7 @@ void Window::arrange() {
   int cell = 0;
   for (int i : indices) {
     auto widget = metricCards[i];
-    widget->setVisible(!hidden.contains(names[i]));
+    widget->setVisible(!hidden.contains(names[i]) && (!mobile || cell < 4));
     if (!widget->isHidden()) {
       metrics->addWidget(widget, cell / columns, cell % columns);
       ++cell;
@@ -1509,6 +1639,27 @@ void Window::arrange() {
   if (!currentCard || !contextCard || !dashboardRadarCard)
     return;
   auto detail = currentCard->findChild<QLabel *>("conditionsDetail");
+  if (mobile) {
+    for (auto widget : QList<QWidget *>{heroHeading, heroSource, detail, heroTemperature,
+                                        heroCondition, weatherGlyph})
+      heroLayout->removeWidget(widget);
+    heroHeading->hide(); heroSource->hide();
+    heroLayout->addWidget(heroTemperature, 0, 0, 2, 1);
+    heroLayout->addWidget(heroCondition, 0, 1);
+    heroLayout->addWidget(detail, 1, 1);
+    heroLayout->addWidget(weatherGlyph, 0, 2, 2, 1);
+    heroLayout->setColumnStretch(0, 0);
+    heroLayout->setColumnStretch(1, 1);
+    heroTemperature->setWordWrap(false);
+    for (auto value : metricValues) {
+      value->setWordWrap(false);
+      value->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    }
+    currentCard->setVisible(!hidden.contains("Current conditions"));
+    dashboardRadarCard->setVisible(!hidden.contains("Local radar"));
+    radarStage->setScale(scaleFactor);
+    return;
+  }
   for (auto widget :
        QList<QWidget *>{heroHeading, heroSource, detail, heroTemperature,
                         heroCondition, weatherGlyph})
@@ -1679,8 +1830,8 @@ void Window::render() {
   location->setText(services.config.location().value("name").toString(
       "Your weather, at a glance"));
   heroTemperature->setText(number(value(7, "temperature_2m"),
-                                  metric ? " °C" : " °F", 1, tempFactor,
-                                  tempShift));
+                                  mobile ? (metric ? "°C" : "°") : metric ? " °C" : " °F",
+                                  mobile ? 0 : 1, tempFactor, tempShift));
   heroCondition->setText(current.contains("weather_code")
                              ? condition(current.value("weather_code").toInt())
                              : "Waiting for weather");
@@ -1692,9 +1843,9 @@ void Window::render() {
       "Feels like " +
       number(fresh && obs[7] ? services.archive.current().value("feels_like")
                              : current.value("apparent_temperature"),
-             metric ? " °C" : " °F", 1, tempFactor, tempShift) +
-      "\nGusts " +
-      number(value(3, "wind_gusts_10m"), " " + windLabel, 1, windFactor));
+             metric ? " °C" : " °F", mobile ? 0 : 1, tempFactor, tempShift) +
+      (mobile ? (fresh && obs[7] ? " · Station" : " · Forecast")
+              : "\nGusts " + number(value(3, "wind_gusts_10m"), " " + windLabel, 1, windFactor)));
   auto rainToday = value(18), strikes = value(15);
   if (fresh) {
     QSqlQuery rain(services.archive.db);
@@ -1793,6 +1944,15 @@ void Window::render() {
     faces[i]->setAccessibleDescription(metricValues[i]->text() + " · " +
                                        metricSources[i]->text());
   }
+  if (mobile) {
+    for (int i = 0; i < 8; ++i) {
+      const auto reading = metricValues[i]->text();
+      metricValues[i]->setProperty("readingText", reading);
+      metricValues[i]->setText(reading.section(' ', 0, 0));
+      auto unit = metricCards[i]->findChild<QLabel *>("mobileUnit" + QString::number(i));
+      unit->setText(reading.section(' ', 1));
+    }
+  }
   const bool motion =
       services.config.settings().value("nativeMotion").toBool(true);
   weatherGlyph->setWeather(
@@ -1827,6 +1987,9 @@ void Window::render() {
       services.stationStatus +
       (obs[0] && !fresh ? "\nLast measurement is stale." : "") + "\n" +
       services.warningStatus);
+  if (mobileStationSummary)
+    mobileStationSummary->setText(services.config.location().value("name").toString() +
+        "\n\n" + stationDetail->text() + "\n\n" + heroSource->text());
   const QStringList severities{"Unknown", "Minor", "Moderate", "Severe",
                                "Extreme"};
   QList<QPair<int, QJsonObject>> rankedWarnings;
@@ -1891,6 +2054,9 @@ void Window::render() {
                  ? services.warningStatus + " · No active warnings returned"
                  : services.warningStatus)
           : warningText.join("\n"));
+  if (mobile && !rankedWarnings.isEmpty())
+    alerts->setText("National Weather Service\n" + event +
+                    (rankedWarnings.size() > 1 ? QString(" · %1 alerts").arg(rankedWarnings.size()) : QString()));
   alerts->setText(alerts->text() + "   ·   View details →");
   alertButton->setAccessibleDescription(alerts->text());
   status->setText(services.forecastStatus + "   ·   Home network port " +
@@ -1938,12 +2104,71 @@ void Window::setup() {
   dialog->open();
 #endif
 }
+void Window::arrangeInstruments() {
+  auto dialog = new QDialog(this);
+  dialog->setObjectName("instrumentArrangement");
+  dialog->setWindowTitle("Arrange instruments");
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  auto layout = new QVBoxLayout(dialog);
+  layout->addWidget(label("Your instruments", "subtitle"));
+  layout->addWidget(label("The first four visible gauges appear on your dashboard.", "muted"));
+  auto list = new QListWidget;
+  list->setObjectName("instrumentOrder");
+  layout->addWidget(list, 1);
+  auto populate = [this, list](int selected) {
+    list->clear();
+    for (int i : gaugeOrder) {
+      auto item = new QListWidgetItem(metricValues[i]->accessibleName() + "\n" +
+                                     metricValues[i]->text(), list);
+      item->setData(Qt::UserRole, i);
+      item->setSizeHint(QSize(0, qRound(58 * scaleFactor)));
+    }
+    list->setCurrentRow(selected);
+  };
+  populate(0);
+  auto actions = new QHBoxLayout;
+  auto up = new QPushButton("Move up");
+  auto down = new QPushButton("Move down");
+  up->setObjectName("instrumentUp");
+  down->setObjectName("instrumentDown");
+  actions->addWidget(up); actions->addWidget(down);
+  layout->addLayout(actions);
+  auto move = [this, list, populate](int step) {
+    const int from = list->currentRow(), to = from + step;
+    if (from < 0 || to < 0 || to >= gaugeOrder.size()) return;
+    moveGauge(gaugeOrder[from], gaugeOrder[to]);
+    populate(to);
+  };
+  connect(up, &QPushButton::clicked, dialog, [move] { move(-1); });
+  connect(down, &QPushButton::clicked, dialog, [move] { move(1); });
+  connect(list, &QListWidget::currentRowChanged, dialog, [list, up, down](int row) {
+    up->setEnabled(row > 0); down->setEnabled(row >= 0 && row < list->count() - 1);
+  });
+  up->setEnabled(false);
+  auto details = new QPushButton("Reading details");
+  layout->addWidget(details);
+  connect(details, &QPushButton::clicked, dialog, [this, list, dialog] {
+    const int index = list->currentItem()->data(Qt::UserRole).toInt();
+    dialog->accept();
+    showInstrument(index);
+  });
+  auto close = new QPushButton("Done");
+  layout->addWidget(close);
+  connect(close, &QPushButton::clicked, dialog, &QDialog::accept);
+  dialog->resize(std::min(460, width()), std::min(680, height()));
+  if (mobile) {
+    dashboardRadarCard->hide();
+    connect(dialog, &QDialog::finished, this, [this] { arrange(); });
+  }
+  dialog->open();
+}
 void Window::showInstrument(int index) {
   auto dialog = new QDialog(this);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   dialog->setWindowTitle(metricValues[index]->accessibleName());
   auto box = new QVBoxLayout(dialog);
-  auto value = label(metricValues[index]->text(), "metric");
+  auto value = label(mobile ? metricValues[index]->property("readingText").toString()
+                            : metricValues[index]->text(), "metric");
   auto source = label(metricSources[index]->text(), "muted");
   box->addWidget(value);
   box->addWidget(source);
@@ -1968,10 +2193,15 @@ void Window::showInstrument(int index) {
   box->addWidget(close);
   connect(close, &QPushButton::clicked, dialog, &QDialog::accept);
   connect(&services, &Services::changed, dialog, [this, index, value, source] {
-    value->setText(metricValues[index]->text());
+    value->setText(mobile ? metricValues[index]->property("readingText").toString()
+                          : metricValues[index]->text());
     source->setText(metricSources[index]->text());
   });
   dialog->resize(std::min(520, width()), std::min(330, height()));
+  if (mobile) {
+    dashboardRadarCard->hide();
+    connect(dialog, &QDialog::finished, this, [this] { arrange(); });
+  }
   dialog->open();
 }
 void Window::renderHistory() {

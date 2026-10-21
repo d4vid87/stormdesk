@@ -50,6 +50,7 @@ public:
   void setTimes(qint64 sunrise, qint64 sunset, int utcOffset, bool motion,
                 qint64 nextSunrise = 0);
   void setScale(double scale);
+  void setCompact(bool enabled) { compact = enabled; setScale(scale); }
   bool hasTimes() const { return rise > 0 && set > rise; }
   bool animated() const { return motion && timer.isActive(); }
 
@@ -63,6 +64,7 @@ private:
   int offset = 0;
   bool motion = true;
   double scale = 1;
+  bool compact = false;
   QTimer timer;
   QElapsedTimer elapsed;
   void cadence();

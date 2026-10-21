@@ -108,6 +108,71 @@ private slots:
     prefs.remove("previewUpdates");
     prefs.remove("lastUpdateCheck");
   }
+  void mobileInstrumentPocket() {
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    QString error;
+    QVERIFY(cfg.save({{"settings", QJsonObject{{"stationName", "Mobile station"},
+        {"lat", 32.6}, {"lon", -97.3}, {"units", "imperial"}}}}, &error));
+    Archive db(dir.filePath("db")); QVERIFY(db.open(&error));
+    Services services(cfg, db);
+    services.network.setProxy(QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", 1));
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    QSettings prefs(QSettings::defaultFormat(), QSettings::UserScope, "StormDesk", "Native");
+    const auto before = prefs.value("gaugeOrder");
+    prefs.remove("gaugeOrder");
+    Window window(services, server, true);
+    window.show();
+    for (const auto size : {QSize(320, 760), QSize(390, 844), QSize(844, 390)}) {
+      window.applyScale(1);
+      window.resize(size);
+      QTest::qWait(20);
+      QCOMPARE(window.size(), size);
+      auto shelf = window.findChild<QScrollArea *>("instrumentShelf");
+      auto radar = window.findChild<Radar *>("dashboardRadar");
+      auto nav = window.findChild<QWidget *>("mobileNavigation");
+      QVERIFY(shelf && radar && nav && nav->isVisible());
+      QCOMPARE(shelf->horizontalScrollBar()->maximum(), 0);
+      QVERIFY(radar->height() > window.height() * .25);
+      QVERIFY(radar->mapTo(&window, QPoint()).y() >
+              shelf->mapTo(&window, shelf->rect().bottomLeft()).y());
+      QVERIFY(nav->mapTo(&window, QPoint()).y() >
+              radar->mapTo(&window, radar->rect().bottomLeft()).y());
+      QVERIFY(window.findChild<QPushButton *>("toggleInstruments")->isHidden());
+      int visible = 0;
+      for (auto face : window.findChildren<InstrumentFace *>())
+        if (face->isVisible()) {
+          ++visible;
+          QVERIFY(shelf->viewport()->rect().contains(
+              face->mapTo(shelf->viewport(), face->rect().center())));
+        }
+      if (size.height() > size.width()) QCOMPARE(visible, 4);
+      QCOMPARE(window.findChild<SunCycle *>("sunCycle")->height(), 48);
+    }
+    window.resize(390, 844);
+    window.findChild<QPushButton *>("mobileTab3")->click();
+    auto tabs = window.findChild<QTabWidget *>();
+    for (int i = 0; i < tabs->count(); ++i)
+      if (tabs->tabText(i) == "Appearance") tabs->setCurrentIndex(i);
+    window.findChild<QPushButton *>("arrangeInstruments")->click();
+    QTest::qWait(5);
+    auto order = window.findChild<QListWidget *>("instrumentOrder");
+    QVERIFY(order && order->count() == 8);
+    QCOMPARE(order->item(0)->data(Qt::UserRole).toInt(), 0);
+    window.findChild<QPushButton *>("instrumentDown")->click();
+    QCOMPARE(order->item(0)->data(Qt::UserRole).toInt(), 2);
+    QCOMPARE(prefs.value("gaugeOrder").toStringList().first(), QString("Wind"));
+    window.findChild<QDialog *>("instrumentArrangement")->accept();
+    window.findChild<QPushButton *>("mobileTab0")->click();
+    QTest::qWait(10);
+    auto wind = window.findChild<InstrumentFace *>("instrumentFace2");
+    auto rain = window.findChild<InstrumentFace *>("instrumentFace0");
+    QVERIFY(wind->mapTo(&window, QPoint()).x() < rain->mapTo(&window, QPoint()).x());
+    window.findChild<QPushButton *>("mobileTab5")->click();
+    QVERIFY(window.findChild<QLabel *>("mobileStationSummary")->isVisible());
+    prefs.setValue("gaugeOrder", before);
+  }
   void instrumentAndRealSetup() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));

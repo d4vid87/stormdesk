@@ -21,6 +21,9 @@
 #include <QApplication>
 #include <QWindow>
 #include <QPixmap>
+#ifdef STORMDESK_ANDROID_WEBVIEW
+#include <QtWebView>
+#endif
 class NativeApplication : public QApplication {
 public:
   using QApplication::QApplication;
@@ -68,6 +71,9 @@ int main(int argc, char **argv) {
   if (!headless) {
 #ifdef STORMDESK_WEBENGINE
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+#endif
+#ifdef STORMDESK_ANDROID_WEBVIEW
+    QtWebView::initialize();
 #endif
     app = std::make_unique<NativeApplication>(argc, argv);
   } else
@@ -249,7 +255,11 @@ int main(int argc, char **argv) {
 #ifdef STORMDESK_GUI
   std::unique_ptr<storm::Window> window;
   if (!headless) {
+#ifdef Q_OS_ANDROID
+    window = std::make_unique<storm::Window>(services, server, true);
+#else
     window = std::make_unique<storm::Window>(services, server);
+#endif
     if (cli.isSet("scale")) {
       bool ok;
       auto value = cli.value("scale").toDouble(&ok);
