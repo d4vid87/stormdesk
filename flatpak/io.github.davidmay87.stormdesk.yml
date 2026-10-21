@@ -3,8 +3,13 @@ app-id: io.github.davidmay87.stormdesk
 runtime: org.kde.Platform
 runtime-version: "6.10"
 sdk: org.kde.Sdk
+base: io.qt.qtwebengine.BaseApp
+base-version: "6.10"
+cleanup-commands:
+  - /app/cleanup-BaseApp.sh
 command: stormdesk
 finish-args:
+  - --env=QTWEBENGINEPROCESS_PATH=/app/bin/QtWebEngineProcess
   - --share=network
   - --share=ipc
   - --socket=wayland
