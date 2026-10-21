@@ -12,9 +12,8 @@ const DEFAULTS = {
   units: 'imperial', refreshSec: 60,
   // Empty means "follow the master switch" — see WIND_UNITS.
   windUnit: '',
-  // 'auto' follows the browser locale; the other two are for the screen that lives in a country
-  // its OS wasn't set up for.
-  clock24: 'auto', places: [], activePlace: null,
+  // New screens use 12-hour time; saved 24-hour or locale preferences remain available.
+  clock24: '12', places: [], activePlace: null,
   // nearbyStations stays bare id strings: an older client on the same /config reads it directly,
   // and anything object-shaped would land in its URLs as [object Object]. New keys are additive.
   nearbyStations: [],

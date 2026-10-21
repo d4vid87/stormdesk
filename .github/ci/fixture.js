@@ -75,18 +75,21 @@ addEventListener('load', () => {
   console.assert(gauges.every(el => getComputedStyle(el.querySelector('.gwrap > span')).display !== 'none'), 'Instrument faces are visible');
   console.assert(document.getElementById('g-ltg').dataset.unavailable === 'false', 'Zero reported strikes is known data');
   console.assert(document.querySelector('#g-wet svg') && document.querySelector('#g-ltg svg'), 'Wet bulb and lightning have instrument faces');
-  console.assert(document.getElementById('hero-alerts').parentElement.id === 'observatory-heading', 'Alert banner sits beside the clock');
+  console.assert(document.getElementById('hero-alerts').parentElement.id === 'desk', 'Instrument alert banner sits above the radar workspace');
   console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');
-  console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'All ten available days render');
-  const firstDay = document.querySelector('#daycards > .daycard');
-  console.assert(firstDay.querySelector('.dc-temp b').textContent === '78°' && firstDay.querySelector('.dc-temp span').textContent === '58°', 'Clear list separates high and low without a slash');
-  console.assert(firstDay.querySelector('.dc-pop').textContent === '0%', 'Clear list keeps rain chance uncluttered and preserves zero');
-  console.assert(getComputedStyle(firstDay.querySelector('.dc-date')).display !== 'none' && document.querySelectorAll('.forecast-columns > span').length === 5, 'Clear list shows dates and labeled columns');
-  console.assert(firstDay.getAttribute('aria-label').includes('high 78') || firstDay.getAttribute('aria-label').includes('High 78'), 'Forecast row describes its readings for screen readers');
-  document.querySelector('#daycards > .daycard').click();
-  console.assert(document.getElementById('forecast-dialog').open, 'Forecast day opens accessible details');
-  document.getElementById('forecast-dialog').close();
-  console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety cards stay outside collapsed analysis');
+  console.assert(document.getElementById('instrument-clock').closest('header'), 'Clock sits in the upper-right header');
+  console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'Shared tool data retains available days');
+  console.assert(document.getElementById('desk-stack').hidden, 'Retired ten-day and six-hour panels stay outside the radar workspace');
+  console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety tools stay accessible through local context');
+  const shelf = document.getElementById('instrument-shelf'), toggle = document.getElementById('instrument-toggle');
+  const wasHidden = shelf.hidden;
+  toggle.click();
+  console.assert(shelf.hidden !== wasHidden && toggle.getAttribute('aria-expanded') === String(!shelf.hidden), 'Instrument collapse updates screen and accessibility state');
+  toggle.click();
+  console.assert(document.getElementById('instrument-sunrise').textContent !== '—', 'Today’s sunrise renders above radar');
+  const radarBox = document.getElementById('instrument-radar').getBoundingClientRect();
+  console.assert(radarBox.width > document.getElementById('desk').clientWidth * .85, 'Radar uses full workspace width');
+  console.assert(radarBox.height >= 150, 'Radar remains usable at small sizes');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
   console.assert(document.querySelector('#daycards .dc-pop').textContent === '—', 'Unavailable rain chance is not zero');
   console.assert(document.querySelector('#g-ltg').textContent.includes('unavailable'), 'Missing lightning is unavailable, not no strikes');
@@ -95,8 +98,12 @@ addEventListener('load', () => {
   console.assert(!document.querySelector('#g-rain .fi-fill, #g-dew .fi-needle, #g-wbgt .fi-fill'), 'Unavailable values have no filled instrument indicators');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [{ properties: {
-    event: '<b>Test advisory</b>', severity: 'Severe', description: '<img src=x onerror=alert(1)>',
+    event: '<b>Test advisory</b>', severity: 'Severe', areaDesc:'Fixture county', expires:new Date((now+3600)*1000).toISOString(), description: '<img src=x onerror=alert(1)>', instruction:'Fixture instructions',
   } }] }));
+  document.querySelector('#hero-alerts button').click();
+  console.assert(document.getElementById('radar-alert-dialog').open && document.getElementById('radar-alert-list').textContent.includes('Fixture county'), 'Banner opens affected areas and official details');
+  console.assert(document.getElementById('radar-alert-list').textContent.includes('Expires (device time)') && document.getElementById('radar-alert-list').textContent.includes('Fixture instructions') && !document.querySelector('#radar-alert-list img'), 'Alert text stays escaped with expiry and instructions');
+  document.getElementById('radar-alert-dialog').close();
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [] }));
   // api.OBS order: time, temp, rh, press, ... — index by name off the module the page already
   // loaded rather than hard-coding a shape that moves.
@@ -107,7 +114,7 @@ addEventListener('load', () => {
     o[OBS.uv] = 4; o[OBS.solar] = 520; o[OBS.dayRain] = 3; o[OBS.battery] = 2.71;
     dispatchEvent(new CustomEvent('wd:ws-obs', { detail: o }));
     console.assert(document.getElementById('observatory-local').textContent.includes('gusts'), 'Local signals refresh with station observations');
-    const settle = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const settle = () => new Promise(resolve => setTimeout(resolve, 0));
     await settle();
     console.assert(document.querySelectorAll('.status-tile').length === 3, 'Status cards show air quality, moon and sunset');
     for (const kind of ['aqi','sky','health']) {

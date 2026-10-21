@@ -360,7 +360,7 @@ export function shapeOm(j, ownTuple = null) {
   if (ownTuple && !settings().activePlace) overlayStation(c, ownTuple, j.elevation);
 
   // Kept so a later observation can be overlaid on this same payload without refetching.
-  return { current_conditions: c, forecast: { daily, hourly }, elevation: j.elevation };
+  return { current_conditions: c, forecast: { daily, hourly }, elevation: j.elevation, timezone: j.timezone };
 }
 
 // The station's reading painted over the model's guess. Exported because observations arrive

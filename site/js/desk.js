@@ -56,33 +56,20 @@ export function renderHeroAlerts(feats, status = '') {
   if (!box) return;
   box.hidden = false;
   box.replaceChildren();
-  const rank = { Extreme: 3, Severe: 2, Moderate: 1, Minor: 0 };
-  const sorted = (feats || []).slice().sort((a, b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
-  box.dataset.severity = sorted[0]?.properties?.severity || '';
+  const rank = { Extreme:4, Severe:3, Moderate:2, Minor:1, Unknown:0 };
+  const sorted = (feats || []).slice().sort((a,b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
+  box.dataset.severity = status ? '' : sorted[0]?.properties?.severity || '';
   box.dataset.state = status ? 'unavailable' : feats == null ? 'loading' : sorted.length ? 'active' : 'clear';
-  const heading = document.createElement('div');
-  heading.className = 'alert-heading';
-  const title = document.createElement('strong');
-  title.textContent = 'WEATHER ALERTS';
-  const text = document.createElement('span');
-  text.className = 'alert-summary';
-  text.textContent = status || (feats == null ? 'Waiting for weather alerts' : sorted.length
-    ? sorted.map((f) => f.properties?.event || 'Weather alert').join(' · ') : 'No active watches, warnings or advisories');
-  heading.append(title, text);
-  const link = document.createElement('button');
-  link.type = 'button';
-  link.textContent = 'View alerts →';
-  link.onclick = () => {
-    const alerts = $('alerts');
-    for (let node = alerts?.parentElement; node; node = node.parentElement) {
-      if (node.tagName === 'DETAILS') node.open = true;
-    }
-    alerts?.scrollIntoView({ behavior: 'auto', block: 'center' });
-    alerts?.setAttribute('tabindex', '-1');
-    alerts?.focus({ preventScroll: true });
-  };
-  link.hidden = !sorted.length;
-  box.append(heading, link);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'instrument-alert-button';
+  button.textContent = status || (feats == null ? 'Checking National Weather Service alerts…' : sorted.length
+    ? sorted.map(({properties:p}) => `${p.severity || 'Unknown'} · ${p.headline || p.event || 'Weather alert'}`).join('   •   ')
+    : 'National Weather Service · No active station-area alerts');
+  if (sorted.length) button.textContent += '   ·   View details →';
+  button.disabled = !sorted.length;
+  button.onclick = () => $('radar-banner-details').click();
+  box.append(button);
 }
 
 export async function refreshDesk() {
@@ -164,6 +151,7 @@ export async function refreshAlerts() {
   let j;
   try { j = await api.alerts(); }
   catch (error) {
+    if (requestedPlace !== JSON.stringify(coords())) return;
     const unsupported = /^404\b/.test(error.message);
     const message = unsupported ? 'NWS alerts are available in the United States only' : 'Alert feed unavailable · check official sources';
     renderHeroAlerts(null, message);
