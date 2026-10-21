@@ -1394,7 +1394,7 @@ void Window::applyScale(double value) {
   font.setPixelSize(qRound(13 * scaleFactor));
   QApplication::setFont(font);
   for (auto face : faces)
-    face->setScale(scaleFactor * (mobile ? .25 : .48));
+    face->setScale(mobile ? std::max(44.0, 44 * scaleFactor) / 86.0 : scaleFactor * .48);
   weatherGlyph->setScale(scaleFactor * (mobile ? .48 : .8));
   sunCycle->setScale(scaleFactor);
   radarStage->setScale(scaleFactor);
@@ -2119,7 +2119,8 @@ void Window::arrangeInstruments() {
     list->clear();
     for (int i : gaugeOrder) {
       auto item = new QListWidgetItem(metricValues[i]->accessibleName() + "\n" +
-                                     metricValues[i]->text(), list);
+                                     (mobile ? metricValues[i]->property("readingText").toString()
+                                             : metricValues[i]->text()), list);
       item->setData(Qt::UserRole, i);
       item->setSizeHint(QSize(0, qRound(58 * scaleFactor)));
     }

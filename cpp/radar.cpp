@@ -77,6 +77,7 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
     layout->insertWidget(1, container, 1);
     if (mobileView->rootObject()) {
       mobileView->rootObject()->setVisible(false);
+      mobileView->rootObject()->setProperty("compact", compact);
       connect(mobileView->rootObject(), SIGNAL(pageLoaded(bool)), this, SLOT(pageLoaded(bool)));
     } else {
       status->setText("Radar view could not start. Open HookEcho or retry.");
