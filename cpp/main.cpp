@@ -19,6 +19,19 @@
 #include "window.h"
 #include <QApplication>
 #include <QPixmap>
+class NativeApplication : public QApplication {
+public:
+  using QApplication::QApplication;
+  bool notify(QObject *receiver, QEvent *event) override {
+#ifdef Q_OS_ANDROID
+    // shortcut: tested Adreno retains partial frames; remove after a Qt upgrade passes device QA.
+    if (event->type() == QEvent::UpdateRequest)
+      if (auto widget = qobject_cast<QWidget *>(receiver); widget && widget->isWindow())
+        widget->update();
+#endif
+    return QApplication::notify(receiver, event);
+  }
+};
 #endif
 
 int main(int argc, char **argv) {
@@ -38,7 +51,7 @@ int main(int argc, char **argv) {
 #ifdef STORMDESK_WEBENGINE
     QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
 #endif
-    app = std::make_unique<QApplication>(argc, argv);
+    app = std::make_unique<NativeApplication>(argc, argv);
   } else
 #endif
     app = std::make_unique<QCoreApplication>(argc, argv);

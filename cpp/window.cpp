@@ -1431,14 +1431,6 @@ void Window::styleAlerts() {
           .arg(tint.name(), palette().color(QPalette::WindowText).name(),
                event.name()));
 }
-bool Window::event(QEvent *event) {
-#ifdef Q_OS_ANDROID
-  // shortcut: tested Android/Adreno retains partial frames; remove after a Qt upgrade passes device QA.
-  if (event->type() == QEvent::UpdateRequest)
-    update();
-#endif
-  return QMainWindow::event(event);
-}
 void Window::arrange() {
   if (!metrics || !body)
     return;

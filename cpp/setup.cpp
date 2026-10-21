@@ -376,7 +376,7 @@ SetupDialog::SetupDialog(Services &s, quint16 port, double scale, Apply save,
   verification->addWidget(retry);
   connect(retry, &QPushButton::clicked, &services, &Services::refresh);
   verification->addWidget(
-      copy("Connection details were saved when you selected Save & test. You "
+      copy("Connection details were saved when you selected Save and test. You "
            "can close this setup while readings arrive."));
   verification->addStretch();
   auto personalize = page();
@@ -461,7 +461,7 @@ void SetupDialog::selectStation(int index) {
       "\nNEXRAD WSR-88D radar: " + settings.value("radarSite").toString() +
       "\nOfficial warnings and forecasts will use this station location.");
   message->setText(
-      "Station imported. Save & test to connect and load local warnings.");
+      "Station imported. Save and test to connect and load local warnings.");
 }
 void SetupDialog::resizeEvent(QResizeEvent *event) {
   QDialog::resizeEvent(event);
