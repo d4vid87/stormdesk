@@ -975,7 +975,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-instrument-20261021`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-gauge-order-20261021`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about

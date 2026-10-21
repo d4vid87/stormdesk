@@ -6,7 +6,7 @@ export function initObservatory() {
   if ($('instrument-stage')) return;
   document.documentElement.dataset.interface = 'instrument';
   const desk = $('desk'), stack = $('desk-stack');
-  document.querySelector('header h1').textContent = 'Stormdesk';
+  document.querySelector('header h1').textContent = 'STORMDESK';
   const clock = document.createElement('div');
   clock.id = 'instrument-clock';
   clock.append($('hero-clock'), $('clock-date'));

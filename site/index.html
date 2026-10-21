@@ -915,14 +915,14 @@
 <link rel="stylesheet" href="themes.css?v=dark-collection-20260926">
 <link rel="stylesheet" href="observatory.css?v=clear-list-20260926">
 <link rel="stylesheet" href="welcome.css?v=cards-20260926">
-<link rel="stylesheet" href="instrument.css?v=20261021">
+<link rel="stylesheet" href="instrument.css?v=gauge-order-20261021">
 </head>
 <body>
 <header>
   <img id="brand" src="stormdesk-icon-512.png?v=20260907" alt="StormDesk">
-  <h1>Stormdesk</h1>
+  <h1>STORMDESK</h1>
   <nav>
-    <button class="tab" data-section="desk">Weather</button>
+    <button class="tab" data-section="desk">Dashboard</button>
     <button class="tab" data-section="lab">Radar</button>
     <button class="tab" data-section="data">History</button>
   </nav>
@@ -1166,7 +1166,7 @@
   <!-- ponytail: Radar is the existing weathermap app in an iframe (radar loop, satellite,
        lightning, SPC, alerts already work there). Inline it into map.js only if the two need shared state. -->
   <section class="page" id="timeline" aria-labelledby="timeline-title">
-    <button type="button" data-view="desk">← Weather</button>
+    <button type="button" data-view="desk">← Dashboard</button>
     <div class="timeline-heading"><p class="desk-eyebrow">PLAN YOUR DAY</p><h2 id="timeline-title">Your weather timeline</h2><p>What’s passed, what’s happening, and what comes next.</p></div>
     <div id="timeline-range" class="muted"></div>
     <div id="timeline-axis" aria-hidden="true"><span class="observed"></span><span class="forecast"></span></div>
@@ -1194,7 +1194,7 @@
     <form method="dialog"><button type="submit">Close</button></form>
   </dialog>
   <section class="page" id="signals">
-    <button type="button" data-view="desk">← Weather</button>
+    <button type="button" data-view="desk">← Dashboard</button>
     <div class="grid" id="signals-grid">
       <div class="signals-intro"><p class="desk-eyebrow">CLOSER TO HOME</p><h2>Local signals</h2><span>Your nearby conditions, outdoor outlook, and personal alerts.</span></div>
       <div class="signal-overview">

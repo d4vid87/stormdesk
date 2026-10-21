@@ -7,13 +7,16 @@ The marketing project uses its GitHub integration; the app project uses direct
 upload. Keep both on the same reviewed source revision.
 
 The browser uses the Instrument design from the native C++/Qt application:
-compact gauges, sun times, the severity-colored NWS banner and full-width HookEcho
+compact gauges, sun times, the event-colored NWS banner and full-width HookEcho
 radar. The alert banner names the National Weather Service and uses HookEcho event
 colors, with Air Quality Alerts in white. Raw NWS severity remains in alert details.
 Current conditions and the sunrise/sunset horizon use larger artwork, subtle motion
 and live event times; reduced-motion and Appearance settings suppress decorative
 animation. Station setup and icon animation live in Settings, while interface size
-stays at the right of the dashboard toolbar. A browser cannot run the Qt Widgets desktop executable. The hosted app is
+stays at the right of the dashboard toolbar. The header reads STORMDESK and the main
+workspace is Dashboard. Drag a gauge title to reorder the eight gauges within their
+rail, or focus a gauge and press Alt + Left/Right. Order is saved per browser/device;
+live updates retain it and other dashboard panels stay fixed. A browser cannot run the Qt Widgets desktop executable. The hosted app is
 the browser companion, with direct forecast/Tempest access or a paired household
 host; the desktop collector remains C++. Never include local settings, station
 credentials or archives in either upload.

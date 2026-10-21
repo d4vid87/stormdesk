@@ -1,3 +1,4 @@
+import { initLayout, snapshot, restore, DEFAULT } from './js/layout.js';
 // Synthetic forecast + station report for CI. The Desk paints nothing without one, and a
 // screenshot of an empty page proves nothing. Fixed values, moving timestamps: the sun has to be
 // up for the day layouts, and every chart wants times near now.
@@ -78,8 +79,37 @@ addEventListener('load', () => {
   console.assert(document.getElementById('hero-alerts').parentElement.id === 'desk', 'Instrument alert banner sits above the radar workspace');
   console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');
   console.assert(document.getElementById('instrument-clock').closest('header'), 'Clock sits in the upper-right header');
-  console.assert(document.querySelector('header h1').textContent === 'Stormdesk', 'Header shows only Stormdesk');
+  console.assert(document.querySelector('header h1').textContent === 'STORMDESK', 'Header shows STORMDESK');
   console.assert(!document.querySelector('#instrument-controls #instrument-connect, #instrument-controls #instrument-motion') && document.querySelector('#settings-station #instrument-connect'), 'Station setup is in settings and dashboard motion control is removed');
+  console.assert(document.querySelector('header [data-section="desk"]').textContent.includes('Dashboard'), 'Main workspace is named Dashboard');
+  const gaugeRow = document.getElementById('gauges'), initialOrder = snapshot();
+  const gaugeIds = () => [...gaugeRow.children].map(el => el.dataset.panel);
+  const shiftGauge = (el, key) => el.dispatchEvent(new KeyboardEvent('keydown', {key,altKey:true,bubbles:true,cancelable:true}));
+  const rainGauge = gaugeRow.firstElementChild;
+  shiftGauge(rainGauge, 'ArrowRight');
+  console.assert(gaugeRow.children[1] === rainGauge && document.activeElement === rainGauge, 'Alt + Right moves one position and preserves focus');
+  console.assert(!document.getElementById('detail')?.classList.contains('open'), 'Reordering does not open measurement details');
+  console.assert(JSON.parse(localStorage.getItem('wd.gaugeOrder')).join() === gaugeIds().join(), 'Gauge order is saved on this device');
+  initLayout(); initLayout();
+  dispatchEvent(new CustomEvent('wd:forecast', {detail:fc}));
+  console.assert(gaugeRow.children[1] === rainGauge && gaugeRow.querySelectorAll('h3').length === 8, 'Reinitialization and live updates preserve order without duplicate controls');
+  console.assert([...gaugeRow.children].every(el => getComputedStyle(el).order === '0'), 'Visual order follows the saved DOM order');
+  shiftGauge(rainGauge, 'ArrowLeft');
+  shiftGauge(rainGauge, 'ArrowLeft');
+  console.assert(gaugeRow.firstElementChild === rainGauge, 'Movement stops at the first gauge');
+  const lastGauge = gaugeRow.lastElementChild;
+  shiftGauge(lastGauge, 'ArrowRight');
+  console.assert(gaugeRow.lastElementChild === lastGauge, 'Movement stops at the last gauge');
+  const reordered = snapshot();
+  reordered['g-dew'].order = -1;
+  restore(reordered);
+  console.assert(gaugeRow.firstElementChild === lastGauge, 'Saved layouts restore only gauge ordering');
+  restore({'g-rain':{order:'invalid'},malicious:{order:-2}});
+  console.assert(gaugeRow.children.length === 8 && gaugeRow.firstElementChild === lastGauge, 'Invalid layout fields cannot replace gauges');
+  restore(DEFAULT); restore(initialOrder);
+  rainGauge.click();
+  console.assert(document.getElementById('detail').classList.contains('open'), 'Gauge values still open measurement details');
+  document.getElementById('detail-close').click();
   console.assert(document.querySelector('#settings-appearance #set-motion'), 'Icon animation stays in Appearance settings');
   console.assert(document.querySelector('#hero-icon .weather-aura') && document.querySelector('#instrument-sun .horizon-chart'), 'Conditions and sun use the illustrated visual treatment');
   console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'Shared tool data retains available days');
