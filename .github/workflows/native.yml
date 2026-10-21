@@ -83,7 +83,11 @@ jobs:
           choco install nsis --no-progress -y
           cpack --config build/CPackConfig.cmake -C Release -B release-assets -D CPACK_PACKAGE_FILE_NAME=StormDesk_5.0.0-preview.1_windows_x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./dist/bin/stormdesk.exe --version
+          $env:QT_COMMAND_LINE_PARSER_NO_GUI_MESSAGE_BOXES = '1'
+          if (-not (Test-Path dist/bin/vcruntime140.dll)) { throw 'MSVC runtime was not deployed' }
+          $app = Start-Process ./dist/bin/stormdesk.exe -ArgumentList '--version' -PassThru -NoNewWindow
+          if (-not $app.WaitForExit(30000)) { $app.Kill(); throw 'Packaged app did not exit' }
+          if ($app.ExitCode -ne 0) { throw "Packaged app exited $($app.ExitCode)" }
       - name: Package macOS app
         if: runner.os == 'macOS'
         run: |

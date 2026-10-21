@@ -80,6 +80,8 @@ install(TARGETS stormdesk RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DE
 install(FILES cpp/stormdesk.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
 install(FILES app-icon.png DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/512x512/apps RENAME stormdesk.png)
 if(WIN32 AND STORMDESK_GUI)
+  set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION bin)
+  include(InstallRequiredSystemLibraries)
   find_program(STORMDESK_WINDEPLOYQT windeployqt REQUIRED)
   install(CODE "execute_process(COMMAND \"${STORMDESK_WINDEPLOYQT}\" --no-translations \"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/stormdesk.exe\" COMMAND_ERROR_IS_FATAL ANY)")
 endif()
