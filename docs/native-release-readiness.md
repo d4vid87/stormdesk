@@ -2,13 +2,15 @@
 
 The 5.0 packages remain previews. A successful CI build is not physical-device acceptance.
 
-## Installed Android Instrument Pocket candidate
+## Instrument Pocket preview.3
 
-The signed APK built from `199a4fa3ef104c9aeaffd22847300e3b78169a53` in [native CI run 39689167725](https://github.com/d4vid87/stormdesk/actions/runs/39689167725) was installed as an upgrade on the Galaxy S24 Ultra / Android 16. Public preview.2 download assets have not been replaced.
+[Preview.3 is published](https://github.com/d4vid87/stormdesk/releases/tag/v5.0.0-preview.3) with 11 packages, SHA-256 checksums, exact build revisions, device checks and vendor-signing reports. All six native jobs, [Flatpak](https://github.com/d4vid87/stormdesk/actions/runs/39691464763) and [AMD64/ARM64 containers](https://github.com/d4vid87/stormdesk/actions/runs/39691464761) passed at the release source. All website package URLs returned HTTP 200. The legacy 4.5.2 latest release and preview.2 remain available. Native Debian previews share package version 5.0.0; replacing one requires `apt install --reinstall` with the downloaded package.
+
+The signed preview.3 APK (version code 50003), built from `d2c60e0e19d2feaae11fbb4494ece1b55fb6e0af` in [native CI run 39691464803](https://github.com/d4vid87/stormdesk/actions/runs/39691464803), was installed as an upgrade on the Galaxy S24 Ultra / Android 16. Its signature and installed version were verified. Station configuration, gauge order and 100% sizing were retained; fresh Tempest observations, embedded KFWS radar, white Air Quality Alert boundaries and return from Settings were confirmed. The same GUI implementation had broader interaction checks on candidate `199a4fa3ef104c9aeaffd22847300e3b78169a53` in [run 39689167725](https://github.com/d4vid87/stormdesk/actions/runs/39689167725). Preview.2 assets remain available for rollback.
 
 - Native current conditions, four ordered gauges, animated sunrise/sunset and bottom navigation use the selected Instrument Pocket layout. All eight gauges remain available through Settings → Appearance → Arrange instruments.
 - Actual Tempest observations were recent, KFWS was selected automatically, and HookEcho displayed the matching white Air Quality Alert boundaries inside the dashboard. The full Radar page uses the provider's touch interface.
-- The signed candidate passed size-picker selection from 115% to 100%, dashboard return from Settings and a gauge-details dialog, full Radar navigation and return, portrait/landscape, and restart with station configuration, gauge order and 100% sizing retained. Touch ordering was exercised during implementation. Local core/UI tests include the mobile layout and picker model-change guards.
+- The implementation candidate passed size-picker selection from 115% to 100%, dashboard return from Settings and a gauge-details dialog, full Radar navigation and return, portrait/landscape, and restart with station configuration, gauge order and 100% sizing retained. Touch ordering was exercised during implementation. Local core/UI tests include the mobile layout and picker model-change guards.
 - The dashboard radar uses a compact viewport. Android recreates its WebView when returning to a hidden page to avoid a blank cached Qt surface; this reloads and recenters the radar. Loading/error feedback and the browser fallback remain available.
 - Physical acceptance is limited to this phone and the interactions above. Every advanced tool, other Android devices and extended offline/background operation remain unchecked.
 
@@ -28,7 +30,7 @@ On each supported device, start with an existing archive backup and retain the p
 2. Confirm an actual current observation and forecast. Check stale/offline states without presenting old observations as fresh.
 3. Exercise every onboarding transition, keyboard entry, scrolling and reopening setup. No retained pixels, clipped fields or inaccessible buttons are acceptable.
 4. Move gauges with touch/mouse and verify the order after a new reading and restart. Verify scale changes, portrait/landscape, and system-bar clearance. On Android run `python3 scripts/check-android-insets.py` with that device selected through `ANDROID_SERIAL`. Qt 6.10 uses a full-screen edge-to-edge rendering surface, so this surface-only check reports overlap even when the content is inset; it cannot prove content clearance. Inspect the dashboard, keyboard, onboarding and dropdowns against the visible system bars on the device.
-5. Verify radar navigation, station location and NWS banner event colors. The installed Instrument Pocket candidate embeds radar; the published preview.2 APK opens it in the system browser. Verify both dashboard and full Radar page, including return from Settings and dialogs.
+5. Verify radar navigation, station location and NWS banner event colors. Preview.3 embeds radar; the older preview.2 APK opens it in the system browser. Verify both dashboard and full Radar page, including return from Settings and dialogs.
 6. Back up and restore the archive, then verify station identity and history. Restore creates a recovery backup; do not overwrite the only copy of an archive.
 7. In Settings → App updates, check stable and preview channels, offline feedback and restart persistence. Installation is explicit. Test the next native release without offering legacy 4.x or a downgrade.
 
