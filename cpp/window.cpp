@@ -707,6 +707,8 @@ QWidget *Window::makeSettings() {
   text(station, "Tempest device ID", "deviceId");
   text(station, "Tempest personal token", "token", true);
   auto importTempest = new QPushButton("Import Tempest");
+  importTempest->setObjectName("importTempest");
+  importTempest->setAccessibleName("Import Tempest");
   station->addRow(importTempest);
   connect(importTempest, &QPushButton::clicked, this, &Window::setup);
   choice(station, "Tempest feed", "nativeTempestConnection",
@@ -1340,6 +1342,10 @@ void Window::arrange() {
     return;
   const double available = (width() - 60) / scaleFactor;
   const bool compact = available < 1050;
+  setupButton->setText(available < 260 ? "Connect\nstation"
+                                       : "Connect station");
+  if (auto import = findChild<QPushButton *>("importTempest"))
+    import->setText(available < 260 ? "Import\nTempest" : "Import Tempest");
   clock->setVisible(!compact);
   clockDate->setVisible(!compact);
   if (pages)

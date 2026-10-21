@@ -297,21 +297,17 @@ private slots:
     Archive db(dir.filePath("db"));
     QString error;
     QVERIFY(db.open(&error));
-    Services services(cfg, db);
-    services.network.setProxy(
-        QNetworkProxy(QNetworkProxy::HttpProxy, "127.0.0.1", 1));
-    QStringList requested;
-    connect(&services.network, &QNetworkAccessManager::finished, this,
-            [&requested](QNetworkReply *reply) {
-              requested << QUrlQuery(reply->url()).queryItemValue("point");
-            });
+    ScriptedServices services(cfg, db);
+    services.replies = {{{}, "Fixture offline"}, {{}, "Fixture offline"}};
     services.pollWarnings();
     services.warnings = QJsonArray{QJsonObject{{"id", "old-location-warning"}}};
     cfg.value = {{"settings", QJsonObject{{"lat", 33.065}, {"lon", -96.918}}}};
     services.pollWarnings();
     QVERIFY(services.warnings.isEmpty());
     QVERIFY(services.warningStatus.contains("Checking"));
-    QTRY_VERIFY(requested.contains("33.0650,-96.9180"));
+    QTRY_COMPARE(services.completed, 2);
+    QCOMPARE(QUrlQuery(services.requested.last()).queryItemValue("point"),
+             QString("33.0650,-96.9180"));
     QVERIFY(services.warningStatus.contains("unavailable"));
   }
   void nativeCloudConnectionIgnoresUdp() {

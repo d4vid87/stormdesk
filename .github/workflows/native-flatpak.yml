@@ -1,0 +1,35 @@
+name: native-flatpak
+on:
+  push:
+    branches: [cpp-rework]
+  workflow_dispatch:
+concurrency:
+  group: flatpak-${{ github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  flatpak:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y flatpak flatpak-builder python3-yaml
+      - name: Pin the manifest to this build
+        run: |
+          python3 - <<'PY'
+          import os, json, yaml
+          from pathlib import Path
+          manifest = yaml.safe_load(Path('flatpak/io.github.davidmay87.stormdesk.yml').read_text())
+          source = manifest['modules'][0]['sources'][0]
+          source.pop('branch')
+          source['commit'] = os.environ['GITHUB_SHA']
+          Path('native-flatpak.json').write_text(json.dumps(manifest))
+          PY
+      - name: Build the native Flatpak
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --install-deps-from=flathub --force-clean --repo=flatpak-repo build-flatpak native-flatpak.json
+          flatpak-builder --run build-flatpak native-flatpak.json stormdesk --version
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo flatpak-repo StormDesk_5.0.0-preview.1_x86_64.flatpak io.github.davidmay87.stormdesk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-flatpak
+          path: StormDesk_5.0.0-preview.1_x86_64.flatpak
