@@ -15,6 +15,7 @@
 #include <QScreen>
 #include <QScrollArea>
 #include <QScroller>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTimer>
 #include <QUrlQuery>
@@ -50,6 +51,7 @@ SetupDialog::SetupDialog(Services &s, quint16 port, double scale, Apply save,
   pages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   layout->addWidget(pages);
   auto scroll = new QScrollArea;
+  scroll->setObjectName("setupScroll");
   scroll->setWidgetResizable(true);
   scroll->setFrameShape(QFrame::NoFrame);
   scroll->setWidget(content);
@@ -497,6 +499,9 @@ void SetupDialog::showStep(int i) {
   connectionForm();
   if (i == 3)
     checkConnection();
+  QTimer::singleShot(0, this, [this] {
+    findChild<QScrollArea *>("setupScroll")->verticalScrollBar()->setValue(0);
+  });
 }
 void SetupDialog::connectionForm() {
   const QString type = source->currentData().toString();

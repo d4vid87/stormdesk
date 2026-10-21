@@ -536,7 +536,10 @@ private slots:
     QVERIFY(setup->findChild<QLabel *>("setupStationSummary")
                 ->text()
                 .contains("KFWS"));
+    auto setupScroll = setup->findChild<QScrollArea *>("setupScroll");
+    setupScroll->verticalScrollBar()->setValue(setupScroll->verticalScrollBar()->maximum());
     next->click();
+    QTRY_COMPARE(setupScroll->verticalScrollBar()->value(), 0);
     QCOMPARE(cfg.text("token"), QString("fixture-token"));
     QCOMPARE(cfg.text("deviceId"), QString("98765"));
     QCOMPARE(cfg.text("stationId"), QString("12345"));
