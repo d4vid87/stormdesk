@@ -40,7 +40,7 @@ static void fitDashboardWebView(int width) {
         // Android ignores the viewport meta width until its native wide-viewport setting is enabled.
         const auto settings = view.callObjectMethod("getSettings", "()Landroid/webkit/WebSettings;");
         settings.callMethod<void>("setUseWideViewPort", "(Z)V", jboolean(true));
-        const int viewport = std::max(720, width);
+        const int viewport = std::max(720, width * 2);
         const auto script = QJniObject::fromString(
             QString("document.querySelector('meta[name=viewport]').setAttribute('content',"
                     "'width=%1,initial-scale=%2,user-scalable=no')")
