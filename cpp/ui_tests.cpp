@@ -142,14 +142,21 @@ private slots:
       QVERIFY(window.findChild<QPushButton *>("toggleInstruments")->isHidden());
       int visible = 0;
       for (auto face : window.findChildren<InstrumentFace *>())
-        if (face->isVisible()) {
+        if (face->parentWidget()->isVisible()) {
           ++visible;
           QVERIFY(shelf->viewport()->rect().contains(
-              face->mapTo(shelf->viewport(), face->rect().center())));
+              face->parentWidget()->mapTo(shelf->viewport(), face->parentWidget()->rect().center())));
         }
-      if (size.height() > size.width()) QCOMPARE(visible, 4);
+      QCOMPARE(visible, 4);
+      QVERIFY(radar->height() > window.height() * (size.width() > size.height() ? .35 : .25));
       QCOMPARE(window.findChild<SunCycle *>("sunCycle")->height(), 48);
     }
+    auto card = window.findChild<InstrumentFace *>("instrumentFace0")->parentWidget();
+    QTest::mouseClick(card, Qt::LeftButton, {}, card->rect().center());
+    auto detail = window.findChild<QDialog *>();
+    QVERIFY(detail && detail->windowTitle() == "Rain today");
+    detail->accept();
+    QTest::qWait(5);
     window.resize(390, 844);
     window.findChild<QPushButton *>("mobileTab3")->click();
     auto tabs = window.findChild<QTabWidget *>();

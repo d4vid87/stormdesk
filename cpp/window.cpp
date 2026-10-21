@@ -173,7 +173,9 @@ Window::Window(Services &s, HttpServer &http, bool mobileUi)
   auto header = new QHBoxLayout;
   auto brand = new QVBoxLayout;
   brand->setSpacing(2);
-  brand->addWidget(label("STORMDESK", "brand"));
+  auto brandTitle = label("STORMDESK", "brand");
+  brandTitle->setObjectName("appBrand");
+  brand->addWidget(brandTitle);
   location = label("Your weather, at a glance", "muted");
   brand->addWidget(location);
   location->hide();
@@ -449,6 +451,12 @@ QWidget *Window::makeWeather() {
     }
     box->insertLayout(0, heading);
     widget->setMinimumWidth(0);
+    if (mobile) {
+      widget->setProperty("mobileGaugeIndex", i);
+      widget->setAccessibleName(names[i] + " details");
+      widget->setFocusPolicy(Qt::StrongFocus);
+      widget->installEventFilter(this);
+    }
     box->setSpacing(2);
     box->setContentsMargins(8, 5, 8, 5);
     faces[i] = new InstrumentFace(i);
@@ -1640,6 +1648,15 @@ void Window::arrange() {
     return;
   auto detail = currentCard->findChild<QLabel *>("conditionsDetail");
   if (mobile) {
+    const bool landscape = width() > height();
+    location->setVisible(!landscape);
+    findChild<QLabel *>("appBrand")->setText(landscape ? "STORMDESK · " + heroTemperature->text()
+                                                     : "STORMDESK");
+    sunCycle->setVisible(!landscape);
+    for (auto face : faces) face->setVisible(!landscape);
+    const auto summary = alerts->property("mobileSummary").toString();
+    if (!summary.isEmpty())
+      alerts->setText(QString(summary).replace('\n', landscape ? " · " : "\n") + " · View details →");
     for (auto widget : QList<QWidget *>{heroHeading, heroSource, detail, heroTemperature,
                                         heroCondition, weatherGlyph})
       heroLayout->removeWidget(widget);
@@ -1655,7 +1672,7 @@ void Window::arrange() {
       value->setWordWrap(false);
       value->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     }
-    currentCard->setVisible(!hidden.contains("Current conditions"));
+    currentCard->setVisible(!landscape && !hidden.contains("Current conditions"));
     dashboardRadarCard->setVisible(!hidden.contains("Local radar"));
     radarStage->setScale(scaleFactor);
     return;
@@ -1706,6 +1723,18 @@ void Window::moveGauge(int source, int target) {
   handle->setFocus();
 }
 bool Window::eventFilter(QObject *watched, QEvent *event) {
+  if (watched->property("mobileGaugeIndex").isValid()) {
+    const bool click = event->type() == QEvent::MouseButtonRelease &&
+        static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton;
+    const bool key = event->type() == QEvent::KeyPress &&
+        (static_cast<QKeyEvent *>(event)->key() == Qt::Key_Space ||
+         static_cast<QKeyEvent *>(event)->key() == Qt::Key_Return);
+    if (click || key) {
+      showInstrument(watched->property("mobileGaugeIndex").toInt());
+      return true;
+    }
+    return QMainWindow::eventFilter(watched, event);
+  }
   auto handle = qobject_cast<QToolButton *>(watched);
   if (!handle || !handle->property("gaugeIndex").isValid())
     return QMainWindow::eventFilter(watched, event);
@@ -2054,9 +2083,16 @@ void Window::render() {
                  ? services.warningStatus + " · No active warnings returned"
                  : services.warningStatus)
           : warningText.join("\n"));
-  if (mobile && !rankedWarnings.isEmpty())
-    alerts->setText("National Weather Service\n" + event +
-                    (rankedWarnings.size() > 1 ? QString(" · %1 alerts").arg(rankedWarnings.size()) : QString()));
+  if (mobile) {
+    const auto summary = rankedWarnings.isEmpty() ? QString()
+        : "National Weather Service\n" + event +
+          (rankedWarnings.size() > 1 ? QString(" · %1 alerts").arg(rankedWarnings.size()) : QString());
+    alerts->setProperty("mobileSummary", summary);
+    if (!summary.isEmpty())
+      alerts->setText(QString(summary).replace('\n', width() > height() ? " · " : "\n"));
+    if (width() > height())
+      findChild<QLabel *>("appBrand")->setText("STORMDESK · " + heroTemperature->text());
+  }
   alerts->setText(alerts->text() + "   ·   View details →");
   alertButton->setAccessibleDescription(alerts->text());
   status->setText(services.forecastStatus + "   ·   Home network port " +
