@@ -8,7 +8,10 @@
 #ifdef STORMDESK_ANDROID_WEBVIEW
 #include <QQuickView>
 #include <QQuickItem>
-#include <QQmlError>
+#include <QCoreApplication>
+#include <QFuture>
+#include <QJniEnvironment>
+#include <QJniObject>
 #endif
 #include <QVBoxLayout>
 #include <algorithm>
@@ -18,6 +21,43 @@
 #endif
 
 namespace storm {
+#ifdef STORMDESK_ANDROID_WEBVIEW
+static void fitDashboardWebView(int width) {
+  QNativeInterface::QAndroidApplication::runOnAndroidMainThread([width]() -> QVariant {
+    if (!QNativeInterface::QAndroidApplication::isActivityContext()) return {};
+    const auto activity = QNativeInterface::QAndroidApplication::context();
+    const auto decor = activity.callObjectMethod("getWindow", "()Landroid/view/Window;")
+                                  .callObjectMethod("getDecorView", "()Landroid/view/View;");
+    QJniEnvironment env;
+    const auto webView = env.findClass("android/webkit/WebView");
+    const auto group = env.findClass("android/view/ViewGroup");
+    QList<QJniObject> pending{decor};
+    while (!pending.isEmpty()) {
+      const auto view = pending.takeLast();
+      if (!view.isValid()) continue;
+      if (env->IsInstanceOf(view.object(), webView)) {
+        if (!view.callMethod<jboolean>("isShown", "()Z")) continue;
+        // Android ignores the viewport meta width until its native wide-viewport setting is enabled.
+        const auto settings = view.callObjectMethod("getSettings", "()Landroid/webkit/WebSettings;");
+        settings.callMethod<void>("setUseWideViewPort", "(Z)V", jboolean(true));
+        const int viewport = std::max(720, width);
+        const auto script = QJniObject::fromString(
+            QString("document.querySelector('meta[name=viewport]').setAttribute('content',"
+                    "'width=%1,initial-scale=%2,user-scalable=no')")
+                .arg(viewport).arg(double(width) / viewport));
+        view.callMethod<void>("evaluateJavascript",
+            "(Ljava/lang/String;Landroid/webkit/ValueCallback;)V",
+            script.object<jstring>(), jobject(nullptr));
+      } else if (env->IsInstanceOf(view.object(), group)) {
+        const int count = view.callMethod<jint>("getChildCount", "()I");
+        for (int i = 0; i < count; ++i)
+          pending << view.callObjectMethod("getChildAt", "(I)Landroid/view/View;", i);
+      }
+    }
+    return {};
+  });
+}
+#endif
 Radar::Radar(Services &s, QWidget *parent, bool compactMode)
     : QWidget(parent), services(s), compact(compactMode) {
   setAccessibleName("HookEcho live radar");
@@ -77,7 +117,6 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
     layout->insertWidget(1, container, 1);
     if (mobileView->rootObject()) {
       mobileView->rootObject()->setVisible(false);
-      mobileView->rootObject()->setProperty("compact", compact);
       connect(mobileView->rootObject(), SIGNAL(pageLoaded(bool)), this, SLOT(pageLoaded(bool)));
     } else {
       status->setText("Radar view could not start. Open HookEcho or retry.");
@@ -94,6 +133,9 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
   setScale(1);
 }
 void Radar::pageLoaded(bool ok) {
+#ifdef STORMDESK_ANDROID_WEBVIEW
+  if (ok && compact && isVisible()) fitDashboardWebView(width());
+#endif
   setProperty("hookEchoLoaded", ok);
   status->setText(ok ? "HookEcho · Check the scan time on the map"
                      : "Radar could not load. Check your connection and retry.");
@@ -140,6 +182,10 @@ void Radar::showEvent(QShowEvent *event) {
 }
 void Radar::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
+#ifdef STORMDESK_ANDROID_WEBVIEW
+  if (compact && isVisible() && property("hookEchoLoaded").toBool())
+    fitDashboardWebView(width());
+#endif
   const int columns = width() / scaleFactor < 420 ? 1 : 3;
   for (auto button : buttons)
     controls->removeWidget(button);
