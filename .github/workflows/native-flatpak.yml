@@ -30,8 +30,8 @@ jobs:
           flatpak-builder --user --install-deps-from=flathub --force-clean --repo=flatpak-repo build-flatpak native-flatpak.json
           flatpak-builder --run build-flatpak native-flatpak.json sh -c 'ldd /app/bin/stormdesk | grep libQt6WebEngineWidgets'
           flatpak-builder --run build-flatpak native-flatpak.json stormdesk --version
-          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo flatpak-repo StormDesk_5.0.0-preview.1_x86_64.flatpak io.github.davidmay87.stormdesk
+          flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo flatpak-repo StormDesk_5.0.0-preview.2_x86_64.flatpak io.github.davidmay87.stormdesk
       - uses: actions/upload-artifact@v4
         with:
           name: native-flatpak
-          path: StormDesk_5.0.0-preview.1_x86_64.flatpak
+          path: StormDesk_5.0.0-preview.2_x86_64.flatpak

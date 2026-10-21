@@ -42,6 +42,63 @@ private slots:
     QApplication::setFont(QFont("Segoe UI"));
 #endif
   }
+  void releaseChecksAndFailures() {
+    struct Releases : Services {
+      using Services::Services;
+      QList<std::function<void(QJsonDocument, QString)>> pending;
+      void request(const QUrl &url, std::function<void(QJsonDocument, QString)> callback,
+                   const QByteArray & = {}, const QByteArray & = {},
+                   const QByteArray & = "GET") override {
+        QVERIFY(url.toString() == "https://api.github.com/repos/d4vid87/stormdesk/releases?per_page=30");
+        pending << callback;
+      }
+    };
+    QTemporaryDir dir;
+    Config cfg(dir.filePath("config.json"));
+    Archive db(dir.filePath("db"));
+    QString error;
+    QVERIFY(db.open(&error));
+    Releases services(cfg, db);
+    HttpServer server(services);
+    QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
+    QSettings prefs(QSettings::defaultFormat(), QSettings::UserScope, "StormDesk", "Native");
+    prefs.setValue("automaticUpdates", false);
+    prefs.setValue("previewUpdates", false);
+    {
+      Window window(services, server);
+      auto check = window.findChild<QPushButton *>("checkUpdates");
+      auto download = window.findChild<QPushButton *>("downloadUpdate");
+      auto status = window.findChild<QLabel *>("appUpdateStatus");
+      auto automatic = window.findChild<QCheckBox *>("automaticUpdates");
+      QVERIFY(check && download && status && automatic);
+      QVERIFY(!automatic->isChecked());
+      check->click();
+      QCOMPARE(services.pending.size(), 1);
+      QVERIFY(!check->isEnabled());
+      services.pending.takeFirst()({}, "Offline");
+      QVERIFY(check->isEnabled());
+      QVERIFY(download->isHidden());
+      QVERIFY(status->text().contains("Could not check"));
+      check->click();
+      services.pending.takeFirst()(QJsonDocument(QJsonObject{}), {});
+      QVERIFY(status->text().contains("Could not check"));
+      check->click();
+      services.pending.takeFirst()(QJsonDocument(QJsonArray{QJsonObject{
+          {"tag_name", "v9.0.0"}, {"draft", false}, {"prerelease", false},
+          {"published_at", "2026-10-21"}, {"assets", QJsonArray{QJsonObject{}}}}}), {});
+      QVERIFY(status->text().contains("v9.0.0"));
+      QVERIFY(!download->isHidden());
+      check->click();
+      services.pending.takeFirst()(QJsonDocument(QJsonArray{}), {});
+      QVERIFY(status->text().contains("No newer release"));
+      QVERIFY(download->isHidden());
+      automatic->setChecked(true);
+    }
+    QCOMPARE(prefs.value("automaticUpdates").toBool(), true);
+    prefs.remove("automaticUpdates");
+    prefs.remove("previewUpdates");
+    prefs.remove("lastUpdateCheck");
+  }
   void instrumentAndRealSetup() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));
@@ -389,7 +446,7 @@ private slots:
         banner->accessibleDescription().contains("National Weather Service"));
     banner->setFocus();
     QTest::keyClick(banner, Qt::Key_Space);
-    auto pages = window.findChild<QStackedWidget *>();
+    auto pages = window.findChild<QStackedWidget *>("dashboardPages");
     QCOMPARE(pages->currentIndex(), 4);
     QCOMPARE(window.findChild<QComboBox *>("nativeTool")->currentIndex(), 6);
     QTRY_VERIFY(window.findChild<QLabel *>("nwsAlertMetadata") &&
@@ -543,7 +600,7 @@ private slots:
     QVERIFY(server.start(0, QHostAddress::LocalHost, &error));
     Window window(services, server);
     window.show();
-    auto stack = window.findChild<QStackedWidget *>();
+    auto stack = window.findChild<QStackedWidget *>("dashboardPages");
     stack->setCurrentIndex(4);
     auto tool = window.findChild<QComboBox *>("nativeTool");
     tool->setCurrentIndex(12);
@@ -656,7 +713,7 @@ private slots:
     window.applyScale(1);
     window.resize(1600, 1100);
     window.show();
-    window.findChild<QStackedWidget *>()->setCurrentIndex(4);
+    window.findChild<QStackedWidget *>("dashboardPages")->setCurrentIndex(4);
     window.findChild<QComboBox *>("nativeTool")->setCurrentIndex(2);
     QTest::qWait(20);
     auto tables = tools->findChildren<QTableWidget *>();
@@ -669,7 +726,7 @@ private slots:
         QCOMPARE(box->count(), 3);
     QCOMPARE(current->item(0, 3)->text(), QString("4.0"));
     auto area = qobject_cast<QScrollArea *>(
-        window.findChild<QStackedWidget *>()->currentWidget());
+        window.findChild<QStackedWidget *>("dashboardPages")->currentWidget());
     QVERIFY(area);
     QVERIFY(area->verticalScrollBar()->maximum() > 0);
     auto contents = tools->findChild<QWidget *>("toolBody");
@@ -772,7 +829,7 @@ private slots:
                             QString::number(size.width()) + " at " +
                             QString::number(scale)));
         for (int page : {0, 1, 2, 3, 4}) {
-          window.findChild<QStackedWidget *>()->setCurrentIndex(page);
+          window.findChild<QStackedWidget *>("dashboardPages")->setCurrentIndex(page);
           QTest::qWait(10);
           if (page == 0) {
             auto stage = window.findChild<RadarStage *>("radarStage");
@@ -826,7 +883,7 @@ private slots:
           }
           tabs->setCurrentIndex(0);
         }
-        window.findChild<QStackedWidget *>()->setCurrentIndex(0);
+        window.findChild<QStackedWidget *>("dashboardPages")->setCurrentIndex(0);
       }
     }
     auto page = window.findChildren<QComboBox *>();

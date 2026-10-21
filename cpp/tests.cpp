@@ -3,6 +3,7 @@
 #include "discovery.h"
 #include "http.h"
 #include "integrations.h"
+#include "updates.h"
 #include <QFile>
 #include <QNetworkProxy>
 #include <QNetworkReply>
@@ -781,6 +782,36 @@ private slots:
     QVERIFY(line.contains("h00"));
     QVERIFY(line.contains("_.../...g..."));
     QVERIFY(cwopPacket("invalid\\r\\n", 32.5, -97.25, r, 0, 0).isEmpty());
+  }
+  void nativeReleaseSelection() {
+    auto release = [](QString tag, bool preview = false) {
+      return QJsonObject{{"tag_name", tag}, {"draft", false},
+                         {"prerelease", preview}, {"published_at", "2026-10-21"},
+                         {"assets", QJsonArray{QJsonObject{{"name", "app"}}}}};
+    };
+    QJsonArray feed{release("v4.5.2"), release("v5.0.0-preview.10", true),
+                    release("v5.0.0-preview.2", true)};
+    QCOMPARE(nativeUpdate(feed, "5.0.0-preview.1", true).value("version").toString(),
+             QString("v5.0.0-preview.10"));
+    QVERIFY(nativeUpdate(feed, "5.0.0-preview.1", false).isEmpty());
+    QVERIFY(nativeUpdate(feed, "5.0.0", true).isEmpty());
+    feed.append(release("v5.0.0"));
+    QCOMPARE(nativeUpdate(feed, "5.0.0-preview.10", false).value("version").toString(),
+             QString("v5.0.0"));
+    QVERIFY(nativeUpdate(feed, "5.0.0", true).isEmpty());
+    feed.append(release("v5.1.0"));
+    const auto offer = nativeUpdate(feed, "5.0.0", false);
+    QCOMPARE(offer.value("url").toString(),
+             QString("https://github.com/d4vid87/stormdesk/releases/tag/v5.1.0"));
+    auto draft = release("v99.0.0");
+    draft["draft"] = true;
+    auto incomplete = release("v98.0.0");
+    incomplete["assets"] = QJsonArray{};
+    QJsonArray invalid{draft, incomplete, release("https://evil.example/app"),
+                       release("v999999999999.0.0"), release("v5.2.0/../../evil"),
+                       release("v5.2.0-preview.0", true)};
+    QVERIFY(nativeUpdate(invalid, "5.0.0", true).isEmpty());
+    QVERIFY(nativeUpdate(feed, "invalid", true).isEmpty());
   }
   void scaleBounds() {
     QCOMPARE(uiScale(.2), .7);

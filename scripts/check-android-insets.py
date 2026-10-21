@@ -15,11 +15,12 @@ def rect(value):
 
 
 if __name__ == "__main__":
-    package = os.environ.get("PACKAGE", "io.github.davidmay87.stormdesk")
+    package = os.environ.get("PACKAGE", "io.github.d4vid87.stormdesk.qt")
     adb("shell", "uiautomator", "dump", "/sdcard/stormdesk-insets-check.xml")
     root = ET.fromstring(adb("shell", "cat", "/sdcard/stormdesk-insets-check.xml"))
     views = [rect(n.get("bounds")) for n in root.iter("node")
-             if n.get("class") == "android.webkit.WebView"
+             if n.get("class") in {"android.webkit.WebView", "android.view.SurfaceView",
+                                  "android.view.TextureView"}
              and n.get("package") == package]
     assert views, "Open StormDesk before running this check"
     bars = {rect(m) for m in re.findall(
@@ -30,5 +31,5 @@ if __name__ == "__main__":
     for left, top, right, bottom in views:
         for bl, bt, br, bb in bars:
             assert right <= bl or left >= br or bottom <= bt or top >= bb, (
-                f"WebView {(left, top, right, bottom)} overlaps system bar {(bl, bt, br, bb)}")
-    print("PASS: StormDesk WebView clears all visible system bars")
+                f"Rendering surface {(left, top, right, bottom)} overlaps system bar {(bl, bt, br, bb)}")
+    print("PASS: StormDesk rendering surfaces clear all visible system bars")

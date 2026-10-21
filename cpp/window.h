@@ -79,6 +79,11 @@ private:
 #endif
   QHash<QString, QWidget *> editors;
   QLabel *settingsMessage;
+  QLabel *updateStatus;
+  QPushButton *updateCheck, *updateDownload;
+  QUrl updateUrl;
+  bool updateBusy = false;
+  void checkUpdates(bool manual = false);
   QWidget *makeWeather();
   QWidget *makeRadar();
   QWidget *makeHistory();

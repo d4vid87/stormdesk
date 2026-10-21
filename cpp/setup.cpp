@@ -35,14 +35,9 @@ SetupDialog::SetupDialog(Services &s, quint16 port, double scale, Apply save,
   setWindowTitle("Welcome to StormDesk · Instrument");
   setAttribute(Qt::WA_DeleteOnClose);
   setMinimumSize(240, 240);
-#ifdef Q_OS_ANDROID
-  // A phone setup page uses the available screen, without desktop dialog centering.
-  setWindowState(Qt::WindowMaximized);
-#else
   resize(850, 760);
   if (parent)
     resize(size().boundedTo(parent->size()));
-#endif
   auto root = new QVBoxLayout(this);
   root->setSizeConstraint(QLayout::SetNoConstraint);
   progress = copy({}, "eyebrow");

@@ -35,7 +35,7 @@ export QMAKE=${QMAKE:-$(command -v qmake6)}
 export EXTRA_QT_MODULES=waylandcompositor
 platforms=$("$QMAKE" -query QT_INSTALL_PLUGINS)/platforms
 export EXTRA_PLATFORM_PLUGINS=$(find "$platforms" -maxdepth 1 -name 'libqwayland*.so' -printf '%f\n' | sort | paste -sd ';')
-export VERSION=${STORMDESK_PACKAGE_VERSION:-5.0.0-preview.1}
+export VERSION=${STORMDESK_PACKAGE_VERSION:-5.0.0-preview.2}
 export OUTPUT="StormDesk_${VERSION}_${arch}.AppImage"
 cd "$output"
 # NSS loads these modules at runtime; mixing them with a newer host NSS aborts WebEngine.

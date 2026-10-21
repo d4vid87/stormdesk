@@ -3,6 +3,8 @@
 #include "radar.h"
 #include "setup.h"
 #include "tools.h"
+#include "updates.h"
+#include <QPointer>
 #include <QApplication>
 #include <QCheckBox>
 #include <QDateTime>
@@ -161,7 +163,10 @@ Window::Window(Services &s, HttpServer &http)
   layout->setSizeConstraint(QLayout::SetNoConstraint);
   layout->setContentsMargins(20, 18, 20, 18);
   layout->setSpacing(16);
-  setCentralWidget(root);
+  auto shell = new QStackedWidget;
+  shell->setObjectName("appShell");
+  shell->addWidget(root);
+  setCentralWidget(shell);
   auto header = new QHBoxLayout;
   auto brand = new QVBoxLayout;
   brand->setSpacing(2);
@@ -195,6 +200,7 @@ Window::Window(Services &s, HttpServer &http)
   new QTextToSpeech(this);
 #endif
   pages = new QStackedWidget;
+  pages->setObjectName("dashboardPages");
   pages->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
   const QStringList titles = {"Dashboard", "Radar", "History", "Settings",
                               "Tools"};
@@ -316,6 +322,11 @@ Window::Window(Services &s, HttpServer &http)
                                         QSize(40, 80));
   resize(initialSize.expandedTo(minimumSize()));
   render();
+  QTimer::singleShot(10000, this, [this] { checkUpdates(); });
+  auto updateTimer = new QTimer(this);
+  updateTimer->setObjectName("appUpdateTimer");
+  updateTimer->start(86400000);
+  connect(updateTimer, &QTimer::timeout, this, [this] { checkUpdates(); });
   connect(qApp, &QCoreApplication::aboutToQuit, this,
           [this] { local.setValue("size", size()); });
 }
@@ -915,6 +926,42 @@ QWidget *Window::makeSettings() {
             "a recovery backup first. The original Rust app’s files are kept "
             "separate from this native preview.",
             "muted"));
+  auto updates = section("App updates");
+  updates->addRow(label("Installed: " STORMDESK_RELEASE_VERSION, "muted"));
+  auto automatic = new QCheckBox("Daily checks");
+  automatic->setObjectName("automaticUpdates");
+  automatic->setAccessibleName("Check for app updates automatically");
+  automatic->setToolTip("Check official GitHub releases once a day");
+  automatic->setChecked(local.value("automaticUpdates", true).toBool());
+  connect(automatic, &QCheckBox::toggled, this, [this](bool enabled) {
+    local.setValue("automaticUpdates", enabled);
+  });
+  updates->addRow(automatic);
+  auto previews = new QCheckBox("Preview builds");
+  previews->setObjectName("previewUpdates");
+  previews->setChecked(local.value("previewUpdates",
+                                  QString(STORMDESK_RELEASE_VERSION).contains('-')).toBool());
+  connect(previews, &QCheckBox::toggled, this, [this](bool enabled) {
+    local.setValue("previewUpdates", enabled);
+    checkUpdates(true);
+  });
+  updates->addRow(previews);
+  updateStatus = label("Checks the official GitHub releases once a day. "
+                       "Downloads and installation stay under your control.", "muted");
+  updateStatus->setObjectName("appUpdateStatus");
+  updates->addRow(updateStatus);
+  updateCheck = new QPushButton("Check now");
+  updateCheck->setObjectName("checkUpdates");
+  connect(updateCheck, &QPushButton::clicked, this, [this] { checkUpdates(true); });
+  updates->addRow(updateCheck);
+  updateDownload = new QPushButton("Download…");
+  updateDownload->setObjectName("downloadUpdate");
+  updateDownload->hide();
+  connect(updateDownload, &QPushButton::clicked, this, [this] {
+    if (!updateUrl.isEmpty())
+      QDesktopServices::openUrl(updateUrl);
+  });
+  updates->addRow(updateDownload);
   settingsMessage = label({}, "notice");
   layout->addWidget(settingsMessage);
   auto save = new QPushButton("Save changes");
@@ -923,6 +970,53 @@ QWidget *Window::makeSettings() {
   layout->addWidget(save);
   loadSettings();
   return scrollView(page);
+}
+void Window::checkUpdates(bool manual) {
+  const auto now = QDateTime::currentSecsSinceEpoch();
+  const auto last = local.value("lastUpdateCheck", 0).toLongLong();
+  if (updateBusy || (!manual &&
+      (!local.value("automaticUpdates", true).toBool() ||
+       (last <= now && now - last < 86400))))
+    return;
+  updateBusy = true;
+  updateCheck->setEnabled(false);
+  updateStatus->setText("Checking official StormDesk releases…");
+  const bool previews = local.value("previewUpdates",
+      QString(STORMDESK_RELEASE_VERSION).contains('-')).toBool();
+  QPointer<Window> guard(this);
+  services.request(QUrl("https://api.github.com/repos/d4vid87/stormdesk/releases?per_page=30"),
+      [guard, previews, manual](QJsonDocument doc, QString error) {
+    if (!guard)
+      return;
+    guard->updateBusy = false;
+    guard->updateCheck->setEnabled(true);
+    if (previews != guard->local.value("previewUpdates",
+        QString(STORMDESK_RELEASE_VERSION).contains('-')).toBool()) {
+      guard->checkUpdates(true);
+      return;
+    }
+    if (!error.isEmpty() || !doc.isArray()) {
+      guard->updateStatus->setText("Could not check for updates. Try again later. " + error);
+      return;
+    }
+    guard->local.setValue("lastUpdateCheck", QDateTime::currentSecsSinceEpoch());
+    const auto offer = nativeUpdate(doc.array(), STORMDESK_RELEASE_VERSION, previews);
+    guard->updateUrl = QUrl(offer.value("url").toString());
+    guard->updateDownload->setVisible(!offer.isEmpty());
+    if (offer.isEmpty()) {
+      guard->updateStatus->setText("No newer release in the selected channel. Checked " +
+          QDateTime::currentDateTime().toString("h:mm AP") + ".");
+      return;
+    }
+    const auto version = offer.value("version").toString();
+    guard->updateStatus->setText("StormDesk " + version + " is available. "
+        "Back up your archive before installing.");
+    if (!manual && guard->local.value("notifiedUpdate").toString() != version) {
+      guard->local.setValue("notifiedUpdate", version);
+      guard->notify("StormDesk update available", version +
+          " is ready. Open Settings → App updates to download.");
+    }
+  });
 }
 void Window::addRule(const QJsonObject &rule) {
   const int row = ruleTable->rowCount();
@@ -1830,7 +1924,19 @@ void Window::setup() {
         return true;
       },
       [this] { restore(); }, this);
+#ifdef Q_OS_ANDROID
+  // Keep onboarding on the main surface; Android TextureView dialogs corrupt partial repaints.
+  dialog->setWindowFlags(Qt::Widget);
+  auto shell = qobject_cast<QStackedWidget *>(centralWidget());
+  shell->addWidget(dialog);
+  connect(dialog, &QDialog::finished, shell, [shell, dialog] {
+    shell->setCurrentIndex(0);
+    shell->removeWidget(dialog);
+  });
+  shell->setCurrentWidget(dialog);
+#else
   dialog->open();
+#endif
 }
 void Window::showInstrument(int index) {
   auto dialog = new QDialog(this);
