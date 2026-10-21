@@ -1340,7 +1340,7 @@ void Window::applyTheme() {
       "QLabel[kind=brand],QLabel[kind=temperature],QLabel[kind=metric],QLabel["
       "kind=subtitle] {font-family:'Barlow Semi Condensed Medium';} QWidget { "
       "color:" +
-      foreground + "; } QMainWindow,QScrollArea,QStackedWidget {background:" +
+      foreground + ";font-size:" + px(13) + "px; } QMainWindow,QScrollArea,QStackedWidget {background:" +
       background + ";} QScrollArea>QWidget>QWidget {background:" + background +
       ";}"
       "QFrame#card {background:" +
