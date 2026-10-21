@@ -30,10 +30,7 @@ export function initObservatory() {
   sun.id = 'instrument-sun';
   sun.setAttribute('aria-label', 'Sunrise and sunset at the selected location');
   sun.innerHTML = '<div class="instrument-sun-end"><span class="instrument-sun-icon sunrise" aria-hidden="true">☀</span><small>Sunrise</small><strong id="instrument-sunrise">—</strong></div><div class="instrument-daylight"><svg viewBox="0 0 400 65" preserveAspectRatio="none" aria-hidden="true"><path d="M4 60Q200-55 396 60"/><circle id="instrument-day-marker" r="4" hidden/></svg><span id="instrument-daylight">Sun times unavailable</span><small id="instrument-sun-zone">Location time</small></div><div class="instrument-sun-end"><span class="instrument-sun-icon sunset" aria-hidden="true">☀</span><small>Sunset</small><strong id="instrument-sunset">—</strong></div>';
-  const local = document.createElement('button');
-  local.id = 'instrument-local';
-  local.innerHTML = '<span>YOUR LOCAL CONTEXT</span><span id="instrument-source">Waiting for current conditions</span><span>Air quality · astronomy · station details →</span>';
-  context.append($('hero'), sun, local);
+  context.append($('hero'), sun);
   shelf.append(context);
   const radar = document.createElement('section');
   radar.id = 'instrument-radar';
@@ -45,7 +42,7 @@ export function initObservatory() {
   const details = document.createElement('dialog');
   details.id = 'instrument-details';
   details.setAttribute('aria-labelledby', 'instrument-details-title');
-  details.innerHTML = '<form method="dialog"><button aria-label="Close local context">Close</button></form><aside id="observatory-signals"><h2 id="instrument-details-title">Local context</h2><div id="observatory-local" class="kv-rows">Waiting for readings</div></aside>';
+  details.innerHTML = '<form method="dialog"><button aria-label="Close local context">Close</button></form><aside id="observatory-signals"><h2 id="instrument-details-title">Local context</h2><p id="instrument-source">Waiting for current conditions</p><div id="observatory-local" class="kv-rows">Waiting for readings</div></aside>';
   document.body.append(details);
   const signals = details.querySelector('aside');
   for (const id of ['alerts','severe','winter','tropical','aqi','sky','health'])
@@ -55,7 +52,7 @@ export function initObservatory() {
   moon.append($('hero-moon'), $('hero-moonset'));
   $('sky').parentElement.append(moon);
   initStatusCards(signals);
-  local.onclick = () => details.showModal();
+  $('instrument-details-open').onclick = () => details.showModal();
   // Shared forecast/tools modules retain their render targets outside the radar workspace.
   stack.hidden = true;
   stack.append(document.querySelector('[data-panel="g-wet"]'));

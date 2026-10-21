@@ -80,7 +80,11 @@ addEventListener('load', () => {
   console.assert(document.getElementById('instrument-clock').closest('header'), 'Clock sits in the upper-right header');
   console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'Shared tool data retains available days');
   console.assert(document.getElementById('desk-stack').hidden, 'Retired ten-day and six-hour panels stay outside the radar workspace');
-  console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety tools stay accessible through local context');
+  console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety tools stay accessible through settings');
+  console.assert(!document.getElementById('instrument-local') && document.getElementById('instrument-context').children.length === 2, 'Local Context card is removed and the sun strip shares the row with current conditions');
+  document.getElementById('instrument-details-open').click();
+  console.assert(document.getElementById('instrument-details').open, 'Local weather details remain accessible from settings');
+  document.getElementById('instrument-details').close();
   const shelf = document.getElementById('instrument-shelf'), toggle = document.getElementById('instrument-toggle');
   const wasHidden = shelf.hidden;
   toggle.click();
