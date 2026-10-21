@@ -1,4 +1,5 @@
 #include "instruments.h"
+#include "popup.h"
 #include "radar.h"
 #include "setup.h"
 #include "tools.h"
@@ -41,6 +42,14 @@ private slots:
                                               "/Fonts/segoeui.ttf") >= 0);
     QApplication::setFont(QFont("Segoe UI"));
 #endif
+  }
+  void popupStaysInsideSystemBars() {
+    const QRect safe(0, 32, 360, 700);
+    QCOMPARE(popupBounds(QRect(20, 2, 320, 160), safe), QRect(20, 32, 320, 160));
+    QCOMPARE(popupBounds(QRect(300, 700, 200, 100), safe), QRect(160, 632, 200, 100));
+    QCOMPARE(popupBounds(QRect(-5, -5, 800, 900), safe), safe);
+    QCOMPARE(popupBounds(QRect(20, 100, 200, 100), safe), QRect(20, 100, 200, 100));
+    QCOMPARE(popupBounds(QRect(20, 100, 200, 100), QRect()), QRect(20, 100, 200, 100));
   }
   void releaseChecksAndFailures() {
     struct Releases : Services {

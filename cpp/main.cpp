@@ -17,7 +17,9 @@
 #include <memory>
 #ifdef STORMDESK_GUI
 #include "window.h"
+#include "popup.h"
 #include <QApplication>
+#include <QWindow>
 #include <QPixmap>
 class NativeApplication : public QApplication {
 public:
@@ -28,6 +30,22 @@ public:
     if (event->type() == QEvent::UpdateRequest)
       if (auto widget = qobject_cast<QWidget *>(receiver); widget && widget->isWindow())
         widget->update();
+#endif
+#if defined(Q_OS_ANDROID) && QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    if (event->type() == QEvent::Show) {
+      auto popup = qobject_cast<QWidget *>(receiver);
+      if (popup && popup->windowType() == Qt::Popup && popup->parentWidget()) {
+        // Android's popup placement includes the system bars on edge-to-edge surfaces.
+        QTimer::singleShot(0, popup, [popup] {
+          if (!popup->parentWidget())
+            return;
+          auto parent = popup->parentWidget()->window()->windowHandle();
+          if (parent && popup->isVisible())
+            popup->setGeometry(storm::popupBounds(
+                popup->geometry(), parent->geometry().marginsRemoved(parent->safeAreaMargins())));
+        });
+      }
+    }
 #endif
     return QApplication::notify(receiver, event);
   }
