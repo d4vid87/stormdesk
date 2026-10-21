@@ -128,7 +128,7 @@ void Radar::createMobileView() {
   mobileContainer->setObjectName("hookEchoMobileView");
   mobileContainer->setMinimumSize(0, 0);
   qobject_cast<QVBoxLayout *>(layout())->insertWidget(1, mobileContainer, 1);
-  loadedUrl = {};
+  loadedUrl = QUrl();
   setProperty("hookEchoLoaded", false);
   status->setText("HookEcho · Loading live radar…");
   status->show();
