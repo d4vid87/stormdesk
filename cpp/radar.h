@@ -38,6 +38,9 @@ private:
   double scaleFactor = 1;
 #ifdef STORMDESK_ANDROID_WEBVIEW
   QQuickView *mobileView = nullptr;
+  QWidget *mobileContainer = nullptr;
+  bool recreateOnShow = false;
+  void createMobileView();
 #endif
 #ifdef STORMDESK_WEBENGINE
   QWebEngineView *view = nullptr;

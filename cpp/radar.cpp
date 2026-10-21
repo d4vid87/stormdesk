@@ -107,21 +107,7 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
     status->setText("Synthetic demo mode · Live HookEcho radar is disabled.");
 #elif defined(STORMDESK_ANDROID_WEBVIEW)
   if (services.config.text("stationSource") != "demo") {
-    mobileView = new QQuickView;
-    mobileView->setResizeMode(QQuickView::SizeRootObjectToView);
-    mobileView->setColor(QColor("#101214"));
-    mobileView->setSource(QUrl("qrc:/native/AndroidRadar.qml"));
-    auto container = QWidget::createWindowContainer(mobileView, this);
-    container->setObjectName("hookEchoMobileView");
-    container->setMinimumSize(0, 0);
-    layout->insertWidget(1, container, 1);
-    if (mobileView->rootObject()) {
-      mobileView->rootObject()->setVisible(false);
-      connect(mobileView->rootObject(), SIGNAL(pageLoaded(bool)), this, SLOT(pageLoaded(bool)));
-    } else {
-      status->setText("Radar view could not start. Open HookEcho or retry.");
-      setProperty("hookEchoLoaded", false);
-    }
+    createMobileView();
   } else {
     status->setText("Synthetic demo mode · Live HookEcho radar is disabled.");
   }
@@ -132,6 +118,28 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
 #endif
   setScale(1);
 }
+#ifdef STORMDESK_ANDROID_WEBVIEW
+void Radar::createMobileView() {
+  mobileView = new QQuickView;
+  mobileView->setResizeMode(QQuickView::SizeRootObjectToView);
+  mobileView->setColor(QColor("#101214"));
+  mobileView->setSource(QUrl("qrc:/native/AndroidRadar.qml"));
+  mobileContainer = QWidget::createWindowContainer(mobileView, this);
+  mobileContainer->setObjectName("hookEchoMobileView");
+  mobileContainer->setMinimumSize(0, 0);
+  qobject_cast<QVBoxLayout *>(layout())->insertWidget(1, mobileContainer, 1);
+  loadedUrl = {};
+  setProperty("hookEchoLoaded", false);
+  status->setText("HookEcho · Loading live radar…");
+  status->show();
+  if (mobileView->rootObject()) {
+    mobileView->rootObject()->setVisible(false);
+    connect(mobileView->rootObject(), SIGNAL(pageLoaded(bool)), this, SLOT(pageLoaded(bool)));
+  } else {
+    status->setText("Radar view could not start. Open HookEcho or retry.");
+  }
+}
+#endif
 void Radar::pageLoaded(bool ok) {
 #ifdef STORMDESK_ANDROID_WEBVIEW
   if (ok && compact && isVisible()) fitDashboardWebView(width());
@@ -144,8 +152,10 @@ void Radar::pageLoaded(bool ok) {
 }
 void Radar::hideEvent(QHideEvent *event) {
 #ifdef STORMDESK_ANDROID_WEBVIEW
-  if (mobileView && mobileView->rootObject())
+  if (mobileView && mobileView->rootObject()) {
     mobileView->rootObject()->setVisible(false);
+    recreateOnShow = true;
+  }
 #endif
   QWidget::hideEvent(event);
 }
@@ -175,6 +185,13 @@ void Radar::setImmersive(bool enabled) {
 void Radar::showEvent(QShowEvent *event) {
   QWidget::showEvent(event);
 #ifdef STORMDESK_ANDROID_WEBVIEW
+  if (recreateOnShow) {
+    // shortcut: Qt's cached Android surface stays blank after dialogs; recreate until container resume is fixed.
+    delete mobileContainer;
+    mobileView = nullptr;
+    createMobileView();
+    recreateOnShow = false;
+  }
   if (mobileView && mobileView->rootObject())
     mobileView->rootObject()->setVisible(true);
 #endif
