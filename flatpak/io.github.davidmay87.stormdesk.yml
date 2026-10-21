@@ -18,7 +18,7 @@ modules:
       - -DCMAKE_BUILD_TYPE=Release
       - -DBUILD_TESTING=OFF
     post-install:
-      - install -Dm644 app-icon.png /app/share/icons/hicolor/512x512/apps/io.github.davidmay87.stormdesk.png
+      - install -Dm644 site/stormdesk-icon-512.png /app/share/icons/hicolor/512x512/apps/io.github.davidmay87.stormdesk.png
       - install -Dm644 flatpak/io.github.davidmay87.stormdesk.desktop /app/share/applications/io.github.davidmay87.stormdesk.desktop
       - install -Dm644 flatpak/io.github.davidmay87.stormdesk.metainfo.xml /app/share/metainfo/io.github.davidmay87.stormdesk.metainfo.xml
       - rm /app/share/applications/stormdesk.desktop

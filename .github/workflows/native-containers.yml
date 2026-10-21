@@ -2,6 +2,7 @@ name: native-containers
 on:
   push:
     branches: [cpp-rework]
+    paths: ['cpp/**', 'site/**', 'CMakeLists.txt', 'Dockerfile', '.github/workflows/native-containers.yml', 'LICENSE']
   workflow_dispatch:
 concurrency:
   group: native-containers-${{ github.ref_name }}

@@ -2,6 +2,7 @@ name: native-flatpak
 on:
   push:
     branches: [cpp-rework]
+    paths: ['cpp/**', 'site/**', 'CMakeLists.txt', 'flatpak/**', '.github/workflows/native-flatpak.yml', 'app-icon.png', 'LICENSE']
   workflow_dispatch:
 concurrency:
   group: flatpak-${{ github.ref_name }}
