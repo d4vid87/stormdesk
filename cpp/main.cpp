@@ -18,6 +18,11 @@
 #ifdef STORMDESK_GUI
 #include "window.h"
 #include "popup.h"
+#ifdef Q_OS_ANDROID
+#include "mobilepicker.h"
+#include <QMouseEvent>
+#include <QKeyEvent>
+#endif
 #include <QApplication>
 #include <QWindow>
 #include <QPixmap>
@@ -29,6 +34,23 @@ public:
   using QApplication::QApplication;
   bool notify(QObject *receiver, QEvent *event) override {
 #ifdef Q_OS_ANDROID
+    if (auto box = qobject_cast<QComboBox *>(receiver); box && !box->isEditable()) {
+      const bool press = event->type() == QEvent::MouseButtonPress &&
+          static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton;
+      const bool release = event->type() == QEvent::MouseButtonRelease &&
+          static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton;
+      const bool key = event->type() == QEvent::KeyPress &&
+          (static_cast<QKeyEvent *>(event)->key() == Qt::Key_Space ||
+           static_cast<QKeyEvent *>(event)->key() == Qt::Key_Return ||
+           (static_cast<QKeyEvent *>(event)->key() == Qt::Key_Down &&
+            static_cast<QKeyEvent *>(event)->modifiers().testFlag(Qt::AltModifier)));
+      if (press || release || key) {
+        box->setFocus(Qt::MouseFocusReason);
+        // Native child radar windows obscure Android's transient combo popups.
+        if (release || key) storm::mobilePicker(box);
+        return true;
+      }
+    }
     // shortcut: tested Adreno retains partial frames; remove after a Qt upgrade passes device QA.
     if (event->type() == QEvent::UpdateRequest)
       if (auto widget = qobject_cast<QWidget *>(receiver); widget && widget->isWindow())
@@ -42,6 +64,11 @@ public:
         QTimer::singleShot(0, popup, [popup] {
           if (!popup->parentWidget())
             return;
+          if (auto box = qobject_cast<QComboBox *>(popup->parentWidget())) {
+            box->hidePopup();
+            storm::mobilePicker(box);
+            return;
+          }
           auto parent = popup->parentWidget()->window()->windowHandle();
           if (parent && popup->isVisible())
             popup->setGeometry(storm::popupBounds(

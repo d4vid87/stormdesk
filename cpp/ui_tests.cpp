@@ -1,5 +1,6 @@
 #include "instruments.h"
 #include "popup.h"
+#include "mobilepicker.h"
 #include "radar.h"
 #include "setup.h"
 #include "tools.h"
@@ -107,6 +108,36 @@ private slots:
     prefs.remove("automaticUpdates");
     prefs.remove("previewUpdates");
     prefs.remove("lastUpdateCheck");
+  }
+  void mobilePickerUsesTheComboModel() {
+    QWidget owner;
+    QComboBox box(&owner);
+    box.addItems({"100%", "Disabled", "115%"});
+    box.setItemData(1, 0, Qt::UserRole - 1);
+    owner.resize(360, 600); owner.show();
+    QSignalSpy activated(&box, &QComboBox::activated);
+    auto dialog = mobilePicker(&box);
+    QVERIFY(dialog);
+    QVERIFY(!mobilePicker(&box));
+    auto list = dialog->findChild<QListWidget *>("mobilePickerOptions");
+    QVERIFY(list && list->count() == 3);
+    QVERIFY(!list->item(1)->flags().testFlag(Qt::ItemIsEnabled));
+    QTest::qWait(5);
+    QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualItemRect(list->item(2)).center());
+    QCOMPARE(box.currentIndex(), 2);
+    QCOMPARE(activated.count(), 1);
+    QCOMPARE(activated.first().first().toInt(), 2);
+    QVERIFY(!box.property("mobilePicking").toBool());
+    QTest::qWait(5);
+    box.setCurrentIndex(0);
+    dialog = mobilePicker(&box);
+    list = dialog->findChild<QListWidget *>("mobilePickerOptions");
+    box.setItemData(2, "Provider changed this option");
+    QTest::qWait(5);
+    QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualItemRect(list->item(2)).center());
+    QCOMPARE(box.currentIndex(), 0);
+    QCOMPARE(activated.count(), 1);
+    QTest::qWait(5);
   }
   void mobileInstrumentPocket() {
     QTemporaryDir dir;
