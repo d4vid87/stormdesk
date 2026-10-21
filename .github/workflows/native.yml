@@ -76,18 +76,15 @@ jobs:
         run: |
           find "$HOME/Library/Logs/DiagnosticReports" /Library/Logs/DiagnosticReports -maxdepth 1 -name 'stormdesk_ui_tests*' -type f -print -exec cat {} \;
       - run: cmake --install build --config Release --prefix dist
-      - name: Package Windows installer and portable app
+      - name: Package Windows portable app
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          choco install nsis --no-progress -y
           cpack --config build/CPackConfig.cmake -C Release -B release-assets -D CPACK_PACKAGE_FILE_NAME=StormDesk_5.0.0-preview.1_windows_x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:QT_COMMAND_LINE_PARSER_NO_GUI_MESSAGE_BOXES = '1'
           if (-not (Test-Path dist/bin/vcruntime140.dll)) { throw 'MSVC runtime was not deployed' }
-          $app = Start-Process ./dist/bin/stormdesk.exe -ArgumentList '--version' -PassThru -NoNewWindow
-          if (-not $app.WaitForExit(30000)) { $app.Kill(); throw 'Packaged app did not exit' }
-          if ($app.ExitCode -ne 0) { throw "Packaged app exited $($app.ExitCode)" }
+          python -c "import subprocess; subprocess.run(['dist/bin/stormdesk.exe', '--version'], check=True, timeout=30)"
       - name: Package macOS app
         if: runner.os == 'macOS'
         run: |
