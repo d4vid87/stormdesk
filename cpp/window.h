@@ -34,6 +34,7 @@ public:
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
+  bool event(QEvent *event) override;
 
 private:
   Services &services;

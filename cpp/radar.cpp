@@ -59,8 +59,8 @@ Radar::Radar(Services &s, QWidget *parent, bool compactMode)
   } else
     status->setText("Synthetic demo mode · Live HookEcho radar is disabled.");
 #else
-  status->setText("Embedded HookEcho needs Qt WebEngine in this build. Open "
-                  "HookEcho to use the live radar in your browser.");
+  status->setText("Open live HookEcho radar in your browser. Your selected "
+                  "station and radar site carry over.");
   reload->hide();
 #endif
   setScale(1);
@@ -142,8 +142,13 @@ void RadarStage::resizeEvent(QResizeEvent *event) {
 void RadarStage::arrange() {
   const int margin = qRound(12 * scaleFactor);
   const int panelWidth = std::max(1, width() - 2 * margin);
-  if (!userToggled)
+  if (!userToggled) {
+#ifdef STORMDESK_WEBENGINE
     toggle->setChecked(width() / scaleFactor >= 900);
+#else
+    toggle->setChecked(true);
+#endif
+  }
   const int buttonHeight = toggle->sizeHint().height();
   const int panelHeight =
       std::max(0, std::min(qRound(330 * scaleFactor), qRound(height() * .46)));
