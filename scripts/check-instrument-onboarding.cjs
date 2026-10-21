@@ -23,6 +23,8 @@ const fs=require('node:fs');
   const site=await page.evaluate(async()=>{const b=await import('./js/boot.js');const s=await (await fetch('sites.json')).json();return b.nearestSite(32.9,-97.03,s).id});assert.equal(site,'KFWS');
   await page.waitForFunction(()=>document.getElementById('wizard').hidden);
   await page.waitForFunction(()=>document.getElementById('desk-radar-frame').src.includes('#goto=KFWS,'));
+  await page.locator('#btn-settings').click();
+  await page.locator('[data-settings-category="station"]').click();
   await page.locator('#instrument-connect').click();
   await page.locator('#wiz-token').fill('edited-fixture-token');assert.equal(await page.locator('#wiz-list button').count(),0);
   assert.deepEqual(errors,[]);await context.close();

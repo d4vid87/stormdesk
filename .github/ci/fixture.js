@@ -78,6 +78,10 @@ addEventListener('load', () => {
   console.assert(document.getElementById('hero-alerts').parentElement.id === 'desk', 'Instrument alert banner sits above the radar workspace');
   console.assert(/\d+:\d{2}/.test(document.getElementById('clock-time').textContent), 'Local clock shows hours and minutes');
   console.assert(document.getElementById('instrument-clock').closest('header'), 'Clock sits in the upper-right header');
+  console.assert(document.querySelector('header h1').textContent === 'Stormdesk', 'Header shows only Stormdesk');
+  console.assert(!document.querySelector('#instrument-controls #instrument-connect, #instrument-controls #instrument-motion') && document.querySelector('#settings-station #instrument-connect'), 'Station setup is in settings and dashboard motion control is removed');
+  console.assert(document.querySelector('#settings-appearance #set-motion'), 'Icon animation stays in Appearance settings');
+  console.assert(document.querySelector('#hero-icon .weather-aura') && document.querySelector('#instrument-sun .horizon-chart'), 'Conditions and sun use the illustrated visual treatment');
   console.assert(document.querySelectorAll('#daycards > .daycard').length === 10, 'Shared tool data retains available days');
   console.assert(document.getElementById('desk-stack').hidden, 'Retired ten-day and six-hour panels stay outside the radar workspace');
   console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety tools stay accessible through settings');
@@ -108,6 +112,9 @@ addEventListener('load', () => {
   console.assert(document.getElementById('radar-alert-dialog').open && document.getElementById('radar-alert-list').textContent.includes('Fixture county'), 'Banner opens affected areas and official details');
   console.assert(document.getElementById('radar-alert-list').textContent.includes('Expires (device time)') && document.getElementById('radar-alert-list').textContent.includes('Fixture instructions') && !document.querySelector('#radar-alert-list img'), 'Alert text stays escaped with expiry and instructions');
   document.getElementById('radar-alert-dialog').close();
+  dispatchEvent(new CustomEvent('wd:alerts', {detail:[{properties:{event:'Air Quality Alert',severity:'Unknown'}}]}));
+  console.assert(document.getElementById('hero-alerts').textContent.includes('National Weather Service') && !document.getElementById('hero-alerts').textContent.includes('Unknown'), 'Banner names the official source instead of Unknown');
+  console.assert(document.getElementById('hero-alerts').style.getPropertyValue('--alert-color') === '#ffffff' && document.getElementById('radar-banner').style.getPropertyValue('--alert-color') === '#ffffff', 'Air Quality Alert uses white in Weather and Radar banners');
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [] }));
   // api.OBS order: time, temp, rh, press, ... — index by name off the module the page already
   // loaded rather than hard-coding a shape that moves.

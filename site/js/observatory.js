@@ -6,15 +6,14 @@ export function initObservatory() {
   if ($('instrument-stage')) return;
   document.documentElement.dataset.interface = 'instrument';
   const desk = $('desk'), stack = $('desk-stack');
-  document.querySelector('header h1').textContent = 'StormDesk / Instrument';
+  document.querySelector('header h1').textContent = 'Stormdesk';
   const clock = document.createElement('div');
   clock.id = 'instrument-clock';
   clock.append($('hero-clock'), $('clock-date'));
   document.querySelector('body > header').append(clock);
-  document.querySelector('header h1').append($('hero-place'));
   const toolbar = document.createElement('div');
   toolbar.id = 'instrument-controls';
-  toolbar.innerHTML = '<button id="instrument-toggle" aria-controls="instrument-shelf">Hide instruments</button><div class="instrument-actions"><label>Interface size <select id="instrument-scale" aria-label="Interface size"></select></label><button id="instrument-connect">Connect station</button><button id="instrument-motion">Pause icons</button></div>';
+  toolbar.innerHTML = '<button id="instrument-toggle" aria-controls="instrument-shelf">Hide instruments</button><div class="instrument-actions"><label>Interface size <select id="instrument-scale" aria-label="Interface size"></select></label></div>';
   for (const value of [.7,.85,1,1.15,1.35,1.5,1.75,2]) {
     const option = new Option(`${Math.round(value * 100)}%`, value);
     toolbar.querySelector('select').append(option);
@@ -29,7 +28,11 @@ export function initObservatory() {
   const sun = document.createElement('section');
   sun.id = 'instrument-sun';
   sun.setAttribute('aria-label', 'Sunrise and sunset at the selected location');
-  sun.innerHTML = '<div class="instrument-sun-end"><span class="instrument-sun-icon sunrise" aria-hidden="true">☀</span><small>Sunrise</small><strong id="instrument-sunrise">—</strong></div><div class="instrument-daylight"><svg viewBox="0 0 400 65" preserveAspectRatio="none" aria-hidden="true"><path d="M4 60Q200-55 396 60"/><circle id="instrument-day-marker" r="4" hidden/></svg><span id="instrument-daylight">Sun times unavailable</span><small id="instrument-sun-zone">Location time</small></div><div class="instrument-sun-end"><span class="instrument-sun-icon sunset" aria-hidden="true">☀</span><small>Sunset</small><strong id="instrument-sunset">—</strong></div>';
+  sun.innerHTML = `<div class="horizon-atmosphere" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="instrument-sun-end sunrise"><svg class="instrument-sun-icon" viewBox="0 0 64 48" aria-hidden="true"><defs><radialGradient id="rise-orb"><stop stop-color="#fff5cc"/><stop offset="1" stop-color="#ffad4d"/></radialGradient></defs><g class="horizon-rays" stroke="#ffca77" stroke-width="2" stroke-linecap="round"><path d="M32 4V10M12 12L17 17M5 30H12M52 12L47 17M52 30H59"/></g><path d="M17 33a15 15 0 0 1 30 0" fill="url(#rise-orb)"/><path d="M6 34H58M18 40H46M25 45H39" stroke="#e8c28e" stroke-linecap="round"/></svg><div><small>Sunrise</small><strong id="instrument-sunrise">—</strong></div></div>
+    <div class="instrument-daylight"><div class="horizon-heading"><span id="instrument-next-sun">Your daylight</span><small id="instrument-sun-zone">Location time</small></div>
+    <div class="horizon-chart"><svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="horizon-line"><stop stop-color="#ffbc67"/><stop offset=".5" stop-color="#f6df9c"/><stop offset="1" stop-color="#dc86a4"/></linearGradient><linearGradient id="horizon-wash" x2="0" y2="1"><stop stop-color="#f8bd62" stop-opacity=".19"/><stop offset="1" stop-color="#f8bd62" stop-opacity="0"/></linearGradient></defs><path class="horizon-fill" d="M8 84Q200-48 392 84V100H8Z"/><path class="horizon-baseline" d="M8 84H392"/><path class="horizon-track" d="M8 84Q200-48 392 84"/><path class="horizon-sheen" d="M8 84Q200-48 392 84"/></svg><span id="instrument-day-marker" hidden aria-hidden="true"></span></div><span id="instrument-daylight">Sun times unavailable</span></div>
+    <div class="instrument-sun-end sunset"><svg class="instrument-sun-icon" viewBox="0 0 64 48" aria-hidden="true"><defs><radialGradient id="set-orb"><stop stop-color="#ffe9c7"/><stop offset="1" stop-color="#e68992"/></radialGradient></defs><g class="horizon-rays" stroke="#e9a4a5" stroke-width="2" stroke-linecap="round"><path d="M32 4V10M12 12L17 17M5 30H12M52 12L47 17M52 30H59"/></g><path d="M17 33a15 15 0 0 1 30 0" fill="url(#set-orb)"/><path d="M6 34H58M18 40H46M25 45H39" stroke="#d99b9f" stroke-linecap="round"/></svg><div><small>Sunset</small><strong id="instrument-sunset">—</strong></div></div>`;
   context.append($('hero'), sun);
   shelf.append(context);
   const radar = document.createElement('section');
@@ -67,6 +70,7 @@ export function initObservatory() {
   toggle.onclick = () => { collapsed = !collapsed; store('wd.instrumentCollapsed', collapsed); arrange(); };
   arrange();
   $('instrument-connect').onclick = () => {
+    $('btn-close').click();
     $('wizard').hidden = false;
     if (!$('wizard').open) $('wizard').showModal();
     $('wizard-choices').hidden = false;
@@ -74,35 +78,35 @@ export function initObservatory() {
     $('btn-wiz-station').click();
   };
   $('instrument-enable-radar').onclick = () => saveSettings({deskRadar:true});
-  let previousMotion = settings().motion === 'off' ? 'auto' : settings().motion;
-  $('instrument-motion').onclick = () => {
-    const paused = settings().motion === 'off';
-    if (!paused) previousMotion = settings().motion;
-    saveSettings({motion: paused ? previousMotion : 'off'});
-  };
   $('instrument-scale').onchange = e => saveSettings({fontScale:Number(e.target.value)});
   const controls = () => {
     $('instrument-scale').value = String(settings().fontScale);
-    $('instrument-motion').textContent = settings().motion === 'off' ? 'Animate icons' : 'Pause icons';
   };
   window.addEventListener('wd:settings', controls);
   controls();
-  let today;
+  let today, tomorrow;
   const renderSun = () => {
     const rise = Number(today?.sunrise), set = Number(today?.sunset), now = Date.now()/1000;
     const valid = Number.isFinite(rise) && Number.isFinite(set) && set > rise
       && now >= Number(today.day_start_local) && now < Number(today.day_start_local) + 86400;
     $('instrument-sun').dataset.available = String(valid);
+    $('instrument-sun').dataset.phase = !valid ? 'unknown' : now < rise ? 'dawn' : now > set ? 'night' : 'day';
+    const nextAt = now < rise ? rise : now < set ? set : tomorrow?.sunrise;
+    const remaining = Math.max(0, Math.ceil((nextAt - now)/60));
+    $('instrument-next-sun').textContent = valid && Number.isFinite(remaining)
+      ? `${now < rise || now > set ? 'Sunrise' : 'Sunset'} in ${Math.floor(remaining/60)}h ${remaining%60}m`
+      : valid ? 'After sunset' : 'Your daylight';
     $('instrument-sunrise').textContent = valid ? new Date(rise*1000).toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true,...(today.timezone ? {timeZone:today.timezone} : {})}) : '—';
     $('instrument-sunset').textContent = valid ? new Date(set*1000).toLocaleTimeString([], {hour:'numeric',minute:'2-digit',hour12:true,...(today.timezone ? {timeZone:today.timezone} : {})}) : '—';
     $('instrument-sun-zone').textContent = valid ? (today.timezone || 'Device local time') : 'Location time';
-    $('instrument-daylight').textContent = valid ? `${Math.floor((set-rise)/3600)}h ${Math.round((set-rise)%3600/60)}m daylight · ${now < rise ? 'Before sunrise' : now > set ? 'After sunset' : 'Daylight'}` : 'Sun times unavailable';
+    const daylightMinutes = Math.round((set-rise)/60);
+    $('instrument-daylight').textContent = valid ? `${Math.floor(daylightMinutes/60)}h ${daylightMinutes%60}m daylight · ${now < rise ? 'Before sunrise' : now > set ? 'After sunset' : 'Daylight'}` : 'Sun times unavailable';
     const marker = $('instrument-day-marker');
     marker.toggleAttribute('hidden', !valid);
     if (valid) {
       const fraction = Math.max(0,Math.min(1,(now-rise)/(set-rise)));
-      marker.setAttribute('cx', String(4+392*fraction));
-      marker.setAttribute('cy', String(60-230*fraction*(1-fraction)));
+      marker.style.left = `${2+96*fraction}%`;
+      marker.style.top = `${84-264*fraction*(1-fraction)}%`;
     }
   };
   const render = e => {
@@ -110,7 +114,9 @@ export function initObservatory() {
     if (!c) return;
     if (fc.forecast) {
       const now = Date.now()/1000;
-      today = fc.forecast.daily?.find(d => now >= d.day_start_local && now < d.day_start_local+86400);
+      const dayIndex = fc.forecast.daily?.findIndex(d => now >= d.day_start_local && now < d.day_start_local+86400);
+      today = fc.forecast.daily?.[dayIndex];
+      tomorrow = fc.forecast.daily?.[dayIndex+1];
       if (today) today = {...today, timezone:fc.timezone};
       renderSun();
     }

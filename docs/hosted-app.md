@@ -8,7 +8,12 @@ upload. Keep both on the same reviewed source revision.
 
 The browser uses the Instrument design from the native C++/Qt application:
 compact gauges, sun times, the severity-colored NWS banner and full-width HookEcho
-radar. A browser cannot run the Qt Widgets desktop executable. The hosted app is
+radar. The alert banner names the National Weather Service and uses HookEcho event
+colors, with Air Quality Alerts in white. Raw NWS severity remains in alert details.
+Current conditions and the sunrise/sunset horizon use larger artwork, subtle motion
+and live event times; reduced-motion and Appearance settings suppress decorative
+animation. Station setup and icon animation live in Settings, while interface size
+stays at the right of the dashboard toolbar. A browser cannot run the Qt Widgets desktop executable. The hosted app is
 the browser companion, with direct forecast/Tempest access or a paired household
 host; the desktop collector remains C++. Never include local settings, station
 credentials or archives in either upload.
@@ -19,6 +24,7 @@ Validate from the repository root before publishing:
 node scripts/check-browser-compat.mjs
 node scripts/check-themes.mjs
 node scripts/check-field-instruments.mjs
+node scripts/check-alert-style.mjs
 node scripts/check-shell-cache.mjs
 node marketing/tests/carbon-preview.mjs
 node marketing/tests/color-studio.mjs

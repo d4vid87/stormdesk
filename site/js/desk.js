@@ -1,3 +1,4 @@
+import { radarAlertColor } from './alert-style.js';
 // 01 Desk — current conditions, near-term forecast, alerts, AQI.
 import * as api from './api.js';
 import { wx } from './icons.js';
@@ -60,11 +61,13 @@ export function renderHeroAlerts(feats, status = '') {
   const sorted = (feats || []).slice().sort((a,b) => (rank[b.properties?.severity] || 0) - (rank[a.properties?.severity] || 0));
   box.dataset.severity = status ? '' : sorted[0]?.properties?.severity || '';
   box.dataset.state = status ? 'unavailable' : feats == null ? 'loading' : sorted.length ? 'active' : 'clear';
+  if (sorted.length && !status) box.style.setProperty('--alert-color', radarAlertColor(sorted[0].properties?.event));
+  else box.style.removeProperty('--alert-color');
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'instrument-alert-button';
   button.textContent = status || (feats == null ? 'Checking National Weather Service alerts…' : sorted.length
-    ? sorted.map(({properties:p}) => `${p.severity || 'Unknown'} · ${p.headline || p.event || 'Weather alert'}`).join('   •   ')
+    ? 'National Weather Service · ' + sorted.map(({properties:p}) => p.headline || p.event || 'Weather alert').join('   •   ')
     : 'National Weather Service · No active station-area alerts');
   if (sorted.length) button.textContent += '   ·   View details →';
   button.disabled = !sorted.length;

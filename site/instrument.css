@@ -1,7 +1,7 @@
 /* Instrument workspace shared by the hosted app and the C++ LAN companion. */
 html body > header { min-height:92px; padding:16px 24px; gap:16px; flex-wrap:wrap; }
 html header #brand { width:32px; height:32px; }
-html header h1 { font:600 21px/1.2 var(--num); text-transform:uppercase; letter-spacing:1.5px; }
+html header h1 { font:600 21px/1.2 var(--num); text-transform:none; letter-spacing:.2px; }
 html header #hero-place { margin:6px 0 0; font:11px/1.3 sans-serif; letter-spacing:0; text-transform:none; color:var(--muted); }
 html body > header nav { margin-left:20px; }
 #instrument-clock { margin-left:auto; text-align:right; min-width:150px; }
@@ -13,17 +13,19 @@ html body > header nav { margin-left:20px; }
 #desk #hero-alerts { display:block!important; flex:none; margin:0; padding:0; min-height:36px; max-width:none; width:auto; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); }
 #desk #hero-alerts .instrument-alert-button { white-space:normal; width:100%; display:block; padding:10px 13px; min-height:36px; color:inherit; background:transparent; border:0; text-align:left; font:12px/1.5 sans-serif; cursor:pointer; opacity:1; }
 #desk #hero-alerts .instrument-alert-button:disabled { cursor:default; }
-#desk #hero-alerts[data-severity="Extreme"], #lab #radar-banner[data-severity="Extreme"] { background:#59252c; color:#ffe4e6; border-color:#f08088; }
-#desk #hero-alerts[data-severity="Severe"], #lab #radar-banner[data-severity="Severe"] { background:#51331f; color:#ffdec3; border-color:#e99656; }
-#desk #hero-alerts[data-severity="Moderate"], #lab #radar-banner[data-severity="Moderate"] { background:#443b20; color:#ffedba; border-color:#d0ad55; }
-#desk #hero-alerts[data-severity="Minor"], #lab #radar-banner[data-severity="Minor"] { background:#233c56; color:#dbeaff; border-color:#79b3ec; }
-#desk #hero-alerts[data-severity="Unknown"], #lab #radar-banner[data-severity="Unknown"] { background:#29313d; color:#e0e6ef; border-color:#8895a8; }
+html[data-interface="instrument"] #desk #hero-alerts[data-state="active"],
+html[data-interface="instrument"] #lab #radar-banner.has-warnings {
+  background:color-mix(in srgb,var(--alert-color) 8%,var(--panel)); color:var(--text);
+  border-color:var(--alert-color); box-shadow:inset 4px 0 var(--alert-color),0 0 0 1px var(--line);
+}
+#desk #hero-alerts[data-state="active"] button::before { content:''; display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:10px; background:var(--alert-color); box-shadow:0 0 12px color-mix(in srgb,var(--alert-color) 35%,transparent); }
+html[data-interface="instrument"] #lab .radar-banner.has-warnings strong { color:var(--text); background:color-mix(in srgb,var(--alert-color) 16%,var(--panel)); }
 #instrument-controls { display:flex; flex:none; align-items:center; gap:8px; justify-content:space-between; }
 #instrument-controls :is(button,select) { min-height:34px; padding:6px 11px; font-size:11px; border:1px solid var(--line); border-radius:5px; background:var(--panel); color:var(--text); }
-.instrument-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.instrument-actions { margin-left:auto; display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .instrument-actions label { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); }
 #instrument-stage { display:flex; flex:1; flex-direction:column; gap:8px; min-height:0; }
-#instrument-shelf { flex:0 0 auto; max-height:34%; overflow:auto; scrollbar-width:thin; min-height:0; }
+#instrument-shelf { flex:0 0 auto; max-height:46%; overflow:auto; scrollbar-width:thin; min-height:0; }
 #desk #gauges { margin:0 0 8px; padding:0; gap:6px; grid-template-columns:repeat(8,minmax(0,1fr)); }
 #desk #gauges > .gauge { min-width:0; padding:9px 10px; border-radius:5px; }
 #desk #gauges h3 { font:500 10px/1.3 var(--num); margin:0; text-transform:uppercase; }
@@ -35,25 +37,64 @@ html body > header nav { margin-left:20px; }
 #desk #gauges .ginner small { font-size:10px; }
 #desk #gauges .ginner > span { font-size:9px; line-height:1.3; margin:2px 0 0; }
 #desk #gauges #g-ltg .ginner small { flex-basis:auto; }
-#instrument-context { display:grid; grid-template-columns:minmax(180px,.8fr) minmax(280px,2.8fr); gap:12px; align-items:stretch; }
-#desk #hero { padding:6px 10px; border:0; background:none; gap:2px; }
-#desk #hero-temp { font:500 27px/1.1 var(--num); letter-spacing:0; color:var(--text); }
-#desk #hero-icon,#desk #hero-icon :is(img,svg) { width:32px; height:32px; }
-#desk .hero-now { gap:8px; flex-wrap:nowrap; }
-#desk #hero-cond { font-size:11px; }
-#desk #hero-feels { font-size:10px; line-height:1.4; }
+#instrument-context { display:grid; grid-template-columns:minmax(280px,1fr) minmax(360px,2.4fr); gap:10px; align-items:stretch; }
+#desk #hero { position:relative; isolation:isolate; overflow:hidden; min-height:148px; box-sizing:border-box; padding:14px 20px; border:1px solid var(--line); border-radius:10px; background:radial-gradient(ellipse at 90% 20%,#9ac4e51f,transparent 68%),var(--panel); gap:3px; justify-content:center; }
+#desk #hero::before { content:'CURRENT CONDITIONS'; order:-1; color:var(--muted); font:10px/1.5 var(--num); letter-spacing:1.6px; }
+#desk #hero .hero-now { display:grid; grid-template-columns:1fr 96px; grid-template-areas:"temp icon" "condition icon"; gap:0 12px; align-items:center; flex-wrap:nowrap; order:0; }
+#desk #hero-temp { grid-area:temp; font:500 64px/.98 var(--num); letter-spacing:-1px; color:var(--text); }
+#desk #hero-icon { grid-area:icon; width:96px; height:96px; margin:0; position:relative; isolation:isolate; }
+#desk #hero-icon :is(img,svg) { width:96px; height:96px; position:relative; z-index:1; filter:drop-shadow(0 7px 12px #8bbdd34d); }
+#desk #hero-icon::before { display:none; }
+#desk #hero .hero-now > div:last-child { grid-area:condition; min-width:0; }
+#desk #hero-cond { font-size:15px; line-height:1.6; }
+#desk #hero-feels { order:1; font-size:11px; line-height:1.6; margin:0; color:var(--muted); }
 #desk #hero-hilo { display:none; }
-#instrument-sun { display:flex; align-items:center; gap:14px; padding:4px 10px; color:var(--muted); }
-.instrument-sun-end { display:flex; align-items:center; flex-direction:column; gap:2px; flex:none; }
-.instrument-sun-icon { display:block; font-size:28px; line-height:28px; color:#d8b77c; animation:instrument-sun-turn 45s linear infinite; }
-.instrument-sun-icon.sunset { color:#c18d79; animation-direction:reverse; }
-.instrument-sun-end small { font:9px/1.4 sans-serif; text-transform:uppercase; }
-.instrument-sun-end strong { color:var(--text); font:500 16px/1.4 var(--num); white-space:nowrap; }
-.instrument-daylight { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; font-size:9px; gap:3px; text-align:center; }
-.instrument-daylight svg { width:100%; height:42px; overflow:visible; }
-.instrument-daylight path { fill:none; stroke:var(--line); stroke-dasharray:3 4; vector-effect:non-scaling-stroke; }
-.instrument-daylight circle { fill:#d8b77c; }
-.instrument-daylight small { font-size:8px; }
+.weather-aura { position:absolute; inset:4px; border-radius:50%; background:radial-gradient(circle,#f8cd762f,transparent 68%); box-shadow:inset 0 0 25px #d8bc7e0f; }
+#hero[data-sky="night"] .weather-aura { background:radial-gradient(circle,#a6c7f33b,transparent 68%); }
+.weather-sparkles { position:absolute; inset:0; }
+.weather-sparkles i { position:absolute; width:3px; height:3px; background:#f6e7c3; border-radius:50%; box-shadow:0 0 6px #fce0a7; }
+.weather-sparkles i:nth-child(1) { left:9%; top:25%; }
+.weather-sparkles i:nth-child(2) { right:6%; top:17%; width:2px; height:2px; }
+.weather-sparkles i:nth-child(3) { right:14%; bottom:14%; width:2px; height:2px; }
+#instrument-sun { position:relative; isolation:isolate; overflow:hidden; display:flex; align-items:center; gap:16px; min-height:148px; padding:12px 20px; box-sizing:border-box; border:1px solid color-mix(in srgb,#d6af78 25%,var(--line)); border-radius:10px; color:var(--muted); background:radial-gradient(ellipse at 8% 100%,#edbd6724,transparent 45%),radial-gradient(ellipse at 95% 100%,#c975a024,transparent 45%),var(--panel); }
+#instrument-sun[data-phase="night"] { background:radial-gradient(ellipse at 70% 15%,#8f9ad324,transparent 70%),radial-gradient(ellipse at 5% 100%,#edbd671a,transparent 45%),var(--panel); }
+.instrument-sun-end { display:flex; align-items:center; flex-direction:column; gap:3px; flex:none; text-align:center; z-index:1; }
+.instrument-sun-icon { display:block; width:58px; height:44px; overflow:visible; filter:drop-shadow(0 0 10px #ffbd6855); animation:none; }
+.sunset .instrument-sun-icon { filter:drop-shadow(0 0 10px #d390aa55); }
+.instrument-sun-end small { display:block; font:10px/1.5 var(--num); letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); }
+.instrument-sun-end strong { display:block; color:var(--text); font:500 24px/1.3 var(--num); white-space:nowrap; }
+.instrument-daylight { z-index:1; flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; font-size:10px; gap:3px; text-align:center; }
+.horizon-heading { display:flex; align-items:baseline; justify-content:space-between; gap:8px; width:100%; }
+#instrument-next-sun { color:var(--text); font:500 16px/1.4 var(--num); }
+#instrument-sun-zone { font-size:9px; color:var(--muted); }
+.horizon-chart { position:relative; width:100%; height:70px; }
+.horizon-chart svg { display:block; width:100%; height:100%; overflow:visible; }
+.horizon-chart path { vector-effect:non-scaling-stroke; }
+.horizon-fill { fill:url(#horizon-wash); }
+.horizon-baseline { fill:none; stroke:var(--line); stroke-dasharray:2 5; }
+.horizon-track { fill:none; stroke:url(#horizon-line); stroke-width:1.8; filter:drop-shadow(0 0 4px #edbb6b55); }
+.horizon-sheen { fill:none; stroke:#fff0cb; stroke-width:2.8; stroke-dasharray:18 430; opacity:0; }
+#instrument-day-marker { position:absolute; display:block; width:14px; height:14px; transform:translate(-50%,-50%); border:2px solid #fff2c4; border-radius:50%; background:#efc579; box-shadow:0 0 0 5px #e9c28016,0 0 24px #f9d08b88; }
+#instrument-day-marker[hidden] { display:none; }
+#instrument-sun[data-phase="night"] #instrument-day-marker { border-color:#f1ecff; background:#d7dffa; box-shadow:0 0 0 5px #a8bbed13,0 0 22px #a8bbed66; }
+.horizon-atmosphere { position:absolute; inset:0; z-index:0; pointer-events:none; }
+.horizon-atmosphere i { position:absolute; width:2px; height:2px; border-radius:50%; background:#e6decc; opacity:.25; }
+.horizon-atmosphere i:nth-child(1) { left:17%; top:17%; }
+.horizon-atmosphere i:nth-child(2) { left:31%; top:32%; }
+.horizon-atmosphere i:nth-child(3) { left:44%; top:10%; width:3px; height:3px; }
+.horizon-atmosphere i:nth-child(4) { left:64%; top:23%; }
+.horizon-atmosphere i:nth-child(5) { left:79%; top:9%; }
+.horizon-atmosphere i:nth-child(6) { left:88%; top:35%; }
+html[data-motion="full"] .weather-aura { animation:weather-breathe 6s ease-in-out infinite; }
+html[data-motion="full"] .weather-star, html[data-motion="full"] .weather-sparkles i, html[data-motion="full"] .horizon-atmosphere i { animation:weather-twinkle 4s ease-in-out infinite; }
+html[data-motion="full"] :is(.weather-sparkles,.horizon-atmosphere) i:nth-child(even) { animation-delay:-2s; }
+html[data-motion="full"] #instrument-sun[data-available="true"] .horizon-sheen { opacity:.45; animation:horizon-flow 18s linear infinite; }
+html[data-motion="full"] #instrument-sun[data-available="true"] .horizon-rays { transform-origin:32px 30px; animation:horizon-rays 8s ease-in-out infinite; }
+@keyframes weather-breathe { 50% { transform:scale(1.12); opacity:.6; } }
+@keyframes weather-twinkle { 50% { opacity:.12; transform:scale(.7); } }
+@keyframes horizon-flow { to { stroke-dashoffset:-448; } }
+@keyframes horizon-rays { 50% { opacity:.6; transform:translateY(-2px); } }
+@media(prefers-reduced-motion:reduce) { html[data-motion] :is(.weather-aura,.weather-star,.weather-sparkles i,.horizon-atmosphere i,.horizon-sheen,.horizon-rays) { animation:none; } }
 #instrument-radar { position:relative; flex:1; min-height:240px; border:1px solid var(--line); overflow:hidden; border-radius:5px; background:var(--panel); }
 #desk #desk-radar { position:absolute; inset:0; width:100%; height:100%!important; min-height:0!important; max-height:none; border:0; border-radius:0; }
 #desk #desk-radar-frame { width:100%; height:100%; }
@@ -68,17 +109,13 @@ html body > header nav { margin-left:20px; }
 #instrument-details .status-sun { grid-column:1/-1; }
 #instrument-details .status-sun-curve { height:60px; width:100%; fill:none; stroke:var(--muted); }
 #instrument-details .status-device { width:100%; margin-top:12px; }
-html[data-motion="off"] .instrument-sun-icon, html[data-motion="lite"] .instrument-sun-icon,
-#instrument-sun[data-available="false"] .instrument-sun-icon { animation:none; }
-@keyframes instrument-sun-turn { to { transform:rotate(360deg); } }
-@media(prefers-reduced-motion:reduce) { .instrument-sun-icon { animation:none; } }
 @media(max-width:1150px) {
   html header h1 { font-size:18px; }
   html body > header { gap:10px; padding:12px 18px; }
   html body > header nav { margin-left:0; }
   #instrument-clock #clock-time { font-size:30px; }
   #desk #gauges { grid-template-columns:repeat(4,minmax(0,1fr)); }
-  #instrument-shelf { max-height:38%; }
+  #instrument-shelf { max-height:46%; }
   #instrument-context { grid-template-columns:1fr 1.6fr; }
 }
 @media(max-width:700px), (max-height:500px) {
@@ -96,11 +133,17 @@ html[data-motion="off"] .instrument-sun-icon, html[data-motion="lite"] .instrume
   .instrument-actions { gap:4px; }
   .instrument-actions label { font-size:0; gap:0; }
   #instrument-controls :is(button,select) { font-size:10px; padding:5px 7px; min-height:32px; }
-  #instrument-connect { display:none; }
   #instrument-shelf { max-height:42%; }
   #desk #gauges { grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
   #desk #gauges > .gauge { padding:8px; }
   #instrument-context { grid-template-columns:1fr; gap:6px; }
-  #instrument-sun { min-height:80px; }
+  #instrument-sun { min-height:132px; padding:12px; gap:10px; }
+  .instrument-sun-end strong { font-size:19px; }
+  .instrument-sun-icon { width:44px; height:36px; }
+  .horizon-heading { flex-direction:column; gap:0; align-items:center; }
+  #instrument-next-sun { font-size:14px; }
+  #instrument-sun-zone { font-size:8px; }
+  .horizon-chart { height:54px; }
+  #desk #hero { min-height:140px; }
   #instrument-radar { min-height:180px; }
 }

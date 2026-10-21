@@ -1,6 +1,7 @@
 // Radar and Instrument share active official alerts and their complete details.
 import { coords } from './app.js';
 import { renderHeroAlerts } from './desk.js';
+import { radarAlertColor } from './alert-style.js';
 const $ = (id) => document.getElementById(id);
 let warnings = [];
 const point = () => `${coords().lat},${coords().lon}`;
@@ -11,6 +12,8 @@ function renderBanner(message, badge = 'RADAR') {
   $('radar-banner-text').textContent = message;
   $('radar-banner').classList.toggle('has-warnings', !!warnings.length);
   $('radar-banner').dataset.severity = warnings[0]?.properties?.severity || '';
+  if (warnings.length) $('radar-banner').style.setProperty('--alert-color', radarAlertColor(warnings[0].properties?.event));
+  else $('radar-banner').style.removeProperty('--alert-color');
   $('radar-banner-details').hidden = !warnings.length;
 }
 
@@ -27,7 +30,7 @@ window.addEventListener('wd:alerts', (event) => {
     const until = p.ends || p.expires;
     return [p.event, p.areaDesc, until && `Until ${new Date(until).toLocaleString()}`].filter(Boolean).join(' · ');
   });
-  renderBanner(headlines.join('   ✦   '), warnings.some(({ properties: p }) => /emergency/i.test(p.event || '')) ? 'EMERGENCY' : 'NWS ALERTS');
+  renderBanner(headlines.join('   ✦   '), warnings.some(({ properties: p }) => /emergency/i.test(p.event || '')) ? 'EMERGENCY' : 'National Weather Service');
 });
 
 window.addEventListener('wd:alerts-error', (event) => {
