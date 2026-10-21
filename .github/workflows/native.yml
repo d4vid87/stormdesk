@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   linux:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -22,6 +23,7 @@ jobs:
       - run: cmake --build build --parallel 2
       - run: ctest --test-dir build --output-on-failure
       - if: always()
+        shell: bash
         run: cat build/native-core-results.txt build/native-ui-results.txt
       - run: python3 cpp/integration_smoke.py build/stormdesk
       - run: cmake -S . -B build-headless -DSTORMDESK_GUI=OFF -DBUILD_TESTING=OFF && cmake --build build-headless --parallel 2
@@ -43,6 +45,7 @@ jobs:
             release-assets/*.AppImage
             release-assets/*.tar.gz
   desktop:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +64,7 @@ jobs:
       - if: runner.os == 'macOS'
         run: ctest --test-dir build -C Release --output-on-failure --repeat until-fail:5 -R stormdesk_ui
       - if: always()
+        shell: bash
         run: cat build/native-core-results.txt build/native-ui-results.txt
       - if: failure() && runner.os == 'macOS'
         env:
@@ -94,6 +98,7 @@ jobs:
             release-assets/*.zip
             release-assets/*.dmg
   android:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
