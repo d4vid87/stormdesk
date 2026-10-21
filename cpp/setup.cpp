@@ -35,9 +35,14 @@ SetupDialog::SetupDialog(Services &s, quint16 port, double scale, Apply save,
   setWindowTitle("Welcome to StormDesk · Instrument");
   setAttribute(Qt::WA_DeleteOnClose);
   setMinimumSize(240, 240);
+#ifdef Q_OS_ANDROID
+  // A phone setup page uses the available screen, without desktop dialog centering.
+  setWindowState(Qt::WindowMaximized);
+#else
   resize(850, 760);
   if (parent)
     resize(size().boundedTo(parent->size()));
+#endif
   auto root = new QVBoxLayout(this);
   root->setSizeConstraint(QLayout::SetNoConstraint);
   progress = copy({}, "eyebrow");
@@ -401,8 +406,8 @@ SetupDialog::SetupDialog(Services &s, quint16 port, double scale, Apply save,
   preferences->addRow(notifications);
   personalize->addLayout(preferences);
   personalize->addWidget(
-      copy("Your choices remain available in Settings. The toolbar’s Pause "
-           "icons button stops decorative weather motion."));
+      copy("Your choices remain available in Settings. Switch off Icon "
+           "animation in Appearance to stop decorative weather motion."));
   personalize->addStretch();
   connect(source, &QComboBox::currentIndexChanged, this,
           [this] { connectionForm(); });
@@ -483,14 +488,14 @@ void SetupDialog::showStep(int i) {
                            "Let’s make contact.", "Check your connection.",
                            "Make yourself at home."};
   heading->setText(titles[i]);
-  progress->setText("STORMDESK / INSTRUMENT · SETUP " + QString::number(i + 1) +
+  progress->setText("STORMDESK · SETUP " + QString::number(i + 1) +
                     " OF 5");
   source->setVisible(path == "station");
   back->setEnabled(i > 0);
   next->setVisible(i > 0);
   next->setEnabled(true);
   next->setText(i == 4                         ? "Open dashboard"
-                : i == 2                       ? "Save & test"
+                : i == 2                       ? "Save and test"
                 : i == 1 && path == "forecast" ? "Load weather"
                                                : "Continue");
   skip->setVisible(i == 3);
