@@ -664,6 +664,10 @@ async function hydrateStation() {
     // history API wants the numeric device_id; a pasted serial (ST-00176465) won't work — and
     // neither does a station ID pasted in the device box, which is numeric and used to sail
     // through this guard and 404 every history call in silence.
+    if (!tempest || !Number.isFinite(st.latitude) || Math.abs(st.latitude) > 90
+      || !Number.isFinite(st.longitude) || Math.abs(st.longitude) > 180)
+      throw new Error('This station needs a Tempest sensor and valid coordinates.');
+    const moved = st.latitude !== settings().lat || st.longitude !== settings().lon;
     const entered = settings().deviceId;
     const known = (st.devices || []).map((d) => String(d.device_id));
     let numeric = tempest ? String(tempest.device_id) : '';
@@ -675,12 +679,16 @@ async function hydrateStation() {
       stationName: st.name,
       lat: st.latitude, lon: st.longitude,
       deviceId: numeric,
+      ...(Number.isFinite(st.station_meta?.elevation) ? {elevationM:st.station_meta.elevation} : {}),
     });
+    if (moved) { radarView = null; store('wd.radar', null); }
     fillDrawer();
     renderPlaces();
     renderStations();
+    return true;
   } catch (e) {
     notify({ title: 'Station lookup failed', body: e.message });
+    return false;
   }
 }
 
@@ -735,6 +743,7 @@ async function wizardFind() {
   saveSettings({ token });
   try {
     const list = (await api.stations()).stations || [];
+    if ($('wiz-token').value.trim() !== token) return;
     if (!list.length) throw new Error('That token works but reaches no stations.');
     $('wiz-list').replaceChildren(...list.map((st, i) => {
       const button = document.createElement('button');
@@ -744,10 +753,12 @@ async function wizardFind() {
     }));
     $('wiz-list').querySelectorAll('[data-wiz]').forEach((b) => {
       b.onclick = async () => {
+        if ($('wiz-token').value.trim() !== token) return;
         const st = list[+b.dataset.wiz];
-        saveSettings({ stationId: String(st.station_id) });
+        saveSettings({ stationId: String(st.station_id), stationSource:'', deviceId:'', activePlace:null });
+        if (!(await hydrateStation())) return;
+        radarView = null; store('wd.radar', null);
         firstReading(async () => (await api.stationObs()).obs?.[0]?.air_temperature);
-        await hydrateStation();
         refreshAll();
         for (const el of ['tenday', 'alerts', 'story', 'agree-verdict', 'changes', 'verify']) {
           const node = $(el);
@@ -755,6 +766,7 @@ async function wizardFind() {
         }
       };
     });
+    if (list.length === 1) $('wiz-list').querySelector('button').click();
   } catch (e) {
     $('wiz-list').textContent = e.message;
   }
@@ -902,9 +914,13 @@ $('btn-ha-test').onclick = async () => {
 
 $('btn-wiz-find').onclick = () => wizardFind();
 $('wiz-token').onkeydown = (e) => { if (e.key === 'Enter') wizardFind(); };
+$('wiz-token').oninput = () => $('wiz-list').replaceChildren();
 function closeWizard() {
   $('wizard').close();
   $('wizard').hidden = true;
+  const frame = $('desk-radar-frame');
+  if (frame.src) frame.src = radarUrl(6.5);
+  loadDeskRadar();
 }
 $('btn-wiz-close').onclick = closeWizard;
 $('wizard').addEventListener('cancel', (event) => { event.preventDefault(); closeWizard(); });
@@ -959,7 +975,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-observatory-20260926`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-gauge-order-20261021`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about
@@ -1340,13 +1356,13 @@ window.addEventListener('wd:refresh', () => {
 // HookEcho (own NEXRAD viewer) instead of the weathermap build. Deep link is
 // `#goto=SITE,lon,lat,zoom[,extras]` — note lon before lat, and unknown extras are ignored by
 // older builds, so adding to this string can never break a deployed viewer.
-const RADAR = 'https://hookecho.pages.dev/';
+const RADAR = 'https://app.hookecho.io/';
 
 // The NEXRAD + TDWR registry, generated from HookEcho's own site table
 // (`cargo run -p wxdata --example sites_json`). Frozen data — a live endpoint would be coupling
 // for nothing.
 let SITES = [];
-fetch('sites.json').then((r) => r.json()).then((j) => { SITES = j; fillSites(); }).catch(() => {});
+fetch('sites.json').then((r) => r.json()).then((j) => { SITES = j.filter(isNexrad); fillSites(); }).catch(() => {});
 
 // Great-circle distance in miles. Site spacing is ~100 mi, so a spherical earth is plenty.
 export function milesBetween(aLat, aLon, bLat, bLon) {
@@ -1357,9 +1373,15 @@ export function milesBetween(aLat, aLon, bLat, bLon) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+export function isNexrad(site) {
+  const id = site.id || '';
+  return /^[A-Z0-9]{4}$/.test(id) && (!id.startsWith('T') || id === 'TJUA')
+    && !['KABC','KACG','KAIH','KAKC'].includes(id);
+}
 export function nearestSite(lat, lon, sites = SITES) {
   let best = null, bestD = Infinity;
   for (const s of sites) {
+    if (!isNexrad(s)) continue;
     const d = milesBetween(lat, lon, s.lat, s.lon);
     if (d < bestD) { bestD = d; best = s; }
   }
@@ -1369,7 +1391,7 @@ export function nearestSite(lat, lon, sites = SITES) {
 // The site the radar should open on: the drawer pick, else the one nearest the station.
 function radarSite() {
   const s = settings();
-  if (s.radarSite) return s.radarSite;
+  if (s.radarSite && isNexrad({id:s.radarSite})) return s.radarSite;
   const n = s.lat == null ? null : nearestSite(s.lat, s.lon);
   return n ? n.id : '';
 }
@@ -1379,7 +1401,7 @@ function radarSite() {
 // That is what stops the site and the camera resetting on every launch.
 export function radarUrl(zoom, embed = true) {
   const s = settings(), v = radarView ?? load('wd.radar', null);
-  const site = v?.site || radarSite();
+  const site = v?.site && isNexrad({id:v.site}) ? v.site : radarSite();
   const lon = v ? v.lon : s.lon, lat = v ? v.lat : s.lat;
   if (lat == null && !site) return RADAR;
   const extras = v
@@ -1505,7 +1527,7 @@ function stillRadar() {
 function stillUrl() {
   const v = radarView ?? load('wd.radar', null);
   const q = new URLSearchParams({
-    site: v?.site || radarSite(), size: '768', zoom: String(v?.zoom ?? 6.5),
+    site: v?.site && isNexrad({id:v.site}) ? v.site : radarSite(), size: '768', zoom: String(v?.zoom ?? 6.5),
     t: String(Math.floor(Date.now() / 300000)),
   });
   q.set('basemap', v?.basemap || 'dark');
@@ -1728,6 +1750,8 @@ if (location.search.includes('selftest')) {
   const sites = [{ id: 'KTLX', name: 'Oklahoma City, OK', lat: 35.33, lon: -97.28 },
     { id: 'KFWS', name: 'Dallas, TX', lat: 32.57, lon: -97.30 }];
   console.assert(nearestSite(35.4, -97.5, sites).id === 'KTLX', 'nearest site');
+  console.assert(nearestSite(32.9, -97.03, [{id:'TDFW',lat:32.9,lon:-97.03}, ...sites]).id === 'KFWS', 'radar: airport TDWR is excluded');
+  console.assert(isNexrad({id:'TJUA'}) && isNexrad({id:'PABC'}) && !isNexrad({id:'KABC'}), 'radar: Puerto Rico and canonical Alaska IDs');
   console.assert(Math.round(milesBetween(35.33, -97.28, 32.57, -97.30)) === 191, 'distance mi');
   store('wd.radar', { hookecho: 1, site: 'KFWS', moment: 'VEL', tilt: 2, srv: true, basemap: 'dark', lon: -97.3, lat: 32.6, zoom: 7 });
   const u = radarUrl(6.5);

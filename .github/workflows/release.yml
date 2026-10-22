@@ -1,8 +1,6 @@
-name: release
+name: legacy-rust-release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:

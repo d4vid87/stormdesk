@@ -1,9 +1,10 @@
 services:
   stormdesk:
-    image: ghcr.io/d4vid87/stormdesk:latest
-    container_name: stormdesk
+    build: .
+    image: stormdesk:native
+    container_name: stormdesk-native
     restart: unless-stopped
     # Required on Linux: the hub's UDP broadcast never reaches a bridged network.
     network_mode: host
     volumes:
-      - ./data:/data
+      - ./data-native:/data

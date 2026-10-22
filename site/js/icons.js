@@ -116,7 +116,10 @@ function wxDrawn(icon, size = 44) {
 }
 
 /** The oversized hero version: the same glyph on a bigger canvas. */
-export const wxHero = (icon, size = 120) => wx(icon, size);
+export function wxHero(key, size = 120) {
+  const artwork = key === 'clear-night' ? `<svg class="wx hero-constellation" width="${size}" height="${size}" viewBox="0 0 120 120" aria-hidden="true"><defs><radialGradient id="hero-moon-pearl" cx=".3" cy=".25" r=".9"><stop stop-color="#fff8e2"/><stop offset=".45" stop-color="#d2dcf7"/><stop offset="1" stop-color="#8c9fda"/></radialGradient><mask id="hero-moon-cut"><rect width="120" height="120" fill="white"/><circle cx="78" cy="35" r="35" fill="black"/></mask></defs><circle cx="57" cy="60" r="35" fill="#9dafdf" opacity=".06"/><g mask="url(#hero-moon-cut)"><circle cx="57" cy="60" r="35" fill="url(#hero-moon-pearl)" stroke="#f3eddf" stroke-width=".6"/><circle cx="37" cy="55" r="4" fill="#a1b0d1" opacity=".4"/><circle cx="49" cy="77" r="6" fill="#a1b0d1" opacity=".3"/><circle cx="31" cy="68" r="2" fill="#a1b0d1" opacity=".35"/></g><g class="weather-star" fill="#f6dfae"><path d="M89 16l1.5 5.5L96 23l-5.5 1.5L89 30l-1.5-5.5L82 23l5.5-1.5z"/><path d="M104 57l1 3.5 3.5 1-3.5 1L104 66l-1-3.5-3.5-1 3.5-1z"/></g><g fill="#dbe7ff"><circle cx="26" cy="24" r="1.4"/><circle cx="87" cy="91" r="1.2"/><circle cx="15" cy="84" r=".8"/></g></svg>` : wx(key, size);
+  return `<span class="weather-aura" aria-hidden="true"></span>${artwork}<span class="weather-sparkles" aria-hidden="true"><i></i><i></i><i></i></span>`;
+}
 
 // ---------- gauge faces ----------
 //

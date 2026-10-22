@@ -915,13 +915,14 @@
 <link rel="stylesheet" href="themes.css?v=dark-collection-20260926">
 <link rel="stylesheet" href="observatory.css?v=clear-list-20260926">
 <link rel="stylesheet" href="welcome.css?v=cards-20260926">
+<link rel="stylesheet" href="instrument.css?v=daylight-ribbon-20261022">
 </head>
 <body>
 <header>
   <img id="brand" src="stormdesk-icon-512.png?v=20260907" alt="StormDesk">
-  <h1>Stormdesk</h1>
+  <h1>STORMDESK</h1>
   <nav>
-    <button class="tab" data-section="desk">Weather</button>
+    <button class="tab" data-section="desk">Dashboard</button>
     <button class="tab" data-section="lab">Radar</button>
     <button class="tab" data-section="data">History</button>
   </nav>
@@ -1165,7 +1166,7 @@
   <!-- ponytail: Radar is the existing weathermap app in an iframe (radar loop, satellite,
        lightning, SPC, alerts already work there). Inline it into map.js only if the two need shared state. -->
   <section class="page" id="timeline" aria-labelledby="timeline-title">
-    <button type="button" data-view="desk">← Weather</button>
+    <button type="button" data-view="desk">← Dashboard</button>
     <div class="timeline-heading"><p class="desk-eyebrow">PLAN YOUR DAY</p><h2 id="timeline-title">Your weather timeline</h2><p>What’s passed, what’s happening, and what comes next.</p></div>
     <div id="timeline-range" class="muted"></div>
     <div id="timeline-axis" aria-hidden="true"><span class="observed"></span><span class="forecast"></span></div>
@@ -1193,7 +1194,7 @@
     <form method="dialog"><button type="submit">Close</button></form>
   </dialog>
   <section class="page" id="signals">
-    <button type="button" data-view="desk">← Weather</button>
+    <button type="button" data-view="desk">← Dashboard</button>
     <div class="grid" id="signals-grid">
       <div class="signals-intro"><p class="desk-eyebrow">CLOSER TO HOME</p><h2>Local signals</h2><span>Your nearby conditions, outdoor outlook, and personal alerts.</span></div>
       <div class="signal-overview">
@@ -1297,6 +1298,7 @@
       reduced to sea level before it is shown, and doing that with the model's elevation instead
       of yours is why the dashboard and the console disagree by a few hundredths.</p>
     <h2 style="font-size:13px;margin-top:18px">Another brand of station</h2>
+    <button id="instrument-connect" type="button">Connect station</button>
     <p class="muted" style="font-size:12px">Leave as Tempest unless you have one of these. Push
       brands need no keys — point the console at the address shown below.</p>
     <label>Station brand</label>
@@ -1397,10 +1399,14 @@
     <label>Accent colour</label><input id="set-accent" type="color" value="#4fb8ff">
     <label>Text size</label>
     <select id="set-font">
+      <option value="0.7">70%</option>
       <option value="0.85">Small</option>
       <option value="1">Normal</option>
       <option value="1.15">Large</option>
       <option value="1.35">Extra large</option>
+      <option value="1.5">150%</option>
+      <option value="1.75">175%</option>
+      <option value="2">200%</option>
     </select>
     <label>Density</label>
     <select id="set-density"><option value="normal">Normal</option><option value="compact">Compact</option></select>
@@ -1427,7 +1433,7 @@
       <option value="on">Always on</option>
       <option value="off">Off</option>
     </select>
-    <label style="margin-top:14px">Motion</label>
+    <label style="margin-top:14px">Icon animation</label>
     <select id="set-motion">
       <option value="auto">Auto — full on capable hardware</option>
       <option value="full">Full — live sky, animated icons</option>
@@ -1660,6 +1666,7 @@
          still be readable on an install whose JavaScript is having a bad day. Keep in step with
          the "Other weather stations" section of the README. -->
     <h2 style="font-size:13px;margin-top:18px">Help</h2>
+    <button id="instrument-details-open" type="button">Local weather details</button>
     <details><summary>Set up my station</summary>
       <div class="muted" style="font-size:12px">
         <p>Pick your brand in <b>My station → Station connection</b>, then set your location

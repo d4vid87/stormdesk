@@ -17,9 +17,11 @@ with TemporaryDirectory(prefix='stormdesk-preview-') as temp:
     boot=boot.replace('Still image · 5 min · tap for the live map','Recorded HookEcho · Sep 26, 2026 · demo capture').replace('Radar snapshot · refreshes every 5 minutes','Recorded HookEcho · Sep 26, 2026 · demo capture')
     (target/'js/boot.js').write_text(boot)
     fixture=(root/'.github/ci/fixture.js').read_text().split("addEventListener('load'")[0]
+    fixture=fixture.replace("import { initLayout, snapshot, restore, DEFAULT } from './js/layout.js';", '')
     fixture+=r'''
 const shift = 5 * 3600;
-fc.forecast.daily.forEach(d => { d.day_start_local+=shift; d.sunrise+=shift; d.sunset+=shift; });
+const dayShift = now < day + shift ? shift - 86400 : shift;
+fc.forecast.daily.forEach(d => { d.day_start_local+=dayShift; d.sunrise+=dayShift; d.sunset+=dayShift; });
 fc.current_conditions.sea_level_pressure=29.95;
 fc._provenance='DEMO DATA · illustrative station readings';
 const observations=Array.from({length:336},(_,i)=>[now-(335-i)*1800,1,2+Math.sin(i/9),4+Math.abs(Math.sin(i/11))*3,180+Math.sin(i/13)*40,3,1012+Math.sin(i/16)*2,22+Math.sin(i/8)*4,60+Math.sin(i/8)*12,20000,3,350,i%50===0?0.4:0,0,0,0,2.71,1,3]);

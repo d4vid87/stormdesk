@@ -1,0 +1,8 @@
+.git
+.serena
+build*
+src-tauri/target
+**/__pycache__
+native-*.png
+/data/
+/data-native/

@@ -49,6 +49,7 @@ function renderHero(fc) {
   const moonHtml = `${moonGlyph(m.age)} ${m.name} · ${m.illum}%`;
   if ($('hero-moon').innerHTML !== moonHtml) $('hero-moon').innerHTML = moonHtml;
   setText($('hero-moonset'), `${m.nextName} ${m.nextDate.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric' })}`);
+  $('hero').dataset.sky = /night/.test(c.icon || '') ? 'night' : 'day';
   setWx($('hero-icon'), c.icon, 150);
   setScene(c.icon);
   renderNormal(d);
@@ -369,7 +370,7 @@ function setWx(box, key, size) {
   const want = `${key}|${document.documentElement.dataset.motion}`;
   if (!box || box.dataset.wx === want) return;
   box.dataset.wx = want;
-  box.innerHTML = icon.wx(key, size);
+  box.innerHTML = box.id === 'hero-icon' ? icon.wxHero(key, size) : icon.wx(key, size);
 }
 
 // ---------- dial gauges ----------
