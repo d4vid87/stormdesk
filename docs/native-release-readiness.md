@@ -2,6 +2,14 @@
 
 The 5.0 packages remain previews. A successful CI build is not physical-device acceptance.
 
+## Daylight Ribbon preview.4
+
+[Preview.4 is published](https://github.com/d4vid87/stormdesk/releases/tag/v5.0.0-preview.4) with eleven packages and verified SHA-256 digests for all sixteen release files. Daylight Ribbon switches between sunrise/sunset and a scrolling forecast for the next 24 hours, with real provider data, local 12-hour times and Celsius/Fahrenheit conversion. Native desktop and compact Android views keep their existing heights; the hosted browser app uses the same selected design. Empty forecasts and missing temperatures remain unavailable.
+
+Release source: `aee274c826aaedb81624df8287e098d45437fe1c`. Local core/UI tests, all six native package jobs, browser CI, Flatpak and containers passed, including view switching, preserved height, scrolling, unit conversion, missing readings and mobile layout. Both Mac jobs repeated the UI suite five times. [Native packages](https://github.com/d4vid87/stormdesk/actions/runs/39712411868) and [Flatpak](https://github.com/d4vid87/stormdesk/actions/runs/39712411870) are built from that source; [AMD64/ARM64 containers](https://github.com/d4vid87/stormdesk/actions/runs/39712411924) use the same revision. Build conclusions and exact asset hashes are recorded in the release's BUILD_INFO.json and SHA256SUMS.txt.
+
+The local Linux Qt/WebEngine build was installed and started with the existing configuration unchanged; new ribbon interactions on physical native devices remain unchecked. No Android device was connected for this release. The physical checks documented for preview.3 below are prior-version evidence, not acceptance of the new ribbon. Android signing and version code 50004 are verified from the packaged APK before publication. Windows and Mac vendor-signing limitations remain. Preview.3 and legacy 4.5.2 stay available for rollback.
+
 ## Instrument Pocket preview.3
 
 [Preview.3 is published](https://github.com/d4vid87/stormdesk/releases/tag/v5.0.0-preview.3) with 11 packages, SHA-256 checksums, exact build revisions, device checks and vendor-signing reports. All six native jobs, [Flatpak](https://github.com/d4vid87/stormdesk/actions/runs/39691464763) and [AMD64/ARM64 containers](https://github.com/d4vid87/stormdesk/actions/runs/39691464761) passed at the release source. All website package URLs returned HTTP 200. The legacy 4.5.2 latest release and preview.2 remain available. Native Debian previews share package version 5.0.0; replacing one requires `apt install --reinstall` with the downloaded package.
