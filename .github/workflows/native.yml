@@ -40,10 +40,10 @@ jobs:
           arch=$(dpkg --print-architecture)
           mkdir -p release-assets
           cpack --config build/CPackConfig.cmake -B release-assets \
-            -D CPACK_PACKAGE_FILE_NAME="StormDesk_5.0.0-preview.3_$arch" \
+            -D CPACK_PACKAGE_FILE_NAME="StormDesk_5.0.0-preview.4_$arch" \
             -D CPACK_DEBIAN_PACKAGE_ARCHITECTURE="$arch"
           bash scripts/build-appimage.sh "$PWD/build" "$PWD/release-assets"
-          tar -czf "release-assets/StormDesk_5.0.0-preview.3_collector_$arch.tar.gz" -C build-headless stormdesk
+          tar -czf "release-assets/StormDesk_5.0.0-preview.4_collector_$arch.tar.gz" -C build-headless stormdesk
       - uses: actions/upload-artifact@v4
         with:
           name: native-${{ matrix.runner }}
@@ -94,7 +94,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          cpack --config build/CPackConfig.cmake -C Release -B release-assets -D CPACK_PACKAGE_FILE_NAME=StormDesk_5.0.0-preview.3_windows_x64
+          cpack --config build/CPackConfig.cmake -C Release -B release-assets -D CPACK_PACKAGE_FILE_NAME=StormDesk_5.0.0-preview.4_windows_x64
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:QT_COMMAND_LINE_PARSER_NO_GUI_MESSAGE_BOXES = '1'
           if (-not (Test-Path dist/bin/vcruntime140.dll)) { throw 'MSVC runtime was not deployed' }
@@ -110,7 +110,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
-          python3 scripts/native-signing.py macos dist/stormdesk.app --dmg "release-assets/StormDesk_5.0.0-preview.3_macos_$(uname -m).dmg"
+          python3 scripts/native-signing.py macos dist/stormdesk.app --dmg "release-assets/StormDesk_5.0.0-preview.4_macos_$(uname -m).dmg"
           ./dist/stormdesk.app/Contents/MacOS/stormdesk --version
       - uses: actions/upload-artifact@v4
         with:
@@ -170,8 +170,8 @@ jobs:
           apk=$(find build-android/android-build/build/outputs/apk -name '*.apk' -type f | head -1)
           mkdir -p release-assets
           "$ANDROID_HOME/build-tools/36.0.0/zipalign" -f -p 4 "$apk" "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$RUNNER_TEMP/stormdesk-upload.jks" --ks-key-alias upload --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD --out release-assets/StormDesk_5.0.0-preview.3_android_arm64.apk "$RUNNER_TEMP/aligned.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify release-assets/StormDesk_5.0.0-preview.3_android_arm64.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks "$RUNNER_TEMP/stormdesk-upload.jks" --ks-key-alias upload --ks-pass env:KEYSTORE_PASSWORD --key-pass env:KEYSTORE_PASSWORD --out release-assets/StormDesk_5.0.0-preview.4_android_arm64.apk "$RUNNER_TEMP/aligned.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify release-assets/StormDesk_5.0.0-preview.4_android_arm64.apk
           rm "$RUNNER_TEMP/stormdesk-upload.jks"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'

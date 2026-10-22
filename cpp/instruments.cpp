@@ -1,4 +1,13 @@
 #include "instruments.h"
+#include "core.h"
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QScrollBar>
+#include <QScroller>
+#include <QStyleOptionFocusRect>
+#include <QWheelEvent>
+#include <QTimeZone>
 #include <QDateTime>
 #include <QPainter>
 #include <QPainterPath>
@@ -255,17 +264,66 @@ void WeatherGlyph::paintEvent(QPaintEvent *) {
     p.restore();
   }
 }
-SunCycle::SunCycle(QWidget *parent) : QWidget(parent) {
-  setAccessibleName("Sunrise and sunset");
+SunCycle::SunCycle(QWidget *parent) : QAbstractButton(parent) {
+  setAccessibleName("Sun cycle. Show 24-hour forecast");
+  setFocusPolicy(Qt::StrongFocus);
+  setCursor(Qt::PointingHandCursor);
   setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  hourly = new QScrollArea(this);
+  hourly->setObjectName("daylightForecast");
+  hourly->setAccessibleName("Next 24 hours. Swipe or scroll for more hours.");
+  hourly->setFrameShape(QFrame::NoFrame);
+  hourly->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  hourly->setWidgetResizable(true);
+  hourly->viewport()->installEventFilter(this);
+  hourly->setStyleSheet("QScrollArea, QScrollArea > QWidget > QWidget { background:transparent; border:0; }");
+  QScroller::grabGesture(hourly->viewport(), QScroller::TouchGesture);
+  hourly->hide();
+  connect(this, &QAbstractButton::clicked, this, [this] {
+    forecastView = !forecastView;
+    hourly->setVisible(forecastView);
+    setAccessibleName(forecastView ? "24-hour forecast. Show sun cycle"
+                                  : "Sun cycle. Show 24-hour forecast");
+    if (forecastView) renderForecast();
+    cadence();
+    update();
+  });
   elapsed.start();
-  timer.setInterval(50);
-  connect(&timer, &QTimer::timeout, this, qOverload<>(&QWidget::update));
+  connect(&timer, &QTimer::timeout, this, [this] {
+    if (forecastBucket != QDateTime::currentSecsSinceEpoch() / 3600)
+      renderForecast();
+    update();
+  });
   setScale(1);
+}
+void SunCycle::placeForecast() {
+  hourly->setGeometry(compact ? QRect(qRound(44 * scale), 0,
+                                      std::max(0, width() - qRound(44 * scale)), height())
+                             : QRect(qRound(10 * scale), qRound(32 * scale),
+                                     std::max(0, width() - qRound(20 * scale)),
+                                     std::max(0, height() - qRound(40 * scale))));
+}
+void SunCycle::resizeEvent(QResizeEvent *) { placeForecast(); }
+bool SunCycle::eventFilter(QObject *object, QEvent *event) {
+  if (object == hourly->viewport() && event->type() == QEvent::Wheel) {
+    const auto wheel = static_cast<QWheelEvent *>(event);
+    auto bar = hourly->horizontalScrollBar();
+    const int before = bar->value();
+    const int delta = wheel->pixelDelta().isNull()
+                          ? wheel->angleDelta().x() + wheel->angleDelta().y()
+                          : wheel->pixelDelta().x() + wheel->pixelDelta().y();
+    bar->setValue(before - delta);
+    if (bar->value() != before) return true;
+  }
+  return QAbstractButton::eventFilter(object, event);
 }
 void SunCycle::setScale(double value) {
   scale = value;
   setFixedHeight(qRound((compact ? 48 : 156) * scale));
+  hourly->setHorizontalScrollBarPolicy(compact ? Qt::ScrollBarAlwaysOff
+                                              : Qt::ScrollBarAsNeeded);
+  placeForecast();
+  renderForecast();
 }
 QString SunCycle::time(qint64 seconds) const {
   return hasTimes() ? QDateTime::fromSecsSinceEpoch(seconds)
@@ -281,16 +339,113 @@ void SunCycle::setTimes(qint64 sunrise, qint64 sunset, int utcOffset,
   offset = utcOffset;
   motion = animate;
   setAccessibleDescription(
-      hasTimes()
-          ? "Sunrise " + time(rise) + ", sunset " + time(set) +
-                ". Location local time."
-          : "Sunrise and sunset unavailable for this date and location.");
+      (hasTimes() ? "Sunrise " + time(rise) + ", sunset " + time(set) +
+                      ". Location local time."
+                  : "Sunrise and sunset unavailable for this date and location.") +
+      " Click or press Space to switch views. Forecast temperatures use your selected units.");
   cadence();
   update();
 }
+void SunCycle::setForecast(const QJsonObject &value, bool useMetric) {
+  if (forecast == value && metric == useMetric &&
+      forecastBucket == QDateTime::currentSecsSinceEpoch() / 3600)
+    return;
+  forecast = value;
+  metric = useMetric;
+  renderForecast();
+  cadence();
+  update();
+}
+void SunCycle::renderForecast() {
+  forecastBucket = QDateTime::currentSecsSinceEpoch() / 3600;
+  const int scroll = hourly->horizontalScrollBar()->value();
+  auto row = new QWidget;
+  auto layout = new QHBoxLayout(row);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(qRound(4 * scale));
+  const auto source = forecast.value("hourly").toObject();
+  const auto times = source.value("time").toArray();
+  const auto temperatures = source.value("temperature_2m").toArray();
+  const auto codes = source.value("weather_code").toArray();
+  const auto days = forecast.value("daily").toObject();
+  const auto rises = days.value("sunrise").toArray();
+  const auto sets = days.value("sunset").toArray();
+  const qint64 now = QDateTime::currentSecsSinceEpoch();
+  QList<QPair<qint64, int>> future;
+  for (int i = 0; i < times.size(); ++i) {
+    const double at = times[i].toDouble(0);
+    if (std::isfinite(at) && at >= now && at < now + 86400)
+      future.append({qint64(at), i});
+  }
+  std::sort(future.begin(), future.end());
+  qint64 previous = 0;
+  int count = 0;
+  for (const auto &hour : future) {
+    if (hour.first == previous) continue;
+    previous = hour.first;
+    if (++count > 24) break;
+    const QTimeZone zone(forecast.value("timezone").toString().toUtf8());
+    const auto utc = QDateTime::fromSecsSinceEpoch(hour.first);
+    const auto at = zone.isValid() ? utc.toTimeZone(zone) : utc.toOffsetFromUtc(offset);
+    const int i = hour.second;
+    const auto temperature = i < temperatures.size() ? temperatures[i] : QJsonValue();
+    const auto code = i < codes.size() && codes[i].isDouble()
+                          ? std::optional<int>(codes[i].toInt()) : std::nullopt;
+    bool day = false;
+    for (int d = 0; d < std::min(rises.size(), sets.size()); ++d)
+      day |= hour.first >= rises[d].toDouble() && hour.first < sets[d].toDouble();
+    const QString degrees = temperature.isDouble() && std::isfinite(temperature.toDouble())
+        ? QString::number(qRound(temperature.toDouble() * (metric ? 1 : 1.8) + (metric ? 0 : 32))) + "°"
+        : "—";
+    auto card = new QWidget;
+    card->setObjectName("daylightHour");
+    card->setFixedWidth(qRound((compact ? 76 : 88) * scale));
+    auto grid = new QGridLayout(card);
+    grid->setContentsMargins(qRound(4 * scale), 0, qRound(4 * scale), 0);
+    grid->setSpacing(0);
+    auto label = [&](const QString &text, int pixels) {
+      auto item = new QLabel(text);
+      item->setTextFormat(Qt::PlainText);
+      item->setAlignment(Qt::AlignCenter);
+      auto f = font(); f.setPixelSize(qRound(pixels * scale)); item->setFont(f);
+      return item;
+    };
+    auto stamp = label(at.toString("h AP"), compact ? 10 : 11);
+    auto reading = label(degrees, compact ? 17 : 25);
+    reading->setObjectName("daylightTemperature");
+    auto glyph = new WeatherGlyph;
+    glyph->setFixedSize(qRound((compact ? 24 : 34) * scale),
+                        qRound((compact ? 30 : 34) * scale));
+    glyph->setWeather(code, day, false);
+    if (compact) {
+      grid->addWidget(stamp, 0, 0);
+      grid->addWidget(reading, 1, 0);
+      grid->addWidget(glyph, 0, 1, 2, 1);
+    } else {
+      grid->addWidget(stamp, 0, 0, 1, 2);
+      grid->addWidget(glyph, 1, 0, Qt::AlignCenter);
+      grid->addWidget(reading, 1, 1);
+      grid->addWidget(label(code ? condition(*code) : "Unavailable", 10), 2, 0, 1, 2);
+    }
+    card->setAccessibleName(at.toString("ddd h AP") + ", " + degrees +
+        (metric ? " Celsius, " : " Fahrenheit, ") + (code ? condition(*code) : "weather unavailable"));
+    layout->addWidget(card);
+  }
+  if (count == 0) {
+    auto empty = new QLabel("Hourly forecast unavailable");
+    empty->setObjectName("daylightForecastEmpty");
+    empty->setAlignment(Qt::AlignCenter);
+    empty->setWordWrap(true);
+    layout->addWidget(empty);
+  }
+  layout->addStretch();
+  delete hourly->takeWidget();
+  hourly->setWidget(row);
+  hourly->horizontalScrollBar()->setValue(scroll);
+}
 void SunCycle::cadence() {
-  if (hasTimes() && isVisible())
-    timer.start(motion ? 50 : 60000);
+  if (isVisible() && (hasTimes() || !forecast.isEmpty()))
+    timer.start(motion && hasTimes() && !forecastView ? 50 : 60000);
   else
     timer.stop();
 }
@@ -301,171 +456,96 @@ void SunCycle::paintEvent(QPaintEvent *) {
   p.setRenderHint(QPainter::Antialiasing);
   p.scale(scale, scale);
   const double w = width() / scale, h = height() / scale;
-  if (compact) {
-    const QColor ink = palette().color(QPalette::WindowText);
-    const QColor gold("#ffc45d"), dusk("#dc9ab4");
-    const double side = std::min(82.0, w * .28);
-    auto f = font(); f.setPixelSize(10); p.setFont(f);
-    p.setPen(palette().color(QPalette::PlaceholderText));
-    p.drawText(QRectF(0, 1, side, 15), Qt::AlignLeft, "SUNRISE");
-    p.drawText(QRectF(w - side, 1, side, 15), Qt::AlignRight, "SUNSET");
-    f.setPixelSize(14); p.setFont(f); p.setPen(ink);
-    p.drawText(QRectF(0, 20, side, 22), Qt::AlignLeft, time(rise));
-    p.drawText(QRectF(w - side, 20, side, 22), Qt::AlignRight, time(set));
-    const double left = side + 5, right = w - side - 5;
-    QPainterPath path;
-    path.moveTo(left, 34); path.quadTo(w / 2, 0, right, 34);
-    QLinearGradient colors(left, 0, right, 0);
-    colors.setColorAt(0, gold); colors.setColorAt(1, dusk);
-    p.setPen(QPen(QBrush(colors), 1.5)); p.drawPath(path);
-    if (hasTimes()) {
-      const double fraction = std::clamp(
-          double(QDateTime::currentSecsSinceEpoch() - rise) / double(set - rise), 0.0, 1.0);
-      const QPointF point(left + (right - left) * fraction,
-                          34 - 68 * fraction * (1 - fraction));
-      QRadialGradient glow(point, 12);
-      QColor soft = gold;
-      soft.setAlpha(motion ? qRound(65 + 15 * std::sin(elapsed.elapsed() / 500.0)) : 65);
-      glow.setColorAt(0, soft); glow.setColorAt(1, Qt::transparent);
-      p.setPen(Qt::NoPen); p.setBrush(glow); p.drawEllipse(point, 12, 12);
-      p.setBrush(ink); p.drawEllipse(point, 3, 3);
-    }
-    return;
-  }
-  const bool wide = w >= 440;
-  const double side = wide ? 104 : w / 2;
   const QColor ink = palette().color(QPalette::WindowText);
-  const QColor gold("#ffbc67"), dusk("#dc86a4");
-  QColor faint = ink;
-  faint.setAlpha(70);
-  const double t = motion && timer.isActive() ? elapsed.elapsed() / 1000.0 : 0;
-  QLinearGradient wash(0, 0, w, h);
-  QColor warm = gold, rose = dusk;
-  warm.setAlpha(20);
-  rose.setAlpha(16);
-  wash.setColorAt(0, warm);
-  wash.setColorAt(1, rose);
-  p.setBrush(wash);
-  p.setPen(QPen(faint, .7));
-  p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 10, 10);
-  for (int i = 0; i < 6; ++i) {
-    QColor star = ink;
-    star.setAlpha(qRound(25 + 18 * (1 + std::sin(t + i))));
-    p.setBrush(star);
-    p.setPen(Qt::NoPen);
-    p.drawEllipse(QPointF(w * (.16 + i * .13), 18 + (i % 3) * 12), 1, 1);
-  }
-  auto endpoint = [&](bool rising, double x) {
-    const QColor color = rising ? gold : dusk;
-    const double cx = x + side / 2, horizon = 62;
-    const double cy = horizon - 8 + std::sin(t * 1.2) * (rising ? -2 : 2);
-    QRadialGradient glow(QPointF(cx, cy), 34);
-    QColor light = color;
-    light.setAlpha(50);
-    glow.setColorAt(0, light);
-    glow.setColorAt(1, Qt::transparent);
-    p.setBrush(glow);
-    p.setPen(Qt::NoPen);
-    p.drawEllipse(QPointF(cx, cy), 34, 34);
-    p.save();
-    p.setClipRect(QRectF(x, 8, side, horizon - 8));
-    QLinearGradient orb(0, cy - 15, 0, cy + 15);
-    orb.setColorAt(0, QColor("#fff2cb"));
-    orb.setColorAt(1, color);
-    p.setBrush(hasTimes() ? QBrush(orb) : QBrush(faint));
-    p.drawEllipse(QPointF(cx, cy), 15, 15);
-    p.setPen(QPen(color, 1.8, Qt::SolidLine, Qt::RoundCap));
-    for (int i = 0; i < 8; ++i)
-      p.drawLine(QPointF(cx, cy) + polar(i * 45, 21),
-                 QPointF(cx, cy) + polar(i * 45, 27));
-    p.restore();
-    p.setPen(QPen(color, 1, Qt::SolidLine, Qt::RoundCap));
-    for (int i = 0; i < 3; ++i)
-      p.drawLine(QPointF(cx - 28 + i * 7, horizon + i * 5),
-                 QPointF(cx + 28 - i * 7, horizon + i * 5));
-    auto f = font();
-    f.setPixelSize(10);
-    p.setFont(f);
-    p.setPen(faint);
-    p.drawText(QRectF(x, 79, side, 15), Qt::AlignCenter,
-               rising ? "SUNRISE" : "SUNSET");
-    f.setPixelSize(wide ? 24 : 22);
-    p.setFont(f);
-    p.setPen(ink);
-    p.drawText(QRectF(x, 98, side, 30), Qt::AlignCenter,
-               time(rising ? rise : set));
-  };
-  endpoint(true, 0);
-  endpoint(false, w - side);
-  const auto now = QDateTime::currentSecsSinceEpoch();
-  QString caption = "Sun times unavailable", next = "Your daylight";
-  if (hasTimes()) {
-    const auto duration = qRound64(double(set - rise) / 60);
-    caption = QString("%1h %2m daylight · %3")
-                  .arg(duration / 60)
-                  .arg(duration % 60)
-                  .arg(now < rise  ? "Before sunrise"
-                       : now > set ? "After sunset"
-                                   : "Daylight");
-    const qint64 nextAt = now < rise ? rise : now < set ? set : nextRise;
-    if (nextAt > now) {
-      const qint64 remaining = (nextAt - now + 59) / 60;
-      next = QString("%1 in %2h %3m")
-                 .arg(now < rise || now > set ? "Sunrise" : "Sunset")
-                 .arg(remaining / 60)
-                 .arg(remaining % 60);
-    } else if (now > set)
-      next = "After sunset";
-  }
-  auto f = font();
-  if (wide) {
-    const double left = side + 12, span = w - 2 * side - 24, base = 111;
-    QPainterPath arc;
-    arc.moveTo(left, base);
-    arc.quadTo(left + span / 2, -9, left + span, base);
-    QLinearGradient colors(left, 0, left + span, 0);
-    colors.setColorAt(0, gold);
-    colors.setColorAt(.5, QColor("#f6df9c"));
-    colors.setColorAt(1, dusk);
-    auto fill = arc;
-    fill.lineTo(left + span, 130);
-    fill.lineTo(left, 130);
-    fill.closeSubpath();
-    QLinearGradient fade(0, 45, 0, 132);
-    fade.setColorAt(0, QColor(248, 189, 98, 40));
-    fade.setColorAt(1, Qt::transparent);
-    p.fillPath(fill, fade);
-    p.setPen(QPen(faint, 1, Qt::DotLine));
-    p.drawLine(QPointF(left, base), QPointF(left + span, base));
-    p.setPen(QPen(QBrush(colors), 1.8));
-    p.drawPath(arc);
-    if (hasTimes()) {
-      const double fraction =
-          std::clamp(double(now - rise) / double(set - rise), 0.0, 1.0);
-      const QPointF point(left + span * fraction,
-                          base - 240 * fraction * (1 - fraction));
-      const QColor marker = now > set ? QColor("#d7dffa") : gold;
-      QRadialGradient glow(point, 20);
-      QColor soft = marker;
-      soft.setAlpha(qRound(65 + 12 * std::sin(t * 2)));
-      glow.setColorAt(0, soft);
-      glow.setColorAt(1, Qt::transparent);
-      p.setPen(Qt::NoPen);
-      p.setBrush(glow);
-      p.drawEllipse(point, 20, 20);
-      p.setPen(QPen(QColor("#f1ecff"), 1.5));
-      p.setBrush(marker);
-      p.drawEllipse(point, 5, 5);
+  const QColor gold("#ffc45d"), blue("#a9c3ef"), dusk("#dc9ab4");
+  const double t = motion ? elapsed.elapsed() / 1000.0 : 0;
+  QColor faint = ink; faint.setAlpha(125);
+  QRadialGradient wash(QPointF(w / 2, h), w * .6);
+  wash.setColorAt(0, QColor(255, 196, 93, 22));
+  wash.setColorAt(1, Qt::transparent);
+  p.setBrush(wash); p.setPen(QPen(QColor(105, 106, 112, 110), .7));
+  p.drawRoundedRect(QRectF(1, 1, w - 2, h - 2), 9, 9);
+  auto f = font(); f.setPixelSize(12); p.setFont(f); p.setPen(ink);
+  const bool saved = forecast.contains("_at") &&
+      QDateTime::currentSecsSinceEpoch() - forecast.value("_at").toDouble() > 3600;
+  if (compact)
+    p.drawText(QRectF(0, 0, 44, h), Qt::AlignCenter, forecastView ? "☀" : "⇄");
+  else
+    p.drawText(QRectF(14, 2, w - 28, 26), Qt::AlignVCenter | Qt::AlignLeft,
+               forecastView ? QString("24-hour forecast · %1%2  ⇄  Sun cycle")
+                                  .arg(metric ? "°C" : "°F", saved ? " · saved" : "")
+                            : "Sun cycle  ⇄  24-hour forecast");
+  if (!forecastView) {
+    const auto now = QDateTime::currentSecsSinceEpoch();
+    const double top = compact ? 0 : 33;
+    const double left = compact ? 44 : 16, right = w - 16;
+    const double side = compact ? 70 : 105;
+    auto endpoint = [&](bool rising) {
+      const double x = rising ? left : right - side;
+      const int align = rising ? Qt::AlignLeft : Qt::AlignRight;
+      f.setPixelSize(compact ? 9 : 10); p.setFont(f); p.setPen(faint);
+      p.drawText(QRectF(x, top + (compact ? 2 : 7), side, 16), align, rising ? "SUNRISE" : "SUNSET");
+      f.setPixelSize(compact ? 14 : 30); p.setFont(f); p.setPen(ink);
+      p.drawText(QRectF(x, top + (compact ? 22 : 27), side, compact ? 22 : 36), align,
+                 time(rising ? rise : set));
+      if (!compact) {
+        const double cx = rising ? x + side + 23 : x - 23;
+        const double cy = top + 30 + (motion ? std::sin(t * 1.2) * 1.5 : 0);
+        const QColor color = rising ? gold : dusk;
+        QRadialGradient glow(QPointF(cx, cy), 27);
+        QColor soft = color; soft.setAlpha(qRound(55 + (motion ? 8 * std::sin(t) : 0)));
+        glow.setColorAt(0, soft); glow.setColorAt(1, Qt::transparent);
+        p.setPen(Qt::NoPen); p.setBrush(glow); p.drawEllipse(QPointF(cx, cy), 27, 27);
+        p.save(); p.setClipRect(QRectF(cx - 26, cy - 26, 52, 26));
+        p.setBrush(color); p.drawEllipse(QPointF(cx, cy), 11, 11);
+        p.setPen(QPen(color, 1.3));
+        for (int ray = 0; ray < 8; ++ray)
+          p.drawLine(QPointF(cx, cy) + polar(ray * 45, 16),
+                     QPointF(cx, cy) + polar(ray * 45, 22));
+        p.restore(); p.setPen(QPen(color, 1));
+        p.drawLine(QPointF(cx - 22, cy + 1), QPointF(cx + 22, cy + 1));
+        p.drawLine(QPointF(cx - 15, cy + 6), QPointF(cx + 15, cy + 6));
+      }
+    };
+    endpoint(true); endpoint(false);
+    const auto date = QDateTime::fromSecsSinceEpoch(now).toOffsetFromUtc(offset);
+    const qint64 midnight = date.toSecsSinceEpoch() - date.time().msecsSinceStartOfDay() / 1000;
+    const double currentHour = (now - midnight) / 3600.0;
+    const double trackLeft = compact ? left + side + 3 : left;
+    const double trackRight = compact ? right - side - 3 : right;
+    const double gap = compact ? 1.5 : 3, span = (trackRight - trackLeft) / 24;
+    const double y = compact ? 23 : top + 83;
+    for (int i = 0; i < 24; ++i) {
+      const qint64 center = midnight + i * 3600 + 1800;
+      const bool daylight = hasTimes() && center >= rise && center < set;
+      const bool current = hasTimes() && int(currentHour) == i;
+      QColor color = daylight ? gold : blue;
+      color.setAlpha(hasTimes() ? current ? 255 : daylight
+          ? qRound(90 + 165 * std::sin((i + .5) / 24 * 3.141592653589793)) : 80 : 30);
+      const double barHeight = current ? (compact ? 23 : 27) + (motion ? std::sin(t) : 0) : (compact ? 9 : 12);
+      p.setPen(Qt::NoPen); p.setBrush(color);
+      p.drawRoundedRect(QRectF(trackLeft + span * i, y - barHeight / 2,
+                               std::max(.5, span - gap), barHeight), 1.5, 1.5);
     }
-    f.setPixelSize(15);
-    p.setFont(f);
-    p.setPen(ink);
-    p.drawText(QRectF(left, 14, span, 24), Qt::AlignLeft, next);
+    if (!compact) {
+      QString caption = "Sun times unavailable";
+      if (hasTimes()) {
+        const auto nextAt = now < rise ? rise : now < set ? set : nextRise;
+        const auto remaining = std::max(qint64(0), (nextAt - now + 59) / 60);
+        const auto minutes = (set - rise + 30) / 60;
+        caption = nextAt > now
+            ? QString("%1 in %2h %3m · %4h %5m daylight")
+                  .arg(now < rise || now > set ? "Sunrise" : "Sunset")
+                  .arg(remaining / 60).arg(remaining % 60).arg(minutes / 60).arg(minutes % 60)
+            : QString("After sunset · %1h %2m daylight").arg(minutes / 60).arg(minutes % 60);
+      }
+      f.setPixelSize(11); p.setFont(f); p.setPen(faint);
+      p.drawText(QRectF(left, h - 24, right - left, 19), Qt::AlignCenter, caption);
+    }
   }
-  f.setPixelSize(10);
-  p.setFont(f);
-  p.setPen(ink);
-  p.drawText(QRectF(8, 133, w - 16, 17), Qt::AlignCenter,
-             wide ? caption : next);
+  if (hasFocus()) {
+    p.setPen(QPen(ink, 1, Qt::DotLine)); p.setBrush(Qt::NoBrush);
+    p.drawRoundedRect(QRectF(3, 3, w - 6, h - 6), 7, 7);
+  }
 }
 } // namespace storm

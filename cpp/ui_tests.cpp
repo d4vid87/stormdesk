@@ -211,6 +211,60 @@ private slots:
     QVERIFY(window.findChild<QLabel *>("mobileStationSummary")->isVisible());
     prefs.setValue("gaugeOrder", before);
   }
+  void daylightRibbonForecast() {
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    QJsonArray times, temperatures, codes;
+    for (int i = -1; i < 26; ++i) {
+      times.append(double(now + 1800 + i * 3600));
+      temperatures.append(i == 1 ? QJsonValue() : QJsonValue(0));
+      codes.append(0);
+    }
+    times.append(times[2]); temperatures.append(99); codes.append(95);
+    SunCycle ribbon;
+    ribbon.resize(600, 156);
+    ribbon.setTimes(now - 3600, now + 3600, -18000, true, now + 86400);
+    const QJsonObject forecast{{"hourly", QJsonObject{
+        {"time", times}, {"temperature_2m", temperatures}, {"weather_code", codes}}}};
+    ribbon.setForecast(forecast, false);
+    ribbon.show();
+    auto hourly = ribbon.findChild<QScrollArea *>("daylightForecast");
+    QVERIFY(hourly && !hourly->isVisible());
+    const int height = ribbon.height();
+    QTest::mouseClick(&ribbon, Qt::LeftButton, {}, QPoint(30, 12));
+    QVERIFY(hourly->isVisible());
+    QVERIFY(!ribbon.animated());
+    QCOMPARE(ribbon.height(), height);
+    QCOMPARE(ribbon.findChildren<QWidget *>("daylightHour").size(), 24);
+    auto values = ribbon.findChildren<QLabel *>("daylightTemperature");
+    QCOMPARE(values[0]->text(), QString("32°"));
+    QCOMPARE(values[1]->text(), QString("—"));
+    QTest::qWait(10);
+    QVERIFY(hourly->horizontalScrollBar()->maximum() > 0);
+    hourly->horizontalScrollBar()->setValue(100);
+    QVERIFY(hourly->horizontalScrollBar()->value() > 0);
+    QVERIFY(hourly->isVisible());
+    ribbon.setForecast(forecast, true);
+    QVERIFY(hourly->isVisible());
+    QCOMPARE(ribbon.findChildren<QLabel *>("daylightTemperature")[0]->text(), QString("0°"));
+    QTest::keyClick(&ribbon, Qt::Key_Space);
+    QVERIFY(!hourly->isVisible());
+    QVERIFY(ribbon.animated());
+    for (const double scale : {.7, 1.0, 2.0}) {
+      ribbon.setCompact(true);
+      ribbon.setScale(scale);
+      ribbon.resize(qRound(320 * scale), ribbon.height());
+      QCOMPARE(ribbon.height(), qRound(48 * scale));
+      ribbon.click();
+      QVERIFY(hourly->isVisible());
+      QVERIFY(ribbon.rect().contains(hourly->geometry()));
+      QVERIFY(hourly->horizontalScrollBar()->maximum() > 0);
+      ribbon.click();
+    }
+    ribbon.setForecast({}, true);
+    ribbon.click();
+    QVERIFY(ribbon.findChild<QLabel *>("daylightForecastEmpty")->isVisible());
+    QCOMPARE(ribbon.findChildren<QWidget *>("daylightHour").size(), 0);
+  }
   void instrumentAndRealSetup() {
     QTemporaryDir dir;
     Config cfg(dir.filePath("config.json"));

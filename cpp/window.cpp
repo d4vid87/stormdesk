@@ -2011,6 +2011,7 @@ void Window::render() {
         (!nextRise || value.toDouble() < nextRise))
       nextRise = qint64(value.toDouble());
   sunCycle->setTimes(rise, set, offset, motion, nextRise);
+  sunCycle->setForecast(f, metric);
   auto stationDetail = contextCard->findChild<QLabel *>("stationDetail");
   stationDetail->setText(
       services.stationStatus +

@@ -1,6 +1,8 @@
 #pragma once
 #include <QAbstractButton>
 #include <QElapsedTimer>
+#include <QJsonObject>
+#include <QScrollArea>
 #include <QTimer>
 #include <optional>
 
@@ -43,7 +45,7 @@ private:
   bool day = true, motion = true;
   void cadence();
 };
-class SunCycle : public QWidget {
+class SunCycle : public QAbstractButton {
   Q_OBJECT
 public:
   explicit SunCycle(QWidget *parent = nullptr);
@@ -51,8 +53,9 @@ public:
                 qint64 nextSunrise = 0);
   void setScale(double scale);
   void setCompact(bool enabled) { compact = enabled; setScale(scale); }
+  void setForecast(const QJsonObject &forecast, bool metric);
   bool hasTimes() const { return rise > 0 && set > rise; }
-  bool animated() const { return motion && timer.isActive(); }
+  bool animated() const { return hasTimes() && motion && !forecastView && timer.isActive(); }
 
 protected:
   void paintEvent(QPaintEvent *) override;
@@ -60,6 +63,14 @@ protected:
   void hideEvent(QHideEvent *) override;
 
 private:
+  void resizeEvent(QResizeEvent *) override;
+  bool eventFilter(QObject *, QEvent *) override;
+  QScrollArea *hourly;
+  QJsonObject forecast;
+  bool metric = false, forecastView = false;
+  qint64 forecastBucket = -1;
+  void renderForecast();
+  void placeForecast();
   qint64 rise = 0, set = 0, nextRise = 0;
   int offset = 0;
   bool motion = true;

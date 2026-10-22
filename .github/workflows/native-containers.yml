@@ -33,13 +33,13 @@ jobs:
         with:
           context: .
           load: true
-          tags: ghcr.io/${{ github.repository }}:5.0.0-preview.3-${{ matrix.arch }}
+          tags: ghcr.io/${{ github.repository }}:5.0.0-preview.4-${{ matrix.arch }}
           cache-from: type=gha,scope=native-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=native-${{ matrix.arch }}
       - name: Check and publish the native collector
         run: |
-          docker run --rm --entrypoint /usr/local/bin/stormdesk ghcr.io/${{ github.repository }}:5.0.0-preview.3-${{ matrix.arch }} --version
-          docker push ghcr.io/${{ github.repository }}:5.0.0-preview.3-${{ matrix.arch }}
+          docker run --rm --entrypoint /usr/local/bin/stormdesk ghcr.io/${{ github.repository }}:5.0.0-preview.4-${{ matrix.arch }} --version
+          docker push ghcr.io/${{ github.repository }}:5.0.0-preview.4-${{ matrix.arch }}
   manifest:
     needs: build
     permissions:
@@ -53,6 +53,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish the multi-architecture preview tag
         run: |
-          docker buildx imagetools create -t ghcr.io/${{ github.repository }}:5.0.0-preview.3 \
-            ghcr.io/${{ github.repository }}:5.0.0-preview.3-amd64 \
-            ghcr.io/${{ github.repository }}:5.0.0-preview.3-arm64
+          docker buildx imagetools create -t ghcr.io/${{ github.repository }}:5.0.0-preview.4 \
+            ghcr.io/${{ github.repository }}:5.0.0-preview.4-amd64 \
+            ghcr.io/${{ github.repository }}:5.0.0-preview.4-arm64

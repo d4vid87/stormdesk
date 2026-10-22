@@ -1,5 +1,6 @@
 // Reuse the live cards and their listeners; only their placement changes.
 import { initStatusCards } from './status-cards.js';
+import { wx } from './icons.js';
 import { settings, saveSettings, load, store, every, num, U, deg2compass, msToWind } from './app.js';
 const $ = id => document.getElementById(id);
 export function initObservatory() {
@@ -27,12 +28,58 @@ export function initObservatory() {
   context.id = 'instrument-context';
   const sun = document.createElement('section');
   sun.id = 'instrument-sun';
-  sun.setAttribute('aria-label', 'Sunrise and sunset at the selected location');
-  sun.innerHTML = `<div class="horizon-atmosphere" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="instrument-sun-end sunrise"><svg class="instrument-sun-icon" viewBox="0 0 64 48" aria-hidden="true"><defs><radialGradient id="rise-orb"><stop stop-color="#fff5cc"/><stop offset="1" stop-color="#ffad4d"/></radialGradient></defs><g class="horizon-rays" stroke="#ffca77" stroke-width="2" stroke-linecap="round"><path d="M32 4V10M12 12L17 17M5 30H12M52 12L47 17M52 30H59"/></g><path d="M17 33a15 15 0 0 1 30 0" fill="url(#rise-orb)"/><path d="M6 34H58M18 40H46M25 45H39" stroke="#e8c28e" stroke-linecap="round"/></svg><div><small>Sunrise</small><strong id="instrument-sunrise">—</strong></div></div>
-    <div class="instrument-daylight"><div class="horizon-heading"><span id="instrument-next-sun">Your daylight</span><small id="instrument-sun-zone">Location time</small></div>
-    <div class="horizon-chart"><svg viewBox="0 0 400 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="horizon-line"><stop stop-color="#ffbc67"/><stop offset=".5" stop-color="#f6df9c"/><stop offset="1" stop-color="#dc86a4"/></linearGradient><linearGradient id="horizon-wash" x2="0" y2="1"><stop stop-color="#f8bd62" stop-opacity=".19"/><stop offset="1" stop-color="#f8bd62" stop-opacity="0"/></linearGradient></defs><path class="horizon-fill" d="M8 84Q200-48 392 84V100H8Z"/><path class="horizon-baseline" d="M8 84H392"/><path class="horizon-track" d="M8 84Q200-48 392 84"/><path class="horizon-sheen" d="M8 84Q200-48 392 84"/></svg><span id="instrument-day-marker" hidden aria-hidden="true"></span></div><span id="instrument-daylight">Sun times unavailable</span></div>
-    <div class="instrument-sun-end sunset"><svg class="instrument-sun-icon" viewBox="0 0 64 48" aria-hidden="true"><defs><radialGradient id="set-orb"><stop stop-color="#ffe9c7"/><stop offset="1" stop-color="#e68992"/></radialGradient></defs><g class="horizon-rays" stroke="#e9a4a5" stroke-width="2" stroke-linecap="round"><path d="M32 4V10M12 12L17 17M5 30H12M52 12L47 17M52 30H59"/></g><path d="M17 33a15 15 0 0 1 30 0" fill="url(#set-orb)"/><path d="M6 34H58M18 40H46M25 45H39" stroke="#d99b9f" stroke-linecap="round"/></svg><div><small>Sunset</small><strong id="instrument-sunset">—</strong></div></div>`;
+  sun.setAttribute('aria-label', 'Daylight Ribbon: sunrise, sunset, and the next 24 hours');
+  const sunIcon = (setting) => `<svg class="instrument-sun-icon" viewBox="0 0 64 48" aria-hidden="true"><g class="horizon-rays" stroke="${setting ? '#e9a4a5' : '#ffca77'}" stroke-width="2" stroke-linecap="round"><path d="M32 4V10M12 12L17 17M5 30H12M52 12L47 17M52 30H59"/></g><path d="M17 33a15 15 0 0 1 30 0" fill="${setting ? '#e68992' : '#ffca77'}"/><path d="M6 34H58M18 40H46M25 45H39" stroke="${setting ? '#d99b9f' : '#e8c28e'}" stroke-linecap="round"/></svg>`;
+  sun.innerHTML = `<button id="instrument-sun-toggle" type="button" aria-pressed="false" aria-label="Sun cycle shown. Switch to 24-hour forecast" aria-controls="instrument-sun-view instrument-hourly"><span>Sun cycle <span aria-hidden="true">⇄</span> 24-hour forecast</span><small>Click to switch</small></button>
+    <div id="instrument-sun-view">
+      <div class="ribbon-endpoints"><div class="instrument-sun-end sunrise">${sunIcon(false)}<div><small>Sunrise</small><strong id="instrument-sunrise">—</strong></div></div>
+      <div class="instrument-sun-end sunset">${sunIcon(true)}<div><small>Sunset</small><strong id="instrument-sunset">—</strong></div></div></div>
+      <div id="instrument-day-ribbon" role="img" aria-label="Daylight hours unavailable">${'<span></span>'.repeat(24)}</div>
+      <div class="ribbon-caption"><span id="instrument-next-sun">Your daylight</span><span id="instrument-daylight">Sun times unavailable</span><small id="instrument-sun-zone">Location time</small></div>
+    </div>
+    <div id="instrument-hourly" hidden><div class="ribbon-forecast-heading"><span id="instrument-hourly-source">Next 24 hours</span><div><button id="instrument-hourly-prev" type="button" aria-label="Earlier forecast hours">‹</button><button id="instrument-hourly-next" type="button" aria-label="Later forecast hours">›</button></div></div><div id="instrument-hourly-rail" role="region" aria-label="Next 24 hours of weather. Swipe or use the arrow buttons."></div></div>`;
+  let forecastView = false, pointerStart, swiping = false;
+  const rail = sun.querySelector('#instrument-hourly-rail');
+  const scrollControls = () => {
+    $('instrument-hourly-prev').disabled = rail.scrollLeft <= 1;
+    $('instrument-hourly-next').disabled = rail.scrollLeft >= rail.scrollWidth - rail.clientWidth - 2;
+  };
+  const switchView = () => {
+    forecastView = !forecastView;
+    $('instrument-sun-view').hidden = forecastView;
+    $('instrument-hourly').hidden = !forecastView;
+    sun.dataset.view = forecastView ? 'forecast' : 'sun';
+    $('instrument-sun-toggle').setAttribute('aria-pressed', String(forecastView));
+    $('instrument-sun-toggle').setAttribute('aria-label', forecastView
+      ? '24-hour forecast shown. Switch to sunrise and sunset'
+      : 'Sun cycle shown. Switch to 24-hour forecast');
+    $('instrument-sun-toggle').querySelector('span').textContent = forecastView
+      ? '24-hour forecast  ⇄  Sun cycle' : 'Sun cycle  ⇄  24-hour forecast';
+    requestAnimationFrame(scrollControls);
+  };
+  sun.querySelector('#instrument-sun-toggle').addEventListener('click', switchView);
+  sun.addEventListener('pointerdown', e => { pointerStart = [e.clientX, e.clientY]; swiping = false; });
+  sun.addEventListener('pointermove', e => {
+    if (pointerStart && Math.hypot(e.clientX-pointerStart[0], e.clientY-pointerStart[1]) > 8) swiping = true;
+  });
+  sun.addEventListener('pointercancel', () => { swiping = true; pointerStart = null; });
+  sun.addEventListener('click', e => {
+    if (!swiping && !e.target.closest('button') && e.target !== rail) switchView();
+    pointerStart = null;
+  });
+  rail.addEventListener('scroll', scrollControls);
+  new ResizeObserver(scrollControls).observe(rail);
+  for (const [id, direction] of [['instrument-hourly-prev', -1], ['instrument-hourly-next', 1]])
+    sun.querySelector('#'+id).addEventListener('click', () => rail.scrollBy({
+      left:direction * Math.max(160, rail.clientWidth * .7),
+      behavior:matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+    }));
+  rail.addEventListener('wheel', e => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && (
+      e.deltaY > 0 && rail.scrollLeft < rail.scrollWidth-rail.clientWidth-1 || e.deltaY < 0 && rail.scrollLeft > 0)) {
+      e.preventDefault(); rail.scrollLeft += e.deltaY;
+    }
+  }, {passive:false});
   context.append($('hero'), sun);
   shelf.append(context);
   const radar = document.createElement('section');
@@ -84,9 +131,13 @@ export function initObservatory() {
   };
   window.addEventListener('wd:settings', controls);
   controls();
-  let today, tomorrow;
+  let today, tomorrow, latestForecast;
   const renderSun = () => {
-    const rise = Number(today?.sunrise), set = Number(today?.sunset), now = Date.now()/1000;
+    const days = latestForecast?.forecast?.daily || [], current = Date.now()/1000;
+    const dayIndex = days.findIndex(d => current >= d.day_start_local && current < d.day_start_local+86400);
+    today = dayIndex < 0 ? null : {...days[dayIndex], timezone:latestForecast.timezone};
+    tomorrow = days[dayIndex+1];
+    const rise = Number(today?.sunrise), set = Number(today?.sunset), now = current;
     const valid = Number.isFinite(rise) && Number.isFinite(set) && set > rise
       && now >= Number(today.day_start_local) && now < Number(today.day_start_local) + 86400;
     $('instrument-sun').dataset.available = String(valid);
@@ -101,24 +152,56 @@ export function initObservatory() {
     $('instrument-sun-zone').textContent = valid ? (today.timezone || 'Device local time') : 'Location time';
     const daylightMinutes = Math.round((set-rise)/60);
     $('instrument-daylight').textContent = valid ? `${Math.floor(daylightMinutes/60)}h ${daylightMinutes%60}m daylight · ${now < rise ? 'Before sunrise' : now > set ? 'After sunset' : 'Daylight'}` : 'Sun times unavailable';
-    const marker = $('instrument-day-marker');
-    marker.toggleAttribute('hidden', !valid);
-    if (valid) {
-      const fraction = Math.max(0,Math.min(1,(now-rise)/(set-rise)));
-      marker.style.left = `${2+96*fraction}%`;
-      marker.style.top = `${84-264*fraction*(1-fraction)}%`;
+    const ribbon = $('instrument-day-ribbon');
+    ribbon.setAttribute('aria-label', valid ? `Daylight from ${$('instrument-sunrise').textContent} to ${$('instrument-sunset').textContent}. Current hour marked.` : 'Daylight hours unavailable');
+    const localHour = valid ? Number(new Intl.DateTimeFormat('en-GB', {
+      hour:'numeric',hourCycle:'h23',...(today.timezone ? {timeZone:today.timezone} : {}),
+    }).format(new Date())) : -1;
+    [...ribbon.children].forEach((bar, hour) => {
+      const at = Number(today?.day_start_local) + hour*3600 + 1800;
+      bar.classList.toggle('daylight', valid && at >= rise && at < set);
+      bar.classList.toggle('current', valid && hour === localHour);
+      bar.style.setProperty('--ribbon-strength', String(.35 + .65 * Math.sin((hour+.5)/24*Math.PI)));
+    });
+  };
+  const renderHours = () => {
+    const now = Date.now()/1000, seen = new Set();
+    const hours = (latestForecast?.forecast?.hourly || [])
+      .filter(h => typeof h.time === 'number' && Number.isFinite(h.time) && h.time >= now && h.time < now + 86400)
+      .sort((a,b) => a.time-b.time).filter(h => !seen.has(h.time) && seen.add(h.time)).slice(0,24);
+    const scroll = rail.scrollLeft, content = document.createDocumentFragment();
+    for (const h of hours) {
+      const at = new Date(h.time*1000), opts = latestForecast.timezone ? {timeZone:latestForecast.timezone} : {};
+      const stamp = at.toLocaleTimeString([], {hour:'numeric',hour12:true,...opts});
+      const day = latestForecast.forecast.daily?.find(d => h.time >= d.day_start_local && h.time < d.day_start_local+86400);
+      const daylight = day && h.time >= day.sunrise && h.time < day.sunset;
+      const key = typeof h.icon === 'string' ? h.icon : '';
+      const glyph = day && !daylight ? key.replace('-day','-night') : key;
+      const card = document.createElement('div'); card.className = 'ribbon-hour';
+      card.classList.toggle('daylight', !!daylight);
+      const time = document.createElement('time'); time.dateTime = at.toISOString(); time.textContent = stamp;
+      const icon = document.createElement('span'); icon.innerHTML = wx(glyph,32);
+      const temp = document.createElement('strong');
+      temp.textContent = typeof h.air_temperature === 'number' && Number.isFinite(h.air_temperature) ? `${Math.round(h.air_temperature)}°` : '—';
+      const conditions = document.createElement('small'); conditions.textContent = h.conditions || 'Weather unavailable';
+      card.setAttribute('aria-label', `${stamp}, ${temp.textContent} ${U.temp()}, ${conditions.textContent}`);
+      card.append(time,icon,temp,conditions); content.append(card);
     }
+    if (!hours.length) {
+      const empty = document.createElement('p'); empty.textContent = 'Hourly forecast unavailable';
+      content.append(empty);
+    }
+    rail.replaceChildren(content); rail.scrollLeft = scroll;
+    $('instrument-hourly-source').textContent = `Next 24 hours · ${U.temp()}`;
+    scrollControls();
   };
   const render = e => {
     const fc = e.detail, c = fc?.current_conditions;
     if (!c) return;
     if (fc.forecast) {
-      const now = Date.now()/1000;
-      const dayIndex = fc.forecast.daily?.findIndex(d => now >= d.day_start_local && now < d.day_start_local+86400);
-      today = fc.forecast.daily?.[dayIndex];
-      tomorrow = fc.forecast.daily?.[dayIndex+1];
-      if (today) today = {...today, timezone:fc.timezone};
+      latestForecast = fc;
       renderSun();
+      renderHours();
     }
     $('instrument-source').textContent = fc._provenance || (fc.local ? 'Station observation' : 'Forecast estimates · no station connected');
     const rows = [
@@ -130,7 +213,15 @@ export function initObservatory() {
       a.textContent=name;b.textContent=value;row.append(a,b);return row;
     }));
   };
-  every('instrument-sun',60,renderSun);
+  let forecastContext = JSON.stringify([settings().units, settings().lat, settings().lon, settings().activePlace, settings().stationId]);
+  window.addEventListener('wd:settings', () => {
+    const next = JSON.stringify([settings().units, settings().lat, settings().lon, settings().activePlace, settings().stationId]);
+    if (next !== forecastContext) {
+      forecastContext = next; latestForecast = null;
+      renderSun(); renderHours();
+    }
+  });
+  every('instrument-sun',60,() => { renderSun(); renderHours(); });
   window.addEventListener('wd:forecast', render);
   window.addEventListener('wd:current', render);
   window.addEventListener('wd:ws-obs', e => {
