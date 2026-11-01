@@ -6,17 +6,13 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
-## [Unreleased]
+## [4.6.0] - 2026-10-31
 
 ### Changed
 - Radar-first Graphite interface with compact live gauges integrated above the official HookEcho viewer at app.hookecho.io. Current conditions stay above the map; forecasts and local signals remain below it.
 - Orbit Glass is the default icon style, with Liquid Chrome, Neon Trace, Precision Dial and Pixel Pulse available in the radar shelf. Choices persist per screen; missing readings and reduced-motion preferences remain respected.
 - Weather requests share bounded caches, respect retry delays, and retain clearly labeled saved readings through outages. Hidden screens pause unnecessary work.
 - Add forecast model selection, saved places, sensor channels, environmental sources, archive imports, exclusions, notes, recovery and reports. Protect station isolation and reject stale in-flight results when switching stations.
-
-The web app can deploy independently from signed desktop/mobile releases. These changes are not a new installer release until a versioned release is published.
-
-## [Unreleased]
 
 ## [4.5.2] - 2026-10-07
 
