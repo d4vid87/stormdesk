@@ -1,6 +1,8 @@
 // Reuse the live cards and their listeners; only their placement changes.
 import { initStatusCards } from './status-cards.js';
-import { settings, num, U, deg2compass, msToWind } from './app.js';
+import { styles, gaugeStyle } from './gauge-icons.js';
+import { settings, saveSettings, num, U, deg2compass, msToWind } from './app.js';
+import { forecast as deskForecast } from './desk.js';
 const $ = id => document.getElementById(id);
 export function initObservatory() {
   if ($('observatory-grid')) return;
@@ -15,9 +17,10 @@ export function initObservatory() {
   const grid = document.createElement('div');
   grid.id = 'observatory-grid';
   grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar" aria-label="Local HookEcho radar"><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
+  grid.prepend(grid.querySelector('#observatory-radar'));
   stack.prepend(grid);
   const left = $('observatory-left');
-  left.append($('hero'));
+  head.firstElementChild.after($('hero'));
   const forecast = document.createElement('section');
   forecast.id = 'observatory-forecast';
   forecast.innerHTML = '<div class="forecast-heading"><h2>10-day forecast</h2><span id="forecast-unit"></span></div><p class="observatory-note" id="forecast-coverage">Waiting for forecast</p><div class="forecast-columns" aria-hidden="true"><span>DAY</span><span></span><span>HIGH</span><span>LOW</span><span>RAIN</span></div>';
@@ -45,9 +48,31 @@ export function initObservatory() {
   // Retain render targets for shared modules without exposing the retired dashboard section.
   const extra = document.createElement('div');
   extra.hidden = true;
-  extra.append(document.querySelector('[data-panel="g-wet"]'), $('desk-outlook'), $('ticker'), $('ha-panel'));
+  extra.append(document.querySelector('[data-panel="g-wet"]'), $('ticker'), $('ha-panel'));
+  const outlook = document.createElement('details');
+  outlook.className = 'card';
+  outlook.id = 'advanced-outlook';
+  outlook.innerHTML = '<summary>48-hour forecast &amp; model range</summary>';
+  outlook.append($('desk-outlook'));
+  stack.append(outlook);
   stack.append(extra);
-  desk.insertBefore($('gauges'), stack);
+  const shelf = document.createElement('div');
+  shelf.id = 'radar-shelf';
+  shelf.append($('gauges'));
+  const controls = document.createElement('div');
+  controls.className = 'gauge-style-control';
+  controls.innerHTML = '<label for="gauge-style">Gauge style</label><select id="gauge-style"></select>';
+  const select = controls.querySelector('select');
+  styles.forEach(style => select.add(new Option(style.name + (style.id === 'orbit' ? ' · default' : ''), style.id)));
+  select.value = gaugeStyle(settings().gaugeStyle);
+  select.addEventListener('change', () => saveSettings({gaugeStyle: gaugeStyle(select.value)}));
+  window.addEventListener('wd:settings', () => { select.value = gaugeStyle(settings().gaugeStyle); });
+  shelf.append(controls);
+  $('observatory-radar').prepend(shelf);
+  const pauseIcons = () => document.documentElement.toggleAttribute('data-gauges-paused', document.hidden || !desk.classList.contains('active'));
+  document.addEventListener('visibilitychange', pauseIcons);
+  window.addEventListener('wd:section', pauseIcons);
+  pauseIcons();
   const label = document.createElement('span');
   label.className = 'observatory-current-label';
   label.textContent = 'CURRENT CONDITIONS';
@@ -62,6 +87,11 @@ export function initObservatory() {
     if (!card) return;
     dialog.querySelector('h2').textContent = `${card.querySelector('.dc-name').textContent} · ${card.querySelector('.dc-date').textContent}`;
     dialog.querySelector('p').textContent = `${card.querySelector('.dc-cond').textContent}. High: ${card.querySelector('.dc-temp b').textContent}. Low: ${card.querySelector('.dc-temp span').textContent}. Rain chance: ${card.querySelector('.dc-pop').textContent}.${card.dataset.precipAmount ? ` Expected precipitation: ${card.dataset.precipAmount}.` : ''}`;
+    const agreement = document.createElement('p');
+    agreement.className = 'forecast-model-note';
+    agreement.textContent = `${card.dataset.agreement || 'Model agreement unavailable'}. Agreement describes model differences, not accuracy or the chance of rain.`;
+    dialog.querySelector('.forecast-model-note')?.remove();
+    dialog.querySelector('form').before(agreement);
     dialog.showModal();
   });
   const render = e => {
@@ -69,7 +99,7 @@ export function initObservatory() {
     if (!c) return;
     if (fc.forecast) {
       const count = Math.min(10, fc.forecast.daily?.length || 0);
-      $('forecast-coverage').textContent = count === 10 ? 'Select a day for details' : count ? `${count} days available · select for details` : 'Forecast unavailable';
+      $('forecast-coverage').textContent = (fc._cached ? 'Saved forecast · ' : '') + (count === 10 ? 'Select a day for details' : count ? `${count} days available · select for details` : 'Forecast unavailable');
       $('forecast-unit').textContent = U.temp();
     }
     const strikes = c.lightning_strike_count_last_3hr;
@@ -83,10 +113,26 @@ export function initObservatory() {
     }));
     $('hero-place').textContent = settings().stationName || 'Your location';
   };
-  window.addEventListener('wd:forecast', render);
-  window.addEventListener('wd:current', render);
+  let pending = null, frame = 0;
+  window.addEventListener('wd:forecast', e => {
+    cancelAnimationFrame(frame); frame = 0; pending = null;
+    if (!document.hidden && desk.classList.contains('active')) render(e);
+    else queue(e);
+  });
+  const queue = e => {
+    pending = e;
+    if (frame || document.hidden || !desk.classList.contains('active')) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!document.hidden && desk.classList.contains('active') && pending) { render(pending); pending = null; }
+    });
+  };
+  window.addEventListener('wd:current', queue);
+  window.addEventListener('wd:section', e => { if (e.detail === 'desk' && pending) queue(pending); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && pending) queue(pending); });
   window.addEventListener('wd:ws-obs', e => {
+    if (deskForecast() || settings().activePlace) return;
     const o = e.detail;
-    render({detail:{local:true,current_conditions:{wind_avg:msToWind(o[2]),wind_gust:msToWind(o[3]),wind_direction:o[4],lightning_strike_count_last_3hr:o[15]}}});
+    queue({detail:{local:true,current_conditions:{wind_avg:msToWind(o[2]),wind_gust:msToWind(o[3]),wind_direction:o[4],lightning_strike_count_last_3hr:o[15]}}});
   });
 }

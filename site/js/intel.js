@@ -1,7 +1,8 @@
 // Phase 2 — forecast intelligence: model agreement, timing anchor, live edge,
 // nowcast, weather story, forecast changes, verification.
 import * as api from './api.js';
-import { settings, U, num, timeStr, deg2compass, every, notify, say } from './app.js';
+import { forecastTime } from './weather-context.js';
+import { settings, U, num, timeStr, deg2compass, every, everyVisible, coords, notify, say } from './app.js';
 import { snapshot, changes, recordForecast, scoreForecast, accuracy } from './track.js';
 import { forecast as deskForecast, severeAlerts } from './desk.js';
 
@@ -12,8 +13,11 @@ const SHORT = { gfs_seamless: 'GFS', ecmwf_ifs025: 'ECMWF', icon_seamless: 'ICON
 let models = null;
 
 export async function refreshModels() {
-  if (settings().lat == null) return;
-  models = await api.multiModel();
+  if (coords().lat == null) return;
+  const context = JSON.stringify([coords(), settings().units]);
+  const result = await api.multiModel();
+  if (context !== JSON.stringify([coords(), settings().units])) return;
+  models = result;
   models._fetchedAt = Date.now() / 1000;
   window.dispatchEvent(new CustomEvent('wd:models', { detail: models }));
   renderAgreement();
@@ -122,23 +126,38 @@ function renderEdge() {
 // --- 15-minute precip nowcast ---
 
 export async function refreshNowcast() {
-  if (settings().lat == null) return;
-  const j = await api.nowcast();
-  const t = j.minutely_15.time.map((x) => new Date(x).getTime());
-  const p = j.minutely_15.precipitation;
-  const now = Date.now();
-  const i0 = t.findIndex((x) => x >= now);
-  const raining = (p[i0] || 0) > 0;
-  const idx = p.findIndex((v, i) => i >= i0 && (raining ? (v || 0) === 0 : (v || 0) > 0));
+  if (coords().lat == null) return;
+  const requestedPlace = JSON.stringify(coords());
   const el = $('nowcast');
+  let j;
+  try { j = await api.nowcast(); }
+  catch (error) {
+    if (requestedPlace !== JSON.stringify(coords())) return;
+    el.textContent = 'Nowcast unavailable';
+    throw error;
+  }
+  if (requestedPlace !== JSON.stringify(coords())) return;
+  const times = j?.minutely_15?.time, p = j?.minutely_15?.precipitation;
+  const t = Array.isArray(times) ? times.map(x => forecastTime(x, j.utc_offset_seconds) * 1000) : [];
+  const now = Date.now(), interval = 15 * 60000;
+  const i0 = t.findIndex(x => x >= now);
+  if (!Array.isArray(p) || t.length < 2 || p.length !== t.length || i0 < 0 || t[i0] - now > interval
+    || t.some((x, i) => !Number.isFinite(x) || (i > 0 && x - t[i - 1] !== interval))
+    || p.some(x => !Number.isFinite(x) || x < 0)) {
+    el.textContent = 'Nowcast unavailable · forecast data is expired or incomplete';
+    return;
+  }
+  const raining = p[i0] > 0;
+  const idx = p.findIndex((v, i) => i >= i0 && (raining ? v === 0 : v > 0));
   if (idx < 0) {
-    el.textContent = raining ? 'Precip continuing past forecast window' : 'Dry for the next 12 hours';
+    el.textContent = raining ? 'Precipitation throughout the available forecast window'
+      : `No precipitation through ${new Date(t[t.length - 1]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     return;
   }
   const mins = Math.round((t[idx] - now) / 60000);
   const msg = raining ? `Precip ends in ~${mins} min` : `Precip starts in ~${mins} min`;
   el.textContent = msg;
-  if (mins <= 60) notify({ id: `precip-${t[idx]}`, category: 'precip', title: 'Precip nowcast', body: msg });
+  if (mins >= 0 && mins <= 60) notify({ id: `precip-${t[idx]}`, category: 'precip', title: 'Precip nowcast', body: msg });
 }
 
 // --- weather story: derived 24h headlines ---
@@ -163,7 +182,7 @@ export function renderStory() {
   if (storm) out.push(`Thunder possible around ${timeStr(storm.time)}.`);
   if (wintry) {
     out.push(`Wintry precip signalled around ${timeStr(wintry.time)}.`);
-    notify({ id: `winter-${wintry.time}`, category: 'winter', title: 'Snow / ice in forecast', body: `${wintry.conditions} around ${timeStr(wintry.time)}` });
+    if (!fc._cached) notify({ id: `winter-${wintry.time}`, category: 'winter', title: 'Snow / ice in forecast', body: `${wintry.conditions} around ${timeStr(wintry.time)}` });
   }
   if (maxGust >= settings().windGustAlert) out.push('Wind advisory-level gusts in the period.');
   storyLines = out;
@@ -240,7 +259,7 @@ function briefTick() {
 
 export function renderTrack() {
   const fc = deskForecast();
-  if (!fc) return;
+  if (!fc || fc._cached) return;
   snapshot(fc);
   recordForecast(fc);
   const ch = changes(fc);
@@ -279,10 +298,10 @@ if (location.search.includes('selftest')) {
 // after a save, and a second listener means a second render per event.
 window.addEventListener('wd:forecast', () => { renderStory(); renderTrack(); renderEdge(); });
 window.addEventListener('wd:settings', renderStory);
-window.addEventListener('wd:obs', (e) => scoreForecast(e.detail));
+window.addEventListener('wd:obs', (e) => { if (!e.detail?._cached) scoreForecast(e.detail); });
 
 export function initIntel() {
   every('intel-brief', 60, briefTick);
-  every('intel-models', 900, refreshModels);
+  everyVisible('intel-models', 900, $('observatory-forecast'), refreshModels);
   every('intel-nowcast', 600, refreshNowcast);
 }

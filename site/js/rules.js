@@ -196,7 +196,7 @@ function fire(m) {
   }
 }
 
-window.addEventListener('wd:obs', (e) => run(fromStation(e.detail)));
+window.addEventListener('wd:obs', (e) => { if (!e.detail?._cached) run(fromStation(e.detail)); });
 window.addEventListener('wd:ws-obs', (e) => run(fromTuple(e.detail)));
 
 // --- built-in: frost ---
@@ -204,6 +204,7 @@ window.addEventListener('wd:ws-obs', (e) => run(fromTuple(e.detail)));
 // Not a rule the user has to think to write. The forecast low, not the reading: a warning that
 // arrives when it is already freezing is not a warning.
 window.addEventListener('wd:forecast', (e) => {
+  if (e.detail?._cached) { fcM = {}; return; }
   fcM = forecastMetrics(e.detail);
   // A forecast rule that waited for the next station report would be up to ten minutes late on
   // a REST source, and the whole point of these is lead time.
@@ -223,32 +224,22 @@ window.addEventListener('wd:forecast', (e) => {
 // --- builder UI (settings drawer) ---
 
 export function renderRules() {
-  const rules = settings().rules || [];
-  const opts = Object.entries(METRICS).map(([k, [label]]) => `<option value="${k}">${label}</option>`).join('');
-  $('rule-metric').innerHTML = opts;
-  $('rule-metric2').innerHTML = opts;
-  const describe = (metric, op, value) => {
-    const [label, unit, digits] = METRICS[metric] || ['(unknown metric)', () => '', 0];
-    return `${label} ${OPS[op] || op} ${num(value, digits)}${unit()}`;
+  const rules=settings().rules||[];
+  const opts=Object.entries(METRICS).map(([k,[label]])=>`<option value="${k}">${label}</option>`).join('');
+  $('rule-metric').innerHTML=opts;$('rule-metric2').innerHTML=opts;
+  const describe=(metric,op,value,channelUnit='')=>{
+    const [label,unit,digits]=METRICS[metric]||(metric?.startsWith('channel:')?[metric.slice(8).replaceAll('_',' '),()=>` ${channelUnit}`,2]:['Unknown metric',()=>'',0]);
+    return `${label} ${OPS[op]||op} ${num(value,digits)}${unit()}`;
   };
-  $('rule-list').innerHTML = rules.length
-    ? rules.map((r, i) => {
-        const text = describe(r.metric, r.op, r.value)
-          + (r.metric2 ? ` AND ${describe(r.metric2, r.op2, r.value2)}` : '')
-          + (r.durMin ? ` · ${r.durMin} min` : '');
-        return `<div class="row" style="margin:0">
-          <span class="place-hit" style="flex:1">${text}</span>
-          <button class="sig-x" data-rule="${i}">×</button></div>`;
-      }).join('')
-    : '<div class="muted" style="font-size:12px">No rules yet</div>';
-  $('rule-list').querySelectorAll('[data-rule]').forEach((b) => {
-    b.onclick = () => {
-      const next = [...(settings().rules || [])];
-      next.splice(+b.dataset.rule, 1);
-      state.clear(); // indices shift; stale latches would belong to the wrong rule
-      saveSettings({ rules: next });
-      renderRules();
-    };
+  const list=$('rule-list');list.replaceChildren();
+  if(!rules.length)list.textContent='No rules yet';
+  rules.forEach((r,i)=>{
+    const row=document.createElement('div');row.className='row';
+    const label=document.createElement('span');label.className='place-hit';label.style.flex='1';
+    label.textContent=describe(r.metric,r.op,r.value,r.channelUnit)+(r.metric2?` AND ${describe(r.metric2,r.op2,r.value2)}`:'')+(r.durMin?` · ${r.durMin} min`:'');
+    const remove=document.createElement('button');remove.className='sig-x';remove.type='button';remove.textContent='×';remove.dataset.rule=i;remove.setAttribute('aria-label','Remove '+label.textContent);
+    remove.onclick=()=>{const next=[...(settings().rules||[])];next.splice(i,1);state.clear();saveSettings({rules:next});renderRules();};
+    row.append(label,remove);list.append(row);
   });
 }
 

@@ -13,6 +13,9 @@ const I = api.OBS;
 
 let history = [];
 let historyHours = 168;
+let comparison = [], comparisonShift = 0, historyRequest = 0;
+const compared = idx => comparison.map(o => ({ x: o[I.time] * 1000 + comparisonShift, sourceX: o[I.time] * 1000, y: o[idx] }));
+const comparisonLine = (idx, name = '') => ({ data: compared(idx), color: '#b49be7', dash: [5, 4], name });
 
 function filterBoards() {
   const value = $('history-filter')?.value || 'all';
@@ -29,6 +32,7 @@ function filterBoards() {
 
 document.addEventListener('change', (event) => {
   if (event.target.id === 'history-filter') { filterBoards(); redrawVisibleCharts(); }
+  if (event.target.id === 'history-compare') refreshBoards();
   if (event.target.id === 'history-range') {
     historyHours = Number(event.target.value);
     $('history-title').textContent = historyHours === 24 ? 'Your day at a glance' : 'Your week at a glance';
@@ -56,6 +60,8 @@ const snapshot = (name, value, caption) => {
 };
 function clearSnapshot() {
   history = [];
+  comparison = [];
+  $('history-comparison-status').textContent = '';
   for (const name of ['temp', 'rain', 'wind', 'press']) snapshot(name, '—', 'Station history unavailable');
   for (const id of ['c-temp', 'c-rain', 'c-wind', 'c-press', 'c-rose']) {
     $(id).removeAttribute('width');
@@ -66,19 +72,29 @@ function clearSnapshot() {
 }
 
 export async function refreshBoards() {
+  const request = ++historyRequest;
+  const context = JSON.stringify([coords(), settings().stationSource, settings().deviceId, settings().units, settings().windUnit]);
+  const current = () => request === historyRequest && context === JSON.stringify([coords(), settings().stationSource, settings().deviceId, settings().units, settings().windUnit]);
   if (!hasSource()) {
     clearSnapshot();
     note('data-history-status', 'Connect a weather station to explore measured history. Forecast analysis remains available below.');
-    drawModels(); drawAccuracy(); drawOfficial(); drawOutlook();
+    drawAnalysis();
     return;
   }
   const end = Math.floor(Date.now() / 1000);
+  const hours = historyHours;
+  const mode = $('history-compare').value;
+  const range = (until) => window.__WD_SRV !== undefined || settings().stationSource
+    ? api.localObs(hours, null, until)
+    : api.deviceObs(settings().deviceId, until - hours * 3600, until);
   try {
-    const j = window.__WD_SRV !== undefined || settings().stationSource
-      ? await api.localObs(historyHours)
-      : await api.deviceObs(settings().deviceId, end - historyHours * 3600, end);
-    history = j.obs || [];
+    const j = await range(end);
+    if (!current()) return;
+    history = (j.obs || []).filter(o => o[I.time] >= end - hours * 3600 && o[I.time] < end);
+    comparison = [];
+    $('history-comparison-status').textContent = '';
   } catch (e) {
+    if (!current()) return;
     clearSnapshot();
     note('data-history-status', `History unavailable: ${e.message}`);
     return;
@@ -99,10 +115,23 @@ export async function refreshBoards() {
   $('history-summary').querySelector('strong').textContent = temperatures.length
     ? `High ${num(Math.max(...temperatures))}${U.temp()} · ${rainDays.length ? `${num(rain, 2)} ${U.precip()} of rain` : 'rain data unavailable'} in the ${historyHours === 24 ? 'last 24 hours' : 'last 7 days'}.`
     : `Station history for the ${historyHours === 24 ? 'last 24 hours' : 'last 7 days'}.`;
-  drawModels();
-  drawAccuracy();
-  drawOfficial();
-  drawOutlook();
+  drawAnalysis();
+  if (mode !== 'none') {
+    $('history-comparison-status').textContent = 'Loading comparison…';
+    const previousEnd = mode === 'previous' ? end - hours * 3600 : Math.floor(new Date(end * 1000).setFullYear(new Date(end * 1000).getFullYear() - 1) / 1000);
+    try {
+      const j = await range(previousEnd);
+      if (!current()) return;
+      comparison = (j.obs || []).filter(o => o[I.time] >= previousEnd - hours * 3600 && o[I.time] < previousEnd);
+      comparisonShift = (end - previousEnd) * 1000;
+      $('history-comparison-status').textContent = comparison.length
+        ? `Dashed purple: ${new Date((previousEnd - hours * 3600) * 1000).toLocaleString()} – ${new Date(previousEnd * 1000).toLocaleString()}, aligned to this window. Solid lines: current period.`
+        : 'No station readings are available for the comparison period.';
+      drawTemp(); drawRain(); drawWind(); drawPressure();
+    } catch (e) {
+      if (current()) $('history-comparison-status').textContent = `Comparison unavailable: ${e.message}. Current period remains visible.`;
+    }
+  }
 }
 
 const pts = (idx, from = 0) =>
@@ -110,17 +139,17 @@ const pts = (idx, from = 0) =>
 
 function drawTemp() {
   // Clicking a point opens the same slide-over the gauges open, windowed on that moment.
-  chart($('c-temp'), [{ data: pts(I.temp), color: '#43cfc3' }],
-    { digits: 0, onPick: (p) => openDetail('temp', p.x) });
+  chart($('c-temp'), [{ data: pts(I.temp), color: '#43cfc3' }, comparisonLine(I.temp)],
+    { digits: 0, onPick: (p) => openDetail('temp', p.sourceX ?? p.x) });
   $('board-temp').textContent = 'Temperature';
   const t = values(I.temp);
   snapshot('temp', t.length ? `${num(t.reduce((a, b) => a + b, 0) / t.length)}${U.temp()}` : '—', t.length ? 'average temperature' : 'No temperature readings');
 }
 
 // daily rain totals from the per-minute accumulation column
-function dailyRain() {
+function dailyRain(rows = history) {
   const byDay = new Map();
-  for (const o of history) {
+  for (const o of rows) {
     if (!Number.isFinite(o[I.rain])) continue;
     const k = new Date(o[I.time] * 1000).setHours(0, 0, 0, 0);
     byDay.set(k, (byDay.get(k) || 0) + o[I.rain]);
@@ -131,8 +160,10 @@ function dailyRain() {
 function drawRain() {
   const d = dailyRain();
   // The bars are whole days; noon is the middle of the window the detail panel will read.
-  chart($('c-rain'), [{ data: d, type: 'bar', color: '#43cfc3' }],
-    { yMin: 0, digits: 2, onPick: (p) => openDetail('rain', p.x + 12 * 3600 * 1000) });
+  chart($('c-rain'), [{ data: d, type: 'bar', color: '#43cfc3' }, {
+    data: dailyRain(comparison).map(p => ({ ...p, sourceX: p.x, x: p.x + comparisonShift })), color: '#b49be7', dash: [5, 4],
+  }],
+    { yMin: 0, digits: 2, onPick: (p) => openDetail('rain', (p.sourceX ?? p.x) + 12 * 3600 * 1000) });
   const total = d.reduce((a, b) => a + b.y, 0);
   $('board-rain').textContent = 'Rain';
   snapshot('rain', d.length ? `${num(total, 2)} ${U.precip()}` : '—', d.length ? 'total rainfall' : 'No rain readings');
@@ -143,7 +174,8 @@ function drawWind() {
   chart($('c-wind'), [
     { data: pts(I.windGust, from), color: '#eea64b', name: 'gust' },
     { data: pts(I.windAvg, from), color: '#43cfc3', name: 'avg' },
-  ], { yMin: 0, digits: 0, onPick: (p, name) => openDetail(name === 'avg' ? 'windAvg' : 'windGust', p.x) });
+    comparisonLine(I.windAvg, 'avg'), comparisonLine(I.windGust, 'gust'),
+  ], { yMin: 0, digits: 0, onPick: (p, name) => openDetail(name === 'avg' ? 'windAvg' : 'windGust', p.sourceX ?? p.x) });
   $('board-wind').textContent = 'Wind';
   const gusts = values(I.windGust);
   snapshot('wind', gusts.length ? `${num(Math.max(...gusts))} ${U.wind()}` : '—', gusts.length ? 'peak gust · average shown in teal' : 'No wind readings');
@@ -196,8 +228,8 @@ function drawRose() {
 
 function drawPressure() {
   const from = Math.floor(Date.now() / 1000) - historyHours * 3600;
-  chart($('c-press'), [{ data: pts(I.press, from), color: '#aaffc4' }],
-    { digits: 2, onPick: (p) => openDetail('press', p.x) });
+  chart($('c-press'), [{ data: pts(I.press, from), color: '#aaffc4' }, comparisonLine(I.press)],
+    { digits: 2, onPick: (p) => openDetail('press', p.sourceX ?? p.x) });
   const p = pts(I.press, from);
   const delta = p.length > 1 ? p[p.length - 1].y - p[0].y : 0;
   $('board-press').textContent = 'Pressure';
@@ -220,6 +252,15 @@ function drawExtremes() {
     ['Samples', num(history.length)],
   ].map(([k, v, m]) => `<div${m ? ` data-metric="${m}" role="button" tabindex="0"` : ''}><span>${k}</span><span>${v}</span></div>`).join('');
 }
+
+function drawAnalysis() {
+  for (const [id, draw] of [['c-models', drawModels], ['c-accuracy', drawAccuracy], ['official', drawOfficial], ['c-qpf', drawOutlook]]) {
+    if ($(id).getClientRects().length) draw();
+  }
+}
+document.addEventListener('toggle', event => {
+  if (event.target.open && event.target.closest('#data-grid')) drawAnalysis();
+}, true);
 
 async function drawModels() {
   const m = await api.multiModel().catch(() => null);

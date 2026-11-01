@@ -90,7 +90,7 @@ fn latest(conn: &rusqlite::Connection) -> Option<(i64, Vec<Option<f64>>, f64, f6
     let row = conn
         .query_row(
             "SELECT ts, wind_dir, wind_avg, wind_gust, temp, humidity, pressure, uv, solar, day_rain \
-             FROM obs ORDER BY ts DESC LIMIT 1",
+             FROM usable_obs ORDER BY ts DESC LIMIT 1",
             [],
             |r| {
                 Ok((
@@ -102,7 +102,7 @@ fn latest(conn: &rusqlite::Connection) -> Option<(i64, Vec<Option<f64>>, f64, f6
         .ok()?;
     let (ts, vals) = row;
     let sum = |since: i64| -> f64 {
-        conn.query_row("SELECT COALESCE(SUM(rain), 0) FROM obs WHERE ts > ?1", [since], |r| r.get(0))
+        conn.query_row("SELECT COALESCE(SUM(rain), 0) FROM usable_obs WHERE ts > ?1", [since], |r| r.get(0))
             .unwrap_or(0.0)
     };
     Some((ts, vals, sum(ts - 3600), sum(ts - 86_400)))
@@ -128,7 +128,7 @@ pub fn start(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
             crate::setting(&cfg_path, "lon").and_then(|v| v.parse::<f64>().ok()),
         );
         let (Some(lat), Some(lon)) = (lat, lon) else { continue };
-        let Ok(conn) = store::open(&store::db_path(&data_dir)) else { continue };
+        let Ok(conn) = store::open(&store::station_db_path(&data_dir, &cfg_path)) else { continue };
         let Some((ts, v, rain_1h, rain_24h)) = latest(&conn) else { continue };
         // Stale readings are worse than none: a hub that went offline an hour ago would
         // otherwise keep reporting the same temperature into a national dataset.
@@ -193,7 +193,7 @@ pub fn start_relay(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
         if !wu && !pws {
             continue;
         }
-        let Ok(conn) = store::open(&store::db_path(&data_dir)) else { continue };
+        let Ok(conn) = store::open(&store::station_db_path(&data_dir, &cfg_path)) else { continue };
         let Some((ts, v, rain_1h, _)) = latest(&conn) else { continue };
         // Same reasoning as CWOP: a station that went offline an hour ago must not keep
         // publishing the same temperature.

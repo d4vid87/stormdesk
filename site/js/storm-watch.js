@@ -42,7 +42,7 @@ window.addEventListener('wd:settings', () => {
 
 $('radar-banner-details').addEventListener('click', () => {
   const list = $('radar-alert-list');
-  list.replaceChildren(...warnings.map(({ properties: p }) => {
+  list.replaceChildren(...warnings.map(({ properties: p, geometry }) => {
     const article = document.createElement('article');
     const title = document.createElement('h3');
     title.textContent = p.event || 'Weather warning';
@@ -51,7 +51,21 @@ $('radar-banner-details').addEventListener('click', () => {
     meta.textContent = [p.areaDesc, p.senderName, p.ends || p.expires ? `Until ${new Date(p.ends || p.expires).toLocaleString()}` : ''].filter(Boolean).join(' · ');
     const body = document.createElement('p');
     body.textContent = [p.description, p.instruction].filter(Boolean).join('\n\n') || 'No further details available.';
-    article.append(title, meta, body);
+    const radar = document.createElement('button');
+    radar.type = 'button';
+    const points = (geometry?.type === 'Polygon' ? geometry.coordinates.flat(1) : geometry?.type === 'MultiPolygon' ? geometry.coordinates.flat(2) : [])
+      .filter(p => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90);
+    const position = points.length ? {
+      lon: (Math.min(...points.map(p => p[0])) + Math.max(...points.map(p => p[0]))) / 2,
+      lat: (Math.min(...points.map(p => p[1])) + Math.max(...points.map(p => p[1]))) / 2,
+    } : coords();
+    radar.textContent = points.length ? 'Show warning area on radar' : 'Show location on radar';
+    radar.disabled = !Number.isFinite(position.lat) || !Number.isFinite(position.lon);
+    radar.onclick = () => {
+      $('radar-alert-dialog').close();
+      window.dispatchEvent(new CustomEvent('wd:radar-focus', { detail: position }));
+    };
+    article.append(title, meta, body, radar);
     return article;
   }));
   $('radar-alert-dialog').showModal();

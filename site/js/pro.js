@@ -1,9 +1,11 @@
 // Desk layout matching myStormDesk: sky hero, signal ticker, trend strip,
 // 48h combined chart, day cards, dial gauges. Driven by the wd:forecast event.
 import * as api from './api.js';
-import { settings, coords, U, num, timeStr, deg2compass, every, msToWind, windToMs, stormMode } from './app.js';
+import { settings, coords, U, num, timeStr, deg2compass, every, everyVisible, msToWind, windToMs, stormMode } from './app.js';
 import { forecast as deskForecast, severeAlerts } from './desk.js';
 import * as icon from './icons.js';
+import { readingInfo, modelAgreement } from './weather-context.js';
+import { gaugeIcon } from './gauge-icons.js';
 import { fieldInstrument } from './field-instruments.js';
 import { initLayout } from './layout.js';
 import { normalToday } from './almanac.js';
@@ -16,6 +18,7 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 
 let history = [];      // last 3h of device obs, for trends
 let consensus = null;  // model temp at this hour
+let agreement = null, localAt = null;
 let qpf = null;        // open-meteo daily precipitation totals, for the day cards
 
 const I = api.OBS;
@@ -53,11 +56,11 @@ function renderHero(fc) {
   setScene(c.icon);
   renderNormal(d);
   if (fc._provenance) {
-    const last = history.at(-1);
-    const age = last ? Math.max(0, Math.round((Date.now() / 1000 - last[I.time]) / 60)) : null;
-    $('hero-live').className = age != null && age < 10 ? 'live on' : 'live';
-    $('hero-live').textContent = age == null ? fc._provenance
-      : `Station · ${age < 10 ? 'live' : `${age}m old`} · ${fc._provenance.startsWith('Cached') ? 'cached forecast' : 'forecast'} otherwise`;
+    const source = c._sources?.air_temperature;
+    $('hero-live').className = source && Date.now() / 1000 - source.at < 600 ? 'live on' : 'live';
+    $('hero-live').textContent = readingInfo(fc, 'air_temperature');
+    $('hero-temp').dataset.source = readingInfo(fc, 'air_temperature');
+    $('hero-temp').title = $('hero-temp').dataset.source;
   }
 }
 
@@ -357,8 +360,13 @@ function renderDays(fc) {
     tweenNumber(card.querySelector('.dc-temp span'), d.air_temp_low, (v) => `${num(v)}°`);
     setText(card.querySelector('.dc-cond'), d.conditions || '');
     setText(card.querySelector('.dc-pop'), Number.isFinite(d.precip_probability) ? `${num(d.precip_probability)}%` : '—');
+    card.dataset.agreement = modelAgreement(agreement, d.day_start_local, days[i + 1]?.day_start_local || d.day_start_local + 86400, settings().units === 'metric');
+    let modelNote = card.querySelector('.dc-agreement');
+    if (!modelNote) { modelNote = document.createElement('small'); modelNote.className = 'dc-agreement'; card.append(modelNote); }
+    setText(modelNote, card.dataset.agreement.split(' · ')[0]);
+    modelNote.title = `${card.dataset.agreement}. Model agreement is not forecast accuracy.`;
     card.dataset.precipAmount = Number.isFinite(amount) ? `${num(amount, 2)} ${U.precip()}` : '';
-    card.setAttribute('aria-label', `${card.querySelector('.dc-name').textContent}, ${card.querySelector('.dc-date').textContent}. ${d.conditions || 'Conditions unavailable'}. High ${num(d.air_temp_high)}${U.temp()}, low ${num(d.air_temp_low)}${U.temp()}. Rain chance ${Number.isFinite(d.precip_probability) ? `${num(d.precip_probability)}%` : 'unavailable'}.`);
+    card.setAttribute('aria-label', `${card.querySelector('.dc-name').textContent}, ${card.querySelector('.dc-date').textContent}. ${d.conditions || 'Conditions unavailable'}. High ${num(d.air_temp_high)}${U.temp()}, low ${num(d.air_temp_low)}${U.temp()}. Rain chance ${Number.isFinite(d.precip_probability) ? `${num(d.precip_probability)}%` : 'unavailable'}. ${card.dataset.agreement}.`);
   });
   return built;
 }
@@ -398,6 +406,15 @@ const setText = (el, txt) => { if (el && el.textContent !== txt) el.textContent 
 function gauge(id, spec) {
   const box = $(id);
   if (!box) return;
+  const fields = { 'g-wind': 'wind_avg', 'g-rain': 'observed_rain_today', 'g-hum': 'relative_humidity',
+    'g-press': 'sea_level_pressure', 'g-dew': 'dew_point', 'g-uv': 'uv', 'g-ltg': 'lightning_strike_count_last_3hr',
+    'g-wet': 'wet_bulb_temperature', 'g-wbgt': 'wbgt' };
+  const fc = deskForecast();
+  const field = id === 'g-rain' && fc?.current_conditions?.observed_rain_today == null ? 'forecast_rain_today' : fields[id];
+  box.dataset.source = !(spec.available ?? Number.isFinite(spec.value)) ? 'Reading unavailable'
+    : fc ? readingInfo(fc, field) : readingInfo({ _provider: ['g-dew', 'g-wet', 'g-wbgt'].includes(id) ? 'Calculated from station readings' : 'Station observation', current_conditions: { time: localAt } }, field);
+  box.title = box.dataset.source;
+  if (box.closest('[data-metric]')) box.closest('[data-metric]').dataset.source = box.dataset.source;
   const faceKey = `${spec.face}|${spec.min}|${spec.max}`;
   box.dataset.unavailable = String(!(spec.available ?? Number.isFinite(spec.value)));
   if (box.dataset.face !== faceKey) {
@@ -405,7 +422,8 @@ function gauge(id, spec) {
     box.innerHTML = '<div class="gwrap"><span aria-hidden="true">' + FACE[spec.face](spec) + '</span>'
       + '<div class="ginner"><b></b><small></small><span></span></div></div>';
   }
-  const instrument = fieldInstrument(id, spec, settings().units === 'metric');
+  const instrument = gaugeIcon(id, settings().gaugeStyle, box.dataset.unavailable === 'true')
+    || fieldInstrument(id, spec, settings().units === 'metric');
   if (instrument) {
     const face = box.querySelector('.gwrap > span');
     if (face._instrument !== instrument) { face.innerHTML = instrument; face._instrument = instrument; }
@@ -569,9 +587,9 @@ export function renderPro(fc = deskForecast()) {
   if (!fc) return;
   performance.mark?.('renderPro-start');
   renderHero(fc);
-  renderTicker(fc);
-  renderTrends(fc);
-  render48(fc);
+  if ($('ticker').getClientRects().length) renderTicker(fc);
+  if ($('trends').getClientRects().length) renderTrends(fc);
+  if ($('c48').getClientRects().length) render48(fc);
   const builtDays = renderDays(fc);
   renderGauges(fc);
   // Only when the day-card shells were just created: they need their grips and saved sizes
@@ -630,6 +648,9 @@ export function wbgtC(taC, rh, solar = 0, windMps = 1) {
 const wbgtWord = (f) => (f >= 90 ? 'Extreme' : f >= 88 ? 'Very high' : f >= 85 ? 'High' : f >= 80 ? 'Moderate' : 'Low');
 
 function renderLocal(o) {
+  localAt = o[I.time];
+  $('hero-temp').dataset.source = readingInfo({ _provider: 'Station observation', current_conditions: { time: localAt } }, 'air_temperature');
+  $('hero-temp').title = $('hero-temp').dataset.source;
   const metric = settings().units === 'metric';
   const t = (c) => (c == null ? null : metric ? c : c * 9 / 5 + 32);
   const w = msToWind;
@@ -691,12 +712,46 @@ function renderLocal(o) {
 // Module level, not inside initPro: initPro re-runs on every settings save and a listener per
 // save stacks up. Both the websocket and the UDP poller dispatch wd:ws-obs; with a forecast in
 // hand the normal render owns the screen and this does nothing.
-window.addEventListener('wd:ws-obs', (e) => { if (!document.hidden && !deskForecast()) renderLocal(e.detail); });
-window.addEventListener('wd:forecast', (e) => renderPro(e.detail));
-window.addEventListener('wd:current', (e) => {
-  if (document.hidden || !e.detail) return;
-  renderHero(e.detail);
-  renderGauges(e.detail);
+window.addEventListener('wd:ws-obs', (e) => { if (!deskForecast() && !settings().activePlace) queueRender({ localObs: e.detail }); });
+let pendingRender = null, renderFrame = 0, fullRender = false;
+function queueRender(fc, full = false) {
+  if (!fc) return;
+  pendingRender = fc;
+  fullRender ||= full;
+  if (renderFrame || document.hidden || !$('desk').classList.contains('active')) return;
+  renderFrame = requestAnimationFrame(() => {
+    renderFrame = 0;
+    if (document.hidden || !$('desk').classList.contains('active')) return;
+    const next = pendingRender, all = fullRender;
+    pendingRender = null; fullRender = false;
+    if (next.localObs) renderLocal(next.localObs);
+    else if (all) renderPro(next);
+    else { renderHero(next); renderGauges(next); }
+  });
+}
+window.addEventListener('wd:forecast', e => {
+  if (!document.hidden && $('desk').classList.contains('active')) {
+    cancelAnimationFrame(renderFrame); renderFrame = 0; pendingRender = null; fullRender = false;
+    renderPro(e.detail);
+  }
+  else queueRender(e.detail, true);
+});
+window.addEventListener('wd:current', e => queueRender(e.detail));
+window.addEventListener('wd:section', e => { if (e.detail === 'desk') queueRender(pendingRender || deskForecast(), true); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) queueRender(pendingRender || deskForecast(), true); });
+window.addEventListener('wd:models', e => {
+  agreement = e.detail;
+  queueRender(deskForecast(), true);
+});
+window.addEventListener('wd:settings', e => {
+  agreement = null;
+  if (!Object.hasOwn(e.detail || {}, 'gaugeStyle')) return;
+  document.querySelectorAll('#gauges .gauge > div[id]').forEach(box => {
+    const face = box.querySelector('.gwrap > span');
+    if (!face) return;
+    const instrument = gaugeIcon(box.id, settings().gaugeStyle, box.dataset.unavailable === 'true');
+    face.innerHTML = instrument; face._instrument = instrument;
+  });
 });
 
 // One dot per station source the LAN server is holding, hover for the /diag line itself. Nothing
@@ -733,15 +788,15 @@ export function initPro() {
     metric.dataset.ready = 'true';
   }
   every('pro-health', 300, renderHealth);
-  every('pro-history', 300, async () => { await loadHistory(); renderPro(); });
-  every('pro-consensus', 900, async () => { await loadConsensus(); renderPro(); });
-  every('pro-qpf', 1800, async () => { await loadQpf(); renderPro(); });
-  every('pro-ensemble', 1800, loadEnsemble);
+  everyVisible('pro-history', 300, $('trends'), async () => { await loadHistory(); renderPro(); });
+  everyVisible('pro-consensus', 900, $('trends'), async () => { await loadConsensus(); renderPro(); });
+  everyVisible('pro-qpf', 1800, $('daycards'), async () => { await loadQpf(); renderPro(); });
+  everyVisible('pro-ensemble', 1800, $('c48'), loadEnsemble);
   // The broadcast clock deliberately keeps seconds visible at every performance level.
   registerClock();
   // The eco toggle changes both the pace and the seconds format; re-register instead of reloading.
   window.addEventListener('wd:settings', registerClock);
-  every('pro-clock', 60, () => { if (deskForecast()) renderHero(deskForecast()); });
+  everyVisible('pro-clock', 60, $('hero'), () => { if (deskForecast()) renderHero(deskForecast()); });
 
   // A class, not an inline style: inline would outrank the rule that stops the animation whenever
   // the Desk isn't the section on screen.

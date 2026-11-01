@@ -104,13 +104,26 @@ fn second(m: &HashMap<&str, f64>, r: &Rule) -> bool {
     let Some(k) = r.metric2.as_deref() else {
         return true;
     };
-    if !METRICS.contains(&k) {
+    if !allowed_metric(k) {
         return false;
     }
     let (Some(v), Some(t)) = (m.get(k), r.value2) else {
         return false;
     };
-    holds(*v, r.op2.as_deref().unwrap_or(">"), t)
+    v.is_finite() && t.is_finite() && holds(*v, r.op2.as_deref().unwrap_or(">"), t)
+}
+
+fn channel_name(metric: &str) -> Option<&str> {
+    metric.strip_prefix("channel:").filter(|name| !name.is_empty() && name.len() <= 80
+        && name.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_'))
+}
+
+fn forecast_metric(metric: &str) -> bool {
+    ["low18h", "rain6h", "gust24h", "hiTomorrow"].contains(&metric)
+}
+
+fn allowed_metric(metric: &str) -> bool {
+    METRICS.contains(&metric) || channel_name(metric).is_some()
 }
 
 /// Which rules fire on this reading. Pure, so the parity tests can drive it directly with the
@@ -121,6 +134,13 @@ pub fn evaluate(
     state: &mut HashMap<String, Latch>,
     now: i64,
 ) -> Vec<(usize, f64)> {
+    evaluate_samples(m, rules, state, now, None)
+}
+
+fn evaluate_samples(
+    m: &HashMap<&str, f64>, rules: &[Rule], state: &mut HashMap<String, Latch>,
+    wall_time: i64, samples: Option<&HashMap<&str, i64>>,
+) -> Vec<(usize, f64)> {
     let mut fired = Vec::new();
     for (i, r) in rules.iter().enumerate() {
         let key = if r.id.is_empty() {
@@ -129,7 +149,7 @@ pub fn evaluate(
             r.id.clone()
         };
         let st = state.entry(key).or_default();
-        if !METRICS.contains(&r.metric.as_str()) {
+        if !allowed_metric(&r.metric) {
             st.since = None;
             continue;
         }
@@ -138,7 +158,20 @@ pub fn evaluate(
             st.last = None;
             continue;
         };
-        if v.is_nan() || st.last.is_some_and(|last| now - last > 180) {
+        // The older input bounds the evidence for a compound rule. Wall-clock ticks
+        // cannot prove that an unchanged sensor reading continued to hold.
+        let stamp = |metric: &str| -> Option<i64> {
+            let at = samples.map_or(Some(wall_time), |s| s.get(metric).copied())?;
+            let age = if forecast_metric(metric) { 1800 } else { 600 };
+            (at <= wall_time && wall_time - at <= age).then_some(at)
+        };
+        let at = stamp(&r.metric).and_then(|a| match r.metric2.as_deref() {
+            Some(k) => stamp(k).map(|b| (a.min(b), a.max(b))), None => Some((a, a)),
+        });
+        let Some((now, first_evidence)) = at else { st.since = None; st.last = None; continue; };
+        let gap = if samples.is_none() { 180 } else if forecast_metric(&r.metric)
+            && r.metric2.as_deref().is_none_or(forecast_metric) { 1800 } else { 600 };
+        if !v.is_finite() || st.last.is_some_and(|last| now < last || now - last > gap) {
             st.since = None;
             st.last = Some(now);
             continue;
@@ -151,13 +184,42 @@ pub fn evaluate(
             }
             continue;
         }
-        st.since.get_or_insert(now);
+        st.since.get_or_insert(first_evidence);
         if !st.latched && now - st.since.unwrap() >= (r.dur_min * 60.0) as i64 {
             st.latched = true;
             fired.push((i, v));
         }
     }
     fired
+}
+
+/// Extra sensor thresholds are stored in these raw units, independent of dashboard display units.
+fn channel_metrics(conn: &rusqlite::Connection, now: i64) -> HashMap<String, (f64, String, i64)> {
+    let mut out = HashMap::new();
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT c.name,c.value,c.unit,c.ts FROM channels c
+         JOIN (SELECT name,MAX(ts) AS ts FROM channels WHERE ts >= ?1 AND ts <= ?2 GROUP BY name) latest
+         ON c.name=latest.name AND c.ts=latest.ts
+         WHERE NOT EXISTS (SELECT 1 FROM notes WHERE kind='exclude' AND c.ts BETWEEN notes.ts AND notes.until)") else { return out; };
+    let Ok(rows) = stmt.query_map([now - 600, now], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, String>(2)?, r.get::<_, i64>(3)?))) else { return out; };
+    for (name, value, unit, ts) in rows.flatten() {
+        let metric = format!("channel:{name}");
+        if channel_name(&metric).is_some() && value.is_finite()
+            && ["°C", "%", "V", "low", "µg/m³", "ppm"].contains(&unit.as_str())
+            && (unit != "low" || value == 0.0 || value == 1.0)
+        {
+            out.insert(metric, (value, unit, ts));
+        }
+    }
+    out
+}
+
+fn channel_description(metric: &str, unit: &str) -> (String, String, usize) {
+    let name = channel_name(metric).unwrap_or("sensor");
+    let mut label = name.replace('_', " ").replace("pm25", "PM2.5").replace("co2", "CO₂");
+    if let Some(rest) = name.strip_prefix("battery_") { label = format!("{} battery", rest.replace('_', " ")); }
+    if let Some(first) = label.chars().next() { label.replace_range(..first.len_utf8(), &first.to_uppercase().to_string()); }
+    (label, if unit == "low" { " (0 normal / 1 low)".into() } else { format!(" {unit}") }, if unit == "low" { 0 } else { 1 })
 }
 
 // --- reading the archive in the units the rule was written in ---
@@ -204,7 +266,7 @@ fn metrics(
     let (ts, gust, wind, rh, temp, uv, rain, interval, press): Row = conn
         .query_row(
             "SELECT ts, wind_gust, wind_avg, humidity, temp, uv, rain, report_interval, pressure
-             FROM obs ORDER BY ts DESC LIMIT 1",
+             FROM usable_obs ORDER BY ts DESC LIMIT 1",
             [],
             |r| {
                 Ok((
@@ -253,7 +315,7 @@ fn metrics(
     // Three hours back, for the two metrics that are a change rather than a reading.
     let then: Option<f64> = conn
         .query_row(
-            "SELECT pressure FROM obs WHERE ts <= ?1 AND pressure IS NOT NULL ORDER BY ts DESC LIMIT 1",
+            "SELECT pressure FROM usable_obs WHERE ts <= ?1 AND pressure IS NOT NULL ORDER BY ts DESC LIMIT 1",
             [ts - 3 * 3600],
             |r| r.get(0),
         )
@@ -267,7 +329,7 @@ fn metrics(
     // Strikes are reported per interval, so three hours' worth is a sum, not a difference.
     let strikes: Option<f64> = conn
         .query_row(
-            "SELECT SUM(strikes) FROM obs WHERE ts > ?1",
+            "SELECT SUM(strikes) FROM usable_obs WHERE ts > ?1",
             [ts - 3 * 3600],
             |r| r.get(0),
         )
@@ -278,7 +340,7 @@ fn metrics(
     type HourRow = (Option<f64>, Option<f64>, Option<f64>);
     let hour: Option<HourRow> = conn
         .query_row(
-            "SELECT temp, pressure, humidity FROM obs WHERE ts <= ?1 ORDER BY ts DESC LIMIT 1",
+            "SELECT temp, pressure, humidity FROM usable_obs WHERE ts <= ?1 ORDER BY ts DESC LIMIT 1",
             [ts - 3600],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
@@ -297,15 +359,69 @@ fn metrics(
     Some((ts, m))
 }
 
-fn forecast_metrics(cfg: &std::path::Path) -> HashMap<&'static str, f64> {
-    static CACHE: OnceLock<Mutex<Option<(u64, HashMap<&'static str, f64>)>>> = OnceLock::new();
+// Relevant settings only: a theme change must not reannounce warnings. This key stays
+// in memory and is never logged because notification destinations can contain secrets.
+pub(crate) fn alert_context(cfg: &std::path::Path) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_slice(&std::fs::read(cfg).ok()?).ok()?;
+    let settings = v.get("settings")?.as_object()?;
+    let mut selected = serde_json::Map::new();
+    for key in [
+        "stationSource", "deviceId", "stationId", "ingestKey", "wllHost",
+        "lacrosseEmail", "awnApiKey", "ecowittMac", "lat", "lon", "units",
+        "windUnit", "rules", "alertRegion", "forecastProvider", "notif",
+        "quietStart", "quietEnd", "ntfyUrl", "ntfyTopic", "webhookUrl",
+        "mqttUrl", "mqttUser", "mqttPass", "haDiscoveryPrefix", "purpleAirHost",
+    ] {
+        selected.insert(key.into(), settings.get(key).cloned().unwrap_or_default());
+    }
+    Some(format!("{}:{}", cfg.display(), serde_json::Value::Object(selected)))
+}
+
+pub(crate) fn context_current(cfg: &std::path::Path, expected: &str) -> bool {
+    alert_context(cfg).as_deref() == Some(expected)
+}
+
+fn check_context(
+    cfg: &std::path::Path, expected: &str, state: &mut HashMap<String, Latch>,
+    seen: &mut std::collections::HashSet<String>,
+) -> bool {
+    if context_current(cfg, expected) { return true; }
+    state.clear();
+    seen.clear();
+    false
+}
+
+#[derive(Clone)]
+struct ForecastCache {
+    context: String,
+    at: i64,
+    values: HashMap<&'static str, f64>,
+}
+
+impl ForecastCache {
+    fn matches(&self, context: &str, now: i64) -> bool {
+        self.context == context && now >= self.at && now - self.at < 900
+    }
+}
+
+fn forecast_metrics(cfg: &std::path::Path, context: &str) -> (i64, HashMap<&'static str, f64>) {
+    forecast_metrics_with(cfg, context, |url| {
+        let r = ureq::get(url).timeout(Duration::from_secs(20)).call().ok()?;
+        serde_json::from_str(&r.into_string().ok()?).ok()
+    })
+}
+
+fn forecast_metrics_with(
+    cfg: &std::path::Path, context: &str,
+    fetch: impl FnOnce(&str) -> Option<serde_json::Value>,
+) -> (i64, HashMap<&'static str, f64>) {
+    static CACHE: OnceLock<Mutex<Option<ForecastCache>>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(None));
     let now = crate::server::epoch();
+    if !context_current(cfg, context) { return (0, HashMap::new()); }
     if let Ok(c) = cache.lock() {
-        if let Some((at, values)) = c.as_ref() {
-            if now.saturating_sub(*at) < 900 {
-                return values.clone();
-            }
+        if let Some(c) = c.as_ref().filter(|c| c.matches(context, now as i64)) {
+            return (c.at, c.values.clone());
         }
     }
     let num = |k: &str| {
@@ -315,22 +431,15 @@ fn forecast_metrics(cfg: &std::path::Path) -> HashMap<&'static str, f64> {
             .ok()
     };
     let Some((lat, lon)) = num("lat").zip(num("lon")) else {
-        return HashMap::new();
+        return (0, HashMap::new());
     };
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}\
         &hourly=temperature_2m,precipitation_probability,wind_gusts_10m\
         &daily=temperature_2m_max&forecast_days=2&timezone=auto&timeformat=unixtime&wind_speed_unit=ms"
     );
-    let Ok(r) = ureq::get(&url).timeout(Duration::from_secs(20)).call() else {
-        return HashMap::new();
-    };
-    let Ok(body) = r.into_string() else {
-        return HashMap::new();
-    };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) else {
-        return HashMap::new();
-    };
+    let Some(v) = fetch(&url) else { return (0, HashMap::new()); };
+    if !context_current(cfg, context) { return (0, HashMap::new()); }
     let hourly = &v["hourly"];
     let times = hourly["time"].as_array().cloned().unwrap_or_default();
     let values = |key: &str, hours: u64| -> Vec<f64> {
@@ -369,10 +478,12 @@ fn forecast_metrics(cfg: &std::path::Path) -> HashMap<&'static str, f64> {
     {
         out.insert("hiTomorrow", if imp { x * 1.8 + 32.0 } else { x });
     }
+    if !context_current(cfg, context) { return (0, HashMap::new()); }
+    let at = crate::server::epoch() as i64;
     if let Ok(mut c) = cache.lock() {
-        *c = Some((now, out.clone()));
+        *c = Some(ForecastCache { context: context.into(), at, values: out.clone() });
     }
-    out
+    (at, out)
 }
 
 // --- the channels ---
@@ -436,18 +547,27 @@ fn quiet_now(cfg: &std::path::Path) -> bool {
 }
 
 fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) -> serde_json::Value {
-    let get = |k: &str| {
-        crate::setting(cfg, k)
-            .unwrap_or_default()
-            .trim_matches('"')
-            .to_string()
+    let Some(context) = alert_context(cfg) else {
+        return serde_json::json!({ "suppressed": true, "channels": [] });
     };
+    push_checked(cfg, &context, category, title, body)
+}
+
+fn push_checked(cfg: &std::path::Path, context: &str, category: &str, title: &str, body: &str) -> serde_json::Value {
+    // Capture destinations before any request. Never read another station's webhook
+    // after waiting for the previous station's ntfy response.
+    let snapshot: serde_json::Value = std::fs::read(cfg).ok()
+        .and_then(|s| serde_json::from_slice(&s).ok()).unwrap_or_default();
+    let get = |k: &str| snapshot["settings"][k].as_str().unwrap_or("").to_string();
+    if !context_current(cfg, context) {
+        return serde_json::json!({ "suppressed": true, "channels": [] });
+    }
     if !setting_enabled(cfg, category) || (quiet_now(cfg) && category != "severe") {
         return serde_json::json!({ "suppressed": true, "channels": [] });
     }
     let mut results = serde_json::Map::new();
     let topic = get("ntfyTopic");
-    if !topic.is_empty() {
+    if !topic.is_empty() && context_current(cfg, context) {
         let base = {
             let u = get("ntfyUrl");
             if u.is_empty() {
@@ -477,7 +597,7 @@ fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) -> serde
         );
     }
     let hook = get("webhookUrl");
-    if !hook.is_empty() {
+    if !hook.is_empty() && context_current(cfg, context) {
         let r = ureq::post(&hook)
             .timeout(Duration::from_secs(15))
             .set("Content-Type", "application/json")
@@ -490,8 +610,8 @@ fn push(cfg: &std::path::Path, category: &str, title: &str, body: &str) -> serde
             serde_json::json!({ "ok": r.is_ok(), "error": r.err().as_ref().map(err_kind) }),
         );
     }
-    crate::mqtt::send(if category == "rule" { "rule" } else { "alert" }, title);
-    if !get("mqttUrl").is_empty() {
+    if context_current(cfg, context) && !get("mqttUrl").is_empty() {
+        crate::mqtt::send_for_station(context, if category == "rule" { "rule" } else { "alert" }, title);
         results.insert("broker".into(), serde_json::json!({ "ok": true }));
     }
     serde_json::json!({ "sent": results.values().any(|v| v["ok"] == true), "channels": results })
@@ -553,6 +673,9 @@ fn nws(cfg: &std::path::Path) -> Option<Vec<serde_json::Value>> {
             .ok()
     };
     let (lat, lon) = (num("lat")?, num("lon")?);
+    if crate::setting(cfg,"alertRegion").as_deref()==Some("CA") {
+        return crate::environment::canada_alerts(lat,lon).ok()?.get("features")?.as_array().cloned();
+    }
     let url = format!("https://api.weather.gov/alerts/active?point={lat:.4},{lon:.4}");
     let body = ureq::get(&url)
         .timeout(Duration::from_secs(20))
@@ -631,29 +754,45 @@ fn tick(
     seen: &mut std::collections::HashSet<String>,
     last_rules: &mut String,
 ) {
-    // A changed rule list shifts every index, and a stale latch would then belong to the wrong
-    // rule — the same reason the page clears its map when a rule is deleted.
-    let raw = crate::setting(cfg, "rules").unwrap_or_default();
-    if raw != *last_rules {
+    let Some(context) = alert_context(cfg) else { state.clear(); seen.clear(); return; };
+    if context != *last_rules {
         state.clear();
-        *last_rules = raw;
+        seen.clear();
+        *last_rules = context.clone();
     }
-
     let rs = rules(cfg);
     if !rs.is_empty() {
-        if let Ok(conn) = store::open(&store::db_path(data_dir)) {
-            if let Some((ts, mut m)) = metrics(&conn, cfg) {
-                m.extend(forecast_metrics(cfg));
-                for (i, v) in evaluate(&m, &rs, state, ts) {
+        if let Ok(conn) = store::open(&store::station_db_path(data_dir, cfg)) {
+            let now = crate::server::epoch() as i64;
+            let channels = channel_metrics(&conn, now);
+            let (ts, mut m) = metrics(&conn, cfg).unwrap_or((0, HashMap::new()));
+            if ts < now - 600 || ts > now { m.clear(); }
+            {
+                let mut stamps: HashMap<String, i64> = m.keys().map(|key| ((*key).into(), ts)).collect();
+                if rs.iter().any(|r| forecast_metric(&r.metric) || r.metric2.as_deref().is_some_and(forecast_metric)) {
+                    let (at, forecast) = forecast_metrics(cfg, &context);
+                    stamps.extend(forecast.keys().map(|key| ((*key).into(), at)));
+                    m.extend(forecast);
+                }
+                if !check_context(cfg, &context, state, seen) { return; }
+                stamps.extend(channels.iter().map(|(key, (_, _, ts))| (key.clone(), *ts)));
+                let sample_times = stamps.iter().map(|(key, at)| (key.as_str(), *at)).collect();
+                let mut owned: HashMap<String, f64> = m.into_iter().map(|(key, value)| (key.into(), value)).collect();
+                owned.extend(channels.iter().map(|(key, (value, _, _))| (key.clone(), *value)));
+                let values = owned.iter().map(|(key, value)| (key.as_str(), *value)).collect();
+                for (i, v) in evaluate_samples(&values, &rs, state, crate::server::epoch() as i64, Some(&sample_times)) {
+                    if !check_context(cfg, &context, state, seen) { return; }
                     let r = &rs[i];
-                    let (label, unit, digits) = describe(&r.metric, cfg);
+                    let (label, unit, digits) = channels.get(&r.metric)
+                        .map(|(_, unit, _)| channel_description(&r.metric, unit))
+                        .unwrap_or_else(|| { let (label, unit, digits) = describe(&r.metric, cfg); (label.into(), unit, digits) });
                     let op = if r.op == "<" { "below" } else { "above" };
                     let title = format!("{label} {op} {:.*}{unit}", digits, r.value);
                     let mut body = format!("Now {:.*}{unit}", digits, v);
                     if r.dur_min > 0.0 {
                         body.push_str(&format!(" for {} min", r.dur_min as i64));
                     }
-                    let result = push(cfg, "rule", &title, &body);
+                    let result = push_checked(cfg, &context, "rule", &title, &body);
                     crate::ingest::note(
                         "alert-delivery",
                         result["sent"] == true,
@@ -669,8 +808,12 @@ fn tick(
         }
     }
 
-    let Some(feats) = nws(cfg) else { return };
+    if !check_context(cfg, &context, state, seen) { return; }
+    let feats = nws(cfg);
+    if !check_context(cfg, &context, state, seen) { return; }
+    let Some(feats) = feats else { return };
     for f in &feats {
+        if !check_context(cfg, &context, state, seen) { return; }
         let Some(p) = f.get("properties") else {
             continue;
         };
@@ -682,7 +825,7 @@ fn tick(
         if quiet_now(cfg) && !matches!(severity.as_str(), "Severe" | "Extreme") {
             continue;
         }
-        let result = push(cfg, "severe", &s("event"), &s("headline"));
+        let result = push_checked(cfg, &context, "severe", &s("event"), &s("headline"));
         crate::ingest::note(
             "alert-delivery",
             result["sent"] == true,
@@ -694,8 +837,9 @@ fn tick(
             false,
         );
     }
+    if !check_context(cfg, &context, state, seen) { return; }
     if expire(seen, &feats) {
-        crate::mqtt::send("alert", "");
+        crate::mqtt::send_for_station(&context, "alert", "");
     }
 }
 
@@ -838,6 +982,69 @@ mod tests {
         assert_eq!(evaluate(&m(&[("gust", 40.0)]), &rs, &mut st, 0).len(), 1);
     }
 
+    #[test]
+    fn extra_sensor_rules_hold_reset_on_missing_and_keep_saved_ids() {
+        let parsed = Rule::from_json(&serde_json::json!({
+            "id":"greenhouse-alert", "metric":"channel:temperature_1",
+            "op":">", "value":30, "durMin":2, "channelUnit":"°C"
+        })).unwrap();
+        let rs = [parsed];
+        let mut state = HashMap::new();
+        assert!(evaluate(&m(&[("channel:temperature_1", 35.0)]), &rs, &mut state, 0).is_empty());
+        assert!(evaluate(&m(&[]), &rs, &mut state, 60).is_empty());
+        assert!(evaluate(&m(&[("channel:temperature_1", 35.0)]), &rs, &mut state, 120).is_empty());
+        assert_eq!(evaluate(&m(&[("channel:temperature_1", 35.0)]), &rs, &mut state, 240).len(), 1);
+        assert!(state["greenhouse-alert"].latched);
+        assert!(evaluate(&m(&[("channel:temperature_1", 35.0)]), &rs, &mut state, 300).is_empty());
+        assert!(!allowed_metric("channel:bad name"));
+        assert!(!allowed_metric("channel:"));
+        let (label, unit, _) = channel_description("channel:soil_moisture_1", "%");
+        assert_eq!(label, "Soil moisture 1");
+        assert_eq!(unit, " %");
+    }
+
+    #[test]
+    fn channel_metrics_ignore_stale_future_invalid_and_excluded_readings() {
+        let conn = store::open(std::path::Path::new(":memory:")).unwrap();
+        let now = 1_700_000_000i64;
+        for ts in [now - 700, now - 100, now - 50, now + 1] {
+            let mut row = vec![None; 19]; row[0] = Some(ts as f64);
+            assert!(store::insert(&conn, &row, 0));
+        }
+        for (ts, name, value, unit) in [
+            (now - 100, "temperature_1", 35.0, "°C"),
+            (now - 100, "soil_moisture_1", 20.0, "%"),
+            (now - 700, "stale", 1.0, "%"),
+            (now + 1, "future", 1.0, "%"),
+            (now - 100, "invalid", 1.0, "madeup"),
+            (now - 100, "battery_bad", 2.0, "low"),
+            (now - 100, "bad name", 1.0, "%"),
+        ] {
+            conn.execute("INSERT INTO channels VALUES (?1,?2,?3,?4)", rusqlite::params![ts,name,value,unit]).unwrap();
+        }
+        let readings = channel_metrics(&conn, now);
+        assert_eq!(readings.len(), 2);
+        assert_eq!(readings["channel:temperature_1"], (35.0, "°C".into(), now - 100));
+        assert!(channel_metrics(&conn, now + 701).is_empty());
+        conn.execute("INSERT INTO notes(ts,until,kind,text) VALUES (?1,?1,'exclude','Sensor maintenance')", [now - 100]).unwrap();
+        assert!(channel_metrics(&conn, now).is_empty(), "excluded observations cannot trigger a sensor rule");
+    }
+
+    #[test]
+    fn standalone_sensor_channels_fire_without_weather_observations() {
+        let conn = store::open(std::path::Path::new(":memory:")).unwrap();
+        let now = 1_700_000_000i64;
+        conn.execute("INSERT INTO channels VALUES (?1,'pm25',42.0,'µg/m³')", [now - 30]).unwrap();
+        let readings = channel_metrics(&conn, now);
+        let values = readings.iter().map(|(key, (value, _, _))| (key.as_str(), *value)).collect();
+        let rs = [rule("channel:pm25", ">", 35.0, 0.0)];
+        assert_eq!(evaluate(&values, &rs, &mut HashMap::new(), now).len(), 1);
+        conn.execute("INSERT INTO notes(ts,until,kind,text) VALUES (?1,?2,'exclude','Air sensor fault')", [now - 60, now]).unwrap();
+        let excluded = channel_metrics(&conn, now);
+        let values = excluded.iter().map(|(key, (value, _, _))| (key.as_str(), *value)).collect();
+        assert!(evaluate(&values, &rs, &mut HashMap::new(), now).is_empty());
+    }
+
     fn warning(event: &str, area: &str, sev: &str) -> serde_json::Value {
         serde_json::json!({ "properties": { "event": event, "areaDesc": area, "severity": sev } })
     }
@@ -905,6 +1112,138 @@ mod tests {
             "severe",
         );
         assert_eq!(g["category"], "severe");
+    }
+
+    #[test]
+    fn hold_duration_needs_new_samples_and_the_older_compound_input() {
+        let mut r = rule("temp", ">", 30.0, 2.0);
+        r.metric2 = Some("channel:temperature_1".into());
+        r.value2 = Some(30.0);
+        let rs = [r];
+        let values = m(&[("temp", 35.0), ("channel:temperature_1", 35.0)]);
+        let mut stamps = HashMap::from([("temp", 1000), ("channel:temperature_1", 1000)]);
+        let mut state = HashMap::new();
+        assert!(evaluate_samples(&values, &rs, &mut state, 1000, Some(&stamps)).is_empty());
+        stamps.insert("temp", 1120);
+        assert!(evaluate_samples(&values, &rs, &mut state, 1120, Some(&stamps)).is_empty());
+        assert!(evaluate_samples(&values, &rs, &mut state, 1240, Some(&stamps)).is_empty());
+        stamps.insert("channel:temperature_1", 1120);
+        assert_eq!(evaluate_samples(&values, &rs, &mut state, 1240, Some(&stamps)).len(), 1);
+        let mut state = HashMap::new();
+        evaluate_samples(&values, &rs, &mut state, 1120, Some(&stamps));
+        assert!(evaluate_samples(&values, &rs, &mut state, 1721, Some(&stamps)).is_empty());
+        assert!(state["legacy-0"].since.is_none(), "stale data resets duration");
+        stamps.insert("temp", 1721);
+        stamps.insert("channel:temperature_1", 1721);
+        assert!(evaluate_samples(&values, &rs, &mut state, 1721, Some(&stamps)).is_empty());
+        stamps.remove("channel:temperature_1");
+        evaluate_samples(&values, &rs, &mut state, 1781, Some(&stamps));
+        assert!(state["legacy-0"].since.is_none(), "missing companion timestamp resets duration");
+        // On first evaluation the newer input marks when both conditions are known.
+        let mut state = HashMap::new();
+        let mut stamps = HashMap::from([("temp", 1000), ("channel:temperature_1", 1060)]);
+        evaluate_samples(&values, &rs, &mut state, 1060, Some(&stamps));
+        stamps.insert("temp", 1120);
+        stamps.insert("channel:temperature_1", 1120);
+        assert!(evaluate_samples(&values, &rs, &mut state, 1120, Some(&stamps)).is_empty());
+        stamps.insert("temp", 1180);
+        stamps.insert("channel:temperature_1", 1180);
+        assert_eq!(evaluate_samples(&values, &rs, &mut state, 1180, Some(&stamps)).len(), 1);
+    }
+
+    #[test]
+    fn forecast_holds_use_acquisitions_instead_of_repeated_cached_ticks() {
+        let rs = [rule("low18h", "<", 0.0, 10.0)];
+        let mut state = HashMap::new();
+        let values = m(&[("low18h", -2.0)]);
+        let mut stamps = HashMap::from([("low18h", 1000)]);
+        assert!(evaluate_samples(&values, &rs, &mut state, 1000, Some(&stamps)).is_empty());
+        assert!(evaluate_samples(&values, &rs, &mut state, 1600, Some(&stamps)).is_empty());
+        stamps.insert("low18h", 1900);
+        assert_eq!(evaluate_samples(&values, &rs, &mut state, 1900, Some(&stamps)).len(), 1);
+    }
+
+    fn test_config(label: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("stormdesk-alerts-{label}-{}-{}.json",
+            std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::write(&path, serde_json::json!({"settings":{
+            "stationSource":"ecowitt", "ecowittMac":"AABBCCDDEE01", "lat":40, "lon":-90, "units":"metric"
+        }}).to_string()).unwrap();
+        path
+    }
+
+    #[test]
+    fn context_changes_clear_latches_and_warnings_and_reject_inflight_forecasts() {
+        let cfg = test_config("context");
+        let context = alert_context(&cfg).unwrap();
+        let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        config["settings"]["theme"] = "dark".into();
+        std::fs::write(&cfg, config.to_string()).unwrap();
+        assert!(context_current(&cfg, &context), "theme does not reset warnings");
+        for (key, value) in [
+            ("ecowittMac", serde_json::json!("AABBCCDDEE02")),
+            ("lat", serde_json::json!(45)), ("lon", serde_json::json!(-95)),
+            ("units", serde_json::json!("imperial")), ("windUnit", serde_json::json!("kt")),
+            ("rules", serde_json::json!([])), ("alertRegion", serde_json::json!("CA")),
+            ("webhookUrl", serde_json::json!("https://example.invalid/new")),
+        ] {
+            let mut changed = config.clone();
+            changed["settings"][key] = value;
+            std::fs::write(&cfg, changed.to_string()).unwrap();
+            let mut state = HashMap::from([("x".into(), Latch::default())]);
+            let mut seen = std::collections::HashSet::from(["warning".into()]);
+            assert!(!check_context(&cfg, &context, &mut state, &mut seen), "{key}");
+            assert!(state.is_empty() && seen.is_empty());
+        }
+        std::fs::write(&cfg, config.to_string()).unwrap();
+        let (_, result) = forecast_metrics_with(&cfg, &context, |_| {
+            config["settings"]["units"] = "imperial".into();
+            std::fs::write(&cfg, config.to_string()).unwrap();
+            Some(serde_json::json!({"daily":{"temperature_2m_max":[1,40]}}))
+        });
+        assert!(result.is_empty(), "response belongs to the old unit/location context");
+        let changed_context = alert_context(&cfg).unwrap();
+        let (at, values) = forecast_metrics_with(&cfg, &changed_context, |_| {
+            Some(serde_json::json!({"daily":{"temperature_2m_max":[1,40]}}))
+        });
+        assert_eq!(values["hiTomorrow"], 104.0);
+        let cached = ForecastCache { context: changed_context.clone(), at, values };
+        assert!(cached.matches(&changed_context, at + 60));
+        assert!(!cached.matches(&context, at + 60));
+        assert!(!cached.matches(&changed_context, at + 900));
+        std::fs::remove_file(cfg).unwrap();
+    }
+
+    #[test]
+    fn station_change_during_ntfy_cancels_later_delivery_destinations() {
+        use std::io::{Read, Write};
+        let cfg = test_config("push");
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let mut config: serde_json::Value = serde_json::from_slice(&std::fs::read(&cfg).unwrap()).unwrap();
+        config["settings"]["ntfyUrl"] = base.clone().into();
+        config["settings"]["ntfyTopic"] = "test".into();
+        config["settings"]["webhookUrl"] = format!("{base}/hook").into();
+        std::fs::write(&cfg, config.to_string()).unwrap();
+        let context = alert_context(&cfg).unwrap();
+        let thread_cfg = cfg.clone();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            let mut request = [0; 4096];
+            stream.read(&mut request).unwrap();
+            config["settings"]["ecowittMac"] = "AABBCCDDEE02".into();
+            std::fs::write(thread_cfg, config.to_string()).unwrap();
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+            listener
+        });
+        let result = push_checked(&cfg, &context, "rule", "Test", "Reading");
+        let listener = server.join().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        assert_eq!(result["channels"]["ntfy"]["ok"], true);
+        assert!(result["channels"].get("webhook").is_none());
+        assert_eq!(listener.accept().unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+        std::fs::remove_file(cfg).unwrap();
     }
 
     #[test]

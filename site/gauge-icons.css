@@ -1,0 +1,46 @@
+.wx-icon{--wx:#a7d5ee;display:inline-grid;place-items:center;position:relative;isolation:isolate;width:48px;height:48px;flex:none;color:var(--wx);vertical-align:middle}
+.wx-icon svg{display:block;width:100%;height:100%;overflow:visible}
+.wx-icon .solid{fill:color-mix(in srgb,var(--wx) 12%,transparent)}
+.wx-icon .rain{animation:wx-rain 1.8s ease-in-out infinite}
+.wx-icon .wind{animation:wx-wind 3.4s ease-in-out infinite}
+.wx-icon .bolt{animation:wx-glow 4s ease-in-out infinite}
+.wx-icon .sun{transform-box:fill-box;transform-origin:center;animation:wx-spin 28s linear infinite}
+.wx-icon .needle{transform-origin:24px 28px;animation:wx-needle 5s ease-in-out infinite alternate}
+.wx-icon .heat,.wx-icon .water,.wx-icon .dew{animation:wx-water 3.6s ease-in-out infinite alternate}
+.wx-chrome{border-radius:14px;background:linear-gradient(140deg,#65727b 0%,#242d34 24%,#10171d 58%,#35444f 100%);box-shadow:inset 0 1px 1px #d5e4ef85,inset 0 -1px 1px #000,0 4px 8px #0005;color:#e2edf4;padding:7px}
+.wx-chrome .solid{fill:#94bbd04a;stroke:#d6e9f4}
+.wx-chrome::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(115deg,transparent 30%,#e2f6ff25 45%,#fff5 48%,transparent 60%);background-size:300% 100%;animation:wx-sheen 6s ease-in-out infinite;pointer-events:none}
+.wx-chrome svg{filter:drop-shadow(0 1px 1px #000)}
+.wx-neon{color:#8fdded}
+.wx-neon svg{stroke-width:1.65;filter:drop-shadow(0 0 4px #76cbdc6b)}
+.wx-neon .solid{fill:#81d8ed09}
+.wx-neon .wind{stroke-dasharray:12 3;animation:wx-flow 4s linear infinite}
+.wx-dial{color:#d9e3e7;border-radius:50%;background:radial-gradient(circle at 35% 25%,#313d44,#0c1216 80%);box-shadow:0 2px 8px #0006}
+.wx-dial .weather-shape{transform:translate(12px,12px) scale(.5);stroke-width:2.8}
+.wx-dial .dial-track{stroke:#677780;stroke-width:.7}
+.wx-dial .dial-ticks{stroke:#b6c4cb;stroke-width:2.8;stroke-dasharray:.7 4.4;opacity:.65}
+.wx-dial .sweep{stroke:var(--wx);stroke-width:2;transform-origin:24px 24px;animation:wx-dial 8s ease-in-out infinite alternate}
+.wx-orbit{border-radius:50%;padding:8px;background:radial-gradient(circle at 28% 22%,#e3f7ff45,transparent 27%),radial-gradient(circle at 50% 85%,color-mix(in srgb,var(--wx) 25%,transparent),#18232c 70%);box-shadow:inset 0 0 0 1px #c3e5f63b,inset 0 -4px 10px #0006,0 4px 10px #0005}
+.wx-orbit::after{content:"";position:absolute;inset:-3px;border:1px solid #bedbe526;border-top-color:var(--wx);border-right-color:transparent;border-radius:50%;animation:wx-spin 9s linear infinite}
+.wx-orbit::before{content:"";position:absolute;inset:3px;border-radius:50%;border-top:1px solid #ecfaff7a;pointer-events:none}
+.wx-orbit svg{stroke-width:2;filter:drop-shadow(0 1px 3px #0008)}
+.wx-pixel{background:radial-gradient(#829ba129 .6px,transparent .8px);background-size:5px 5px;border-radius:4px;overflow:hidden}
+.wx-pixel svg{fill:var(--wx);stroke:none;shape-rendering:crispEdges;animation:wx-pixel 3.6s steps(2,end) infinite}
+.wx-pixel::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 42%,#d9ffff38 49%,transparent 56%);background-size:100% 300%;animation:wx-scan 4s linear infinite}
+.wx-unavailable{opacity:.4;filter:grayscale(1)}
+.wx-unavailable *,.wx-unavailable::after,.wx-unavailable::before,.wx-motion-paused .wx-icon *,.wx-motion-paused .wx-icon::after,.wx-motion-paused .wx-icon::before{animation-play-state:paused!important}
+@keyframes wx-rain{0%,100%{transform:translateY(-1px);opacity:.55}55%{transform:translateY(3px);opacity:1}}
+@keyframes wx-wind{0%,100%{transform:translateX(-1.5px)}50%{transform:translateX(2px)}}
+@keyframes wx-flow{to{stroke-dashoffset:-60}}
+@keyframes wx-glow{0%,100%{opacity:.65}50%{opacity:1;fill:color-mix(in srgb,var(--wx) 40%,transparent)}}
+@keyframes wx-spin{to{transform:rotate(360deg)}}
+@keyframes wx-needle{from{transform:rotate(-12deg)}to{transform:rotate(10deg)}}
+@keyframes wx-dial{from{transform:rotate(-110deg)}to{transform:rotate(100deg)}}
+@keyframes wx-water{from{opacity:.55;transform:translateY(1px)}to{opacity:1;transform:translateY(-1px)}}
+@keyframes wx-sheen{0%,25%{background-position:100% 0}75%,100%{background-position:0 0}}
+@keyframes wx-pixel{0%,100%{opacity:.65;transform:translateY(0)}50%{opacity:1;transform:translateY(-1px)}}
+@keyframes wx-scan{from{background-position:0 0}to{background-position:0 100%}}
+@media(prefers-reduced-motion:reduce){.wx-icon *,.wx-icon::before,.wx-icon::after{animation:none!important}}
+
+html:not([data-motion="full"]) .wx-icon *, html:not([data-motion="full"]) .wx-icon::before, html:not([data-motion="full"]) .wx-icon::after,
+html[data-gauges-paused] .wx-icon *, html[data-gauges-paused] .wx-icon::before, html[data-gauges-paused] .wx-icon::after {animation:none!important}

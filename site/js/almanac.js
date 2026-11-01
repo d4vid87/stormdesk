@@ -113,7 +113,7 @@ function coverageNote() {
   if (!coverage) return '';
   const state = coverage.backfill === 'running'
     ? 'still fetching older observations from WeatherFlow'
-    : coverage.backfill === 'done' ? 'backfilled from WeatherFlow' : 'from this app only';
+    : ['done', 'complete'].includes(coverage.backfill) ? 'backfilled from WeatherFlow' : 'from this app only';
   return `<div><span>Archive</span><span class="muted">${num(coverage.count)} observations · ${state}</span></div>`;
 }
 
