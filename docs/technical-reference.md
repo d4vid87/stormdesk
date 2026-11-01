@@ -34,7 +34,7 @@ Settings now opens to a searchable home with six category cards: Everyday, Appea
 
 Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [theme screenshots](../README.md#screenshots).
 
-These screenshots and layout notes describe the current web/source UI. The latest packaged release is **4.5.2**; an existing downloaded installer may show the earlier interface until it updates.
+The latest packaged release is **4.6.1**, including the radar-first layout and all five gauge icon styles. Screenshots may illustrate an earlier layout; existing installations receive the new interface when updated.
 
 The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Radar → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 
