@@ -346,6 +346,7 @@ export function shapeOm(j, ownTuple = null) {
   const i0 = next < 0 ? Math.max(0, times.length - 1) : Math.max(0, next - 1);
   const at = (k) => (H[k] ? H[k][i0] : null);
   const inHg = (hpa) => (hpa == null ? null : metric ? hpa : hpa * 0.02953);
+  const metres = (key, value) => value == null ? null : j.hourly_units?.[key] === 'ft' ? value / 3.28084 : value;
 
   const daily = (D.time || []).map((t, i) => {
     const code = D.weather_code?.[i];
@@ -370,7 +371,7 @@ export function shapeOm(j, ownTuple = null) {
     relative_humidity: H.relative_humidity_2m?.[i],
     feels_like: H.apparent_temperature?.[i],
     cloud_cover: H.cloud_cover?.[i],
-    freezing_level: H.freezing_level_height?.[i],
+    freezing_level: metres('freezing_level_height', H.freezing_level_height?.[i]),
     precip: H.precipitation?.[i],
     precip_probability: H.precipitation_probability?.[i],
     wind_avg: H.wind_speed_10m?.[i],
@@ -401,10 +402,10 @@ export function shapeOm(j, ownTuple = null) {
     uv: at('uv_index'),
     solar_radiation: at('shortwave_radiation'),
     wet_bulb_temperature: at('wet_bulb_temperature_2m'),
-    // metres, whatever the unit params say — open-meteo doesn't convert this one. Hero converts.
-    visibility: at('visibility'),
+    // Normalize provider feet/metres once; every display converts from metres.
+    visibility: metres('visibility', at('visibility')),
     cloud_cover: at('cloud_cover'),
-    freezing_level: at('freezing_level_height'),
+    freezing_level: metres('freezing_level_height', at('freezing_level_height')),
     // FAA convective cloud-base approximation; model estimate in metres AGL, not a measured ceiling.
     cloud_base_estimate: Number.isFinite(cur.temperature_2m) && Number.isFinite(cur.dew_point_2m)
       ? Math.max(0, (cur.temperature_2m - cur.dew_point_2m) / (metric ? 1 : 1.8) * 125) : null,
