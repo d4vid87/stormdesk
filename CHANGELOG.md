@@ -6,7 +6,10 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
-## [4.6.0] - 2026-10-31
+## [4.6.1] - 2026-10-31
+
+### Fixed
+- Update stable Tauri plugins, TLS verification libraries, root certificates and ZIP handling to remove the release audit's vulnerability findings. MQTT uses verified native TLS with the operating system's certificate store; Linux distributions include the OpenSSL 3 runtime.
 
 ### Changed
 - Radar-first Graphite interface with compact live gauges integrated above the official HookEcho viewer at app.hookecho.io. Current conditions stay above the map; forecasts and local signals remain below it.

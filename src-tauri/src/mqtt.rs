@@ -321,7 +321,7 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
         opts.set_credentials(c.user.clone(), c.pass.clone());
     }
     if tls {
-        opts.set_transport(rumqttc::Transport::tls_with_default_config());
+        opts.set_transport(rumqttc::Transport::tls_with_config(rumqttc::TlsConfiguration::Native));
     }
     // The broker says we are gone the moment this process does, so Home Assistant shows the
     // sensors unavailable instead of serving a frozen reading forever.
@@ -429,7 +429,7 @@ pub fn probe(cfg_path: &std::path::Path) -> (bool, String) {
         opts.set_credentials(c.user.clone(), c.pass.clone());
     }
     if tls {
-        opts.set_transport(rumqttc::Transport::tls_with_default_config());
+        opts.set_transport(rumqttc::Transport::tls_with_config(rumqttc::TlsConfiguration::Native));
     }
     let (client, mut connection) = Client::new(opts, 8);
     let _ = client.publish(

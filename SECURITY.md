@@ -142,6 +142,14 @@ network on a cold checkout — `cargo fetch` first. The greps need neither.
 
 [share]: README.md#sharing-a-read-only-dashboard
 
+### October 31, 2026 release audit
+
+StormDesk 4.6.1 upgrades the stable Tauri plugins (including the updater), rustls, rustls-webpki and bundled root certificates. This removes the reported TLS and ZIP extraction vulnerabilities. MQTT now uses rumqttc's native TLS backend and the operating system's certificate store; certificate and hostname verification remain enabled. Linux packages and containers include the OpenSSL 3 runtime.
+
+The old rustls-webpki 0.102, rustls-pemfile and unic dependency paths are gone, so their exceptions have been removed. The historical analysis below describes earlier releases, not the 4.6.1 dependency tree.
+
+Three maintenance notices remain accepted: RUSTSEC-2026-0370, -0371 and -0372. They cover zvariant, zbus_names and zvariant_derive merging into zbus 6. Current stable Tauri notification/single-instance dependencies still use zbus 5. These advisories report maintenance status, not a vulnerability. Keep the specific exceptions only until stable upstream plugins migrate; do not ignore future vulnerability reports on these crates.
+
 ### The 2026-08 advisory batch — three more rustls-webpki findings, and a wall of "unmaintained"
 
 The advisories run on `main` started failing on 2026-08-26 when the RustSec database grew a

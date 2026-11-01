@@ -12,7 +12,7 @@ WORKDIR /src/src-tauri
 RUN cargo build --release --no-default-features --bin stormdesk
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/src-tauri/target/release/stormdesk /usr/local/bin/stormdesk
 # The uid is fixed at 1000:1000 so a bind mount can be matched from the host.
