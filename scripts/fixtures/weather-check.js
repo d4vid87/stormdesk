@@ -32,12 +32,8 @@ try {
   document.querySelector('[data-metric="dew"]').click();
   check($('detail-blurb').textContent.includes('Forecast estimate'), 'Unmeasured fields retain forecast provenance');
   $('detail-close').click();
-  $('advanced-outlook').open=true;
-  $('c48').scrollIntoView();
-  await wait(); await wait();
-  check(requests.some(u=>u.includes('ensemble-api')), 'Opening visible outlook fetches ensemble data');
-  check($('c48-temp').querySelector('svg'), 'Opening outlook paints its chart');
-  $('advanced-outlook').open=false;
+  check(['advanced-outlook','observatory-signals','activity-planner'].every(id => getComputedStyle($(id)).display === 'none'), 'Retired Weather sections are not displayed');
+  check(!requests.some(u=>u.includes('ensemble-api')), 'Removed model section performs no hidden ensemble work');
   document.querySelector('.tab[data-section="data"]').click();
   $('history-range').value='24'; $('history-range').dispatchEvent(new Event('change',{bubbles:true}));
   $('history-compare').value='previous'; await refreshBoards();
