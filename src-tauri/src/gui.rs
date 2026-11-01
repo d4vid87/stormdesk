@@ -255,6 +255,9 @@ pub fn run() {
                 // server's port moves when the configured one is taken, and WebKit keys
                 // localStorage per origin, so a moving port would wipe the token and layout on
                 // every restart.
+                let software_renderer = cfg!(target_os = "linux")
+                    && ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"].iter()
+                        .any(|key| std::env::var(key).as_deref() == Ok("1"));
                 win = win
                     .title(format!("StormDesk — tablet: http://{}:{}", crate::server::lan_ip(), port))
                     .inner_size(1280.0, 800.0)
@@ -263,7 +266,7 @@ pub fn run() {
                     .maximized(cfg!(target_os = "linux") && !is_hyprland_session())
                     // the window isn't same-origin with the LAN server, so it needs the port told to it
                     .initialization_script(format!(
-                        "window.__WD_UDP='http://localhost:{port}/udp';window.__WD_SRV='http://localhost:{port}';{};",
+                        "window.__WD_UDP='http://localhost:{port}/udp';window.__WD_SRV='http://localhost:{port}';window.__WD_SOFTWARE_RENDERER={software_renderer};{};",
                         crate::server::ver_script()
                     ));
             }

@@ -177,6 +177,10 @@ addEventListener('load', () => {
     await document.fonts.ready;
     await settle();
     const desk = document.getElementById('desk');
+    const thumbnails = [...document.querySelectorAll('#daycards .dc-icon img, #forecast-hourly .fd-icon img, #forecast-precip .fd-icon img')];
+    console.assert(thumbnails.length >= 10 && thumbnails.every(img => img.getAttribute('src').includes('icons/static/')), 'Forecast thumbnails do not run separate SVG animation timelines');
+    console.assert((getComputedStyle(document.querySelector('#daycards .dc-icon')).animationName !== 'none') === animatedSky, 'Forecast cards retain motion without animated SVG documents');
+    console.assert((getComputedStyle(document.querySelector('.fd-hour[aria-pressed="true"] .fd-icon')).animationName !== 'none') === animatedSky, 'Selected hour animation respects motion preference');
     console.assert(desk.scrollWidth <= desk.clientWidth + 1, 'Forecast desk stays within the browser width');
     if (innerWidth >= 1350 && innerHeight >= 900) {
       console.assert([...document.querySelectorAll('#daycards > .daycard')].every(card => card.getBoundingClientRect().bottom <= innerHeight), 'All ten forecast days remain above the fold on desktop');

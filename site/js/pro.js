@@ -356,7 +356,8 @@ function renderDays(fc) {
     setText(card.querySelector('.dc-name'), labels[i] || date.toLocaleDateString([], { weekday: 'short' }));
     setText(card.querySelector('.dc-date'), date.toLocaleDateString([], { month: 'short', day: 'numeric' }));
     setArc(card.querySelector('[data-arc]'), d.air_temp_low, d.air_temp_high);
-    setWx(card.querySelector('.dc-icon'), d.icon, 30);
+    // Let the card supply motion without a separate SVG animation timeline for every day.
+    setWx(card.querySelector('.dc-icon'), d.icon, 30, true);
     tweenNumber(card.querySelector('.dc-temp b'), d.air_temp_high, (v) => `${num(v)}°`);
     tweenNumber(card.querySelector('.dc-temp span'), d.air_temp_low, (v) => `${num(v)}°`);
     setText(card.querySelector('.dc-cond'), d.conditions || '');
@@ -378,11 +379,11 @@ function renderDays(fc) {
 
 // An icon written only when the key actually changed: assigning the same markup (or the same
 // <img src>) restarts the animation, and the hero used to do that once a minute.
-function setWx(box, key, size) {
-  const want = `${key}|${document.documentElement.dataset.motion}`;
+function setWx(box, key, size, still = false) {
+  const want = `${key}|${document.documentElement.dataset.motion}|${still}`;
   if (!box || box.dataset.wx === want) return;
   box.dataset.wx = want;
-  box.innerHTML = icon.wx(key, size);
+  box.innerHTML = icon.wx(key, size, still);
 }
 
 // ---------- dial gauges ----------

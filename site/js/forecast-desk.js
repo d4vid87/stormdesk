@@ -48,7 +48,7 @@ const node = (tag, className, text) => {
   if (text != null) el.textContent = text;
   return el;
 };
-const icon = key => { const el = node('span', 'fd-icon'); el.setAttribute('aria-hidden', 'true'); el.innerHTML = wx(key, 58); return el; };
+const icon = key => { const el = node('span', 'fd-icon'); el.setAttribute('aria-hidden', 'true'); el.innerHTML = wx(key, 58, true); return el; };
 const time = timeStr;
 const chance = n => Number.isFinite(n) ? `${num(n)}%` : '—';
 

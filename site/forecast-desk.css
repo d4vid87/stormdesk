@@ -96,6 +96,10 @@ html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-
 .fd-hour-grid { display:grid; grid-template-columns:90px repeat(var(--hours,8),minmax(0,1fr)); align-items:stretch; }
 .fd-hour-grid > p { grid-column:1/-1; }
 .fd-hour { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:8px 2px; border:0; border-top:2px solid transparent; border-radius:6px 6px 0 0; background:none; color:var(--text); font:inherit; cursor:pointer; }
+/* Animate the selected thumbnail as one layer instead of ticking a separate SVG document per hour. */
+@media(prefers-reduced-motion:no-preference) {
+  html[data-motion="full"]:not([data-gauges-paused]) .fd-hour[aria-pressed=true] .fd-icon { animation:forecast-float 5s ease-in-out infinite; }
+}
 .fd-hour[aria-pressed=true] { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); border-color:var(--accent); }
 .fd-hour > span:first-child { font-size:calc(11 * var(--fd-text)); }
 .fd-hour strong { font:500 calc(29 * var(--fd-reading)) var(--num); }

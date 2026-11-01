@@ -185,6 +185,15 @@ export function coords() {
   return p ? { lat: p.lat, lon: p.lon, name: p.name } : { lat: _settings.lat, lon: _settings.lon, name: _settings.stationName };
 }
 
+// Shared geography belongs here; importing the startup module runs the application again.
+export function milesBetween(aLat, aLon, bLat, bLon) {
+  const rad = Math.PI / 180, R = 3958.8;
+  const dLat = (bLat - aLat) * rad, dLon = (bLon - aLon) * rad;
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
 // --- formatting helpers ---
 
 // Wind is the one unit people override: a sailor wants knots on an otherwise imperial

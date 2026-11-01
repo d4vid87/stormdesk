@@ -38,6 +38,7 @@ jobs:
       - run: node marketing/tests/carbon-preview.mjs
       - run: node marketing/tests/color-studio.mjs
       - run: node scripts/check-shell-cache.mjs
+      - run: node scripts/check-startup.mjs
       - run: node scripts/check-scheduler.mjs
       - run: node scripts/check-weather-context.mjs
       - run: node scripts/check-forecast-desk.mjs

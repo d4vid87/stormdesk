@@ -1,9 +1,9 @@
 import { organizeSettings, updateSettingsHome } from './settings-home.js';
 import { safeMode } from './compat.js';
 import { testVoice } from './app.js';
-import './storm-watch.js?v=signal-20260923d';
+import './storm-watch.js';
 // Wire the shell: settings drawer, diagnostics, nav, section modules.
-import { settings, saveSettings, sharedSettings, LOCAL_SETTING_KEYS, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob } from './app.js';
+import { settings, saveSettings, sharedSettings, LOCAL_SETTING_KEYS, configured, hasSource, hasLocation, initNav, applyTabs, fullscreen, holdScreen, refreshAll, notify, load, store, applyEco, ecoOn, initKiosk, expires, num, U, msToWind, windToMs, setServerAlerts, alertsAreServerSide, every, clearJob, milesBetween } from './app.js';
 import * as api from './api.js';
 import { motionLevel } from './motion.js';
 import { initDesk, refreshDesk, refreshObs, refreshAlerts, refreshAqi } from './desk.js';
@@ -13,7 +13,7 @@ import { initAlmanac } from './almanac.js';
 import { initRules, renderRules } from './rules.js';
 import { initEnv } from './env.js';
 import { initPlaces, renderPlaces } from './places.js';
-import { initPro } from './pro.js?v=clear-list-20260926';
+import { initPro } from './pro.js';
 import { initLayout, snapshot, restore, hiddenPanels, unhide, panelIds, tabOf, setTab, TABS, NEVER_HIDE } from './layout.js';
 import { initUdp } from './udp.js';
 import { initOutlook } from './outlook.js';
@@ -147,6 +147,7 @@ export function mayPush(pulled = rev !== null) {
 let pendingSettings = {};
 async function pushConfig(retried = false) {
   if (syncing || PUBLIC || !mayPush()) return false;
+  clearTimeout(pushTimer);
   const changed = pendingSettings;
   pendingSettings = {};
   const r = await fetch(`${SRV}/config`, {
@@ -158,7 +159,11 @@ async function pushConfig(retried = false) {
   const j = await r.json().catch(() => null);
   if (r.status === 409 && j && !retried) {
     rev = j._rev;
-    if (j.settings) saveSettings({ ...sharedSettings(j.settings), ...changed });
+    // Applying a server conflict must not schedule another save of the same settings.
+    const wasSyncing = syncing;
+    syncing = true;
+    try { if (j.settings) saveSettings({ ...sharedSettings(j.settings), ...changed }); }
+    finally { syncing = wasSyncing; }
     pendingSettings = { ...changed, ...pendingSettings };
     return pushConfig(true);
   }
@@ -1372,15 +1377,6 @@ const RADAR = 'https://app.hookecho.io/';
 // for nothing.
 let SITES = [];
 fetch('sites.json').then((r) => r.json()).then((j) => { SITES = j; fillSites(); }).catch(() => {});
-
-// Great-circle distance in miles. Site spacing is ~100 mi, so a spherical earth is plenty.
-export function milesBetween(aLat, aLon, bLat, bLon) {
-  const rad = Math.PI / 180, R = 3958.8;
-  const dLat = (bLat - aLat) * rad, dLon = (bLon - aLon) * rad;
-  const h = Math.sin(dLat / 2) ** 2
-    + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(h));
-}
 
 export function nearestSite(lat, lon, sites = SITES) {
   let best = null, bestD = Infinity;

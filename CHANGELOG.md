@@ -9,7 +9,12 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 ## [4.8.1] - 2026-11-01
 
 ### Fixed
-- Remove repeated blur passes around animated forecast and Orbit Glass icons; retain their animations and use a static forecast glow.
+- Start the application once: nearby-station distance calculations no longer import the startup module under a second URL. Stop conflicting settings saves and repeated dashboard rebuilds.
+- Cancel duplicate scheduled settings saves and prevent conflict resolution from scheduling another save.
+- Let Auto motion select lighter effects when the Linux desktop uses software rendering. Explicit Full motion remains available.
+- Include the GStreamer plugins needed by locally built AppImages.
+- Animate forecast thumbnails as whole layers instead of running a separate SVG animation timeline in every day and hour. Keep the animated current-weather icon, Orbit Glass gauges and motion preferences.
+- Remove repeated blur passes around forecast and Orbit Glass icons; use a static forecast glow.
 - Scale Forecast desk readings and columns to the browser window, including ultrawide displays.
 - Keep capable browsers on the full dashboard after a refresh or interrupted load; retain the explicit Lite view and appliance compatibility routing.
 

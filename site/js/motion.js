@@ -23,7 +23,8 @@ export function motionLevel() {
   if (REDUCED?.matches || settings().palette === 'eink') return 'off';
   const m = settings().motion || 'auto';
   if (m !== 'auto') return m;
-  return ecoOn() ? 'lite' : 'full';
+  // A fast CPU can still have a software-only WebKit renderer (notably NVIDIA AppImages).
+  return ecoOn() || window.__WD_SOFTWARE_RENDERER ? 'lite' : 'full';
 }
 
 export function applyMotion() {

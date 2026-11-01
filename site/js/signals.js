@@ -1,7 +1,6 @@
 // 03 Local Signals — nearby public Tempest stations vs yours, plus the live websocket feed.
 import * as api from './api.js';
-import { settings, saveSettings, configured, hasSource, U, num, deg2compass, every, notify, store, load, notifHistory, timeStr, msToWind } from './app.js';
-import { milesBetween } from './boot.js';
+import { settings, saveSettings, configured, hasSource, U, num, deg2compass, every, notify, store, load, notifHistory, timeStr, msToWind, milesBetween } from './app.js';
 
 const $ = (id) => document.getElementById(id);
 
