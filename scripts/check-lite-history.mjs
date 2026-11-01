@@ -56,9 +56,9 @@ try {
   const dom = await capture('/lite/?page=history', ['--virtual-time-budget=5000']);
   assert.match(dom, /hourly samples/, 'History rendered after dynamic import');
   assert.match(dom, /70°F/, 'Saved sample is visible in the chosen unit system');
-  for (const agent of ['Mozilla/5.0 (Linux; Tizen 9.0) Family Hub', 'Mozilla/5.0 (X11; CrOS x86_64) Chrome/130']) {
+  for (const agent of ['Mozilla/5.0 (Linux; Tizen 9.0) Family Hub', 'Mozilla/5.0 SMART-TV']) {
     const routed = await capture('/?page=history', ['--virtual-time-budget=5000', `--user-agent=${agent}`]);
-    assert.match(routed, /<title>Stormdesk Lite<\/title>/, 'Constrained browser opens Lite before full boot');
+    assert.match(routed, /<title>Stormdesk Lite<\/title>/, 'Appliance browser opens Lite before full boot');
     assert.match(routed, /hourly samples/, 'Routed browser retains History');
   }
   const soaked = await capture('/lite/?page=history&soak=1', ['--virtual-time-budget=3610000']);

@@ -1740,7 +1740,6 @@ pulled.then(() => {
     initDesk(); initIntel(); initSignals(); refreshHistoryIfLoaded(); initAlmanac(); initEnv(); initPro(); initDetail(); initUdp(); initHome();
     every('server-alerts', 300, probeServerAlerts);
     (window.__WD_TIMINGS ||= {}).initialDeskRenderMs = Math.round(performance.now());
-    try { localStorage.removeItem('wd.boot.pending'); } catch { /* storage may be disabled */ }
     window.__TAURI__?.core?.invoke('frontend_ready')?.catch(() => {});
   });
 });

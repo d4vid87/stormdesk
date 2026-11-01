@@ -7,7 +7,7 @@ assert.equal(safeMode('Mozilla/5.0 SMART-TV', '?motion=full'), true);
 assert.equal(safeMode('Mozilla/5.0 Android SamsungBrowser/25.0', ''), false);
 assert.equal(safeMode('Mozilla/5.0 Chrome/130', '?safe=1'), true);
 assert.equal(safeMode('Mozilla/5.0 Chrome/130', '?safe=0'), false);
-assert.equal(safeMode('Mozilla/5.0 (X11; CrOS x86_64) Chrome/130', ''), true);
+assert.equal(safeMode('Mozilla/5.0 (X11; CrOS x86_64) Chrome/130', ''), false);
 
 const html = readFileSync('site/index.html', 'utf8');
 const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
@@ -18,13 +18,17 @@ function start(userAgent, search = '', pending = null, capacity = {}) {
   const location = { pathname: '/', search, href: `https://app.mystormdesk.com/${search}`,
     replace: (url) => { destination = String(url); } };
   runInNewContext(bootstrap, { URL, URLSearchParams, Date, JSON, location, navigator: { userAgent, ...capacity },
-    localStorage: { getItem: (key) => memory.get(key) || null, setItem: (key, value) => memory.set(key, value) }, window: {} });
+    localStorage: { getItem: (key) => memory.get(key) || null, setItem: (key, value) => memory.set(key, value),
+      removeItem: (key) => memory.delete(key) }, window: {} });
   return { destination, memory };
 }
 assert.match(start('Mozilla/5.0 (Linux; Tizen) Family Hub').destination, /\/lite\//);
-assert.match(start('Mozilla/5.0 (X11; CrOS x86_64)').destination, /\/lite\//);
+assert.equal(start('Mozilla/5.0 (X11; CrOS x86_64)').destination, '', 'Chromebooks open the full dashboard');
 assert.equal(start('Mozilla/5.0 Android SamsungBrowser/25.0').destination, '');
-assert.match(start('Mozilla/5.0 Chrome/130', '', { started: Date.now() }).destination, /\/lite\//);
-assert.match(start('Mozilla/5.0 Chrome/130', '', null, { deviceMemory: 2, hardwareConcurrency: 4 }).destination, /\/lite\//);
+const interrupted = start('Mozilla/5.0 Chrome/130', '', { started: Date.now() });
+assert.equal(interrupted.destination, '', 'An interrupted or concurrent load must not force Lite');
+assert.equal(interrupted.memory.has('wd.boot.pending'), false, 'Clear the obsolete recovery flag');
+assert.equal(start('Mozilla/5.0 Chrome/130').memory.has('wd.boot.pending'), false, 'Do not mark every load as a failure');
+assert.equal(start('Mozilla/5.0 Chrome/130', '', null, { deviceMemory: 2, hardwareConcurrency: 4 }).destination, '', 'Memory estimates must not force Lite');
 assert.equal(start('Mozilla/5.0 (Linux; Tizen)', '?full=1').destination, '');
 console.log('Browser compatibility checks passed');
