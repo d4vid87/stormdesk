@@ -1472,6 +1472,14 @@ function radarWatchdog() {
 // (radar at every launch on the one machine it hangs). Now the user's saved choice is never
 // touched, and a crash costs nothing.
 let stormOverride = false;
+window.addEventListener('wd:settings', e => {
+  if ('deskRadar' in (e.detail || {})) {
+    // An explicit view choice takes precedence over the current storm override.
+    stormOverride = false;
+    $('set-desk-radar').checked = !!settings().deskRadar;
+    loadDeskRadar();
+  } else if ('stormAuto' in (e.detail || {})) loadDeskRadar();
+});
 window.addEventListener('wd:storm', (e) => {
   if (!settings().stormAuto) return;
   const panel = $('desk-radar');
@@ -1572,7 +1580,14 @@ function loadDeskRadar() {
   // stormAuto re-checked here so switching it off mid-storm hides the radar on drawer close —
   // the wd:storm event that set the override will not fire again until the alert state changes.
   panel.hidden = !(settings().deskRadar || (stormOverride && settings().stormAuto));
+  $('desk').classList.toggle('outlook-view', panel.hidden);
+  $('outlook-astronomy')?.toggleAttribute('hidden', !panel.hidden);
+  document.querySelectorAll('[data-weather-view]').forEach(button => {
+    button.setAttribute('aria-pressed', String((button.dataset.weatherView === 'outlook') === panel.hidden));
+  });
   if (panel.hidden) {
+    loadDeskRadar.cancel?.();
+    radarAlive();
     if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); }
     $('desk-radar-still').hidden = true;
     $('desk-radar-caption').hidden = true;
@@ -1596,6 +1611,7 @@ function loadDeskRadar() {
   loadDeskRadar.armed = true;
 
   const start = () => {
+    if (panel.hidden || !$('desk').classList.contains('active') || !loadDeskRadar.armed) return;
     if (!f.src) { f.src = radarUrl(6.5); radarWatchdog(); }
     panel.classList.add('loaded');
   };
@@ -1609,6 +1625,7 @@ function loadDeskRadar() {
     io.disconnect();
     whenIdle();
   }, { rootMargin: '200px' });
+  loadDeskRadar.cancel = () => io.disconnect();
   io.observe(panel);
 }
 

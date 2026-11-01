@@ -32,7 +32,7 @@ fc._provenance='DEMO DATA · illustrative station readings';
 const observations=Array.from({length:336},(_,i)=>[now-(335-i)*1800,1,2+Math.sin(i/9),4+Math.abs(Math.sin(i/11))*3,180+Math.sin(i/13)*40,3,1012+Math.sin(i/16)*2,22+Math.sin(i/8)*4,60+Math.sin(i/8)*12,20000,3,350,i%50===0?0.4:0,0,0,0,2.71,1,3]);
 const captureTheme=new URLSearchParams(location.search).get('theme');
 const prior=JSON.parse(localStorage.getItem('wd.settings')||'{}');
-localStorage.setItem('wd.settings',JSON.stringify({token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'Fort Worth · DEMO DATA',lat:32.75,lon:-97.33,units:'imperial',theme:'dark',palette:captureTheme||prior.palette||'graphite',deskRadar:true,eco:'off',motion:new URLSearchParams(location.search).get('motion')||'auto',nightDim:false,kioskCycleSec:0,nearbyRadius:0,speakAlerts:false,webNotif:false}));
+localStorage.setItem('wd.settings',JSON.stringify({token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'Fort Worth · DEMO DATA',lat:32.75,lon:-97.33,units:'imperial',theme:'dark',palette:captureTheme||prior.palette||'graphite',deskRadar:prior.deskRadar!==false,eco:'off',motion:new URLSearchParams(location.search).get('motion')||'auto',nightDim:false,kioskCycleSec:0,nearbyRadius:0,speakAlerts:false,webNotif:false}));
 const realFetch=window.fetch.bind(window);
 window.fetch=async (input,options)=>{
  const u=new URL(typeof input==='string'?input:input.url,location.href);
@@ -48,6 +48,13 @@ window.fetch=async (input,options)=>{
  else if(u.origin===location.origin&&u.pathname==='/history/tuples')body={obs:observations};
  else if(u.origin===location.origin&&u.pathname==='/udp')body={device_status:{voltage:2.77,rssi:-62,hub_rssi:-48,uptime:864000,sensor_status:0,_at:now}};
  else if(u.origin===location.origin&&/^\/(config|health|diag|events|history)/.test(u.pathname))return new Response('',{status:404});
+ if(body===fc){
+  const {crossing}=await import('./js/env.js');
+  fc.forecast.daily.forEach(d=>{
+   d.sunrise=Math.floor((crossing(new Date(d.sunrise*1000),32.75,-97.33,-0.833,true)?.getTime()||d.sunrise*1000)/1000);
+   d.sunset=Math.floor((crossing(new Date(d.sunset*1000),32.75,-97.33,-0.833,false)?.getTime()||d.sunset*1000)/1000);
+  });
+ }
  return body===undefined?realFetch(input,options):new Response(JSON.stringify(body),{headers:{'Content-Type':'application/json'}});
 };
 window.WebSocket=class extends EventTarget {constructor(){super();this.readyState=0;}close(){}send(){}};

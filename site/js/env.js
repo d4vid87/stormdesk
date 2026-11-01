@@ -49,12 +49,14 @@ export function crossing(around, lat, lon, deg, rising) {
 
 const hhmm = (d) => (d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--');
 
-function renderSky() {
-  const fc = deskForecast();
+function renderSky(event) {
+  const fc = event?.detail || deskForecast();
   const c = coords();
-  if (!fc || c.lat == null) return;
-  const [today, tomorrow] = fc.forecast.daily;
-  if (!today?.sunrise) return;
+  const [today, tomorrow] = fc?.forecast?.daily || [];
+  if (c.lat == null || c.lon == null || !today?.sunrise || !today?.sunset) {
+    $('sky').innerHTML = '<div class="muted">Sun and twilight times unavailable for this location</div>';
+    return;
+  }
 
   const sunrise = new Date(today.sunrise * 1000);
   const sunset = new Date(today.sunset * 1000);
@@ -63,21 +65,28 @@ function renderSky() {
   const morningGolden = crossing(sunrise, c.lat, c.lon, 6, true);
   const eveningGolden = crossing(sunset, c.lat, c.lon, 6, false);
 
+  const moonToday = moonTimes && moonTimes.lat === c.lat && moonTimes.lon === c.lon && moonTimes.day === moonDay();
   const len = today.sunset - today.sunrise;
   const nextLen = tomorrow?.sunset ? tomorrow.sunset - tomorrow.sunrise : null;
   const delta = nextLen == null ? null : nextLen - len;
   const mins = (s) => `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`;
 
   const rows = [
+    ['Astronomical dawn', hhmm(crossing(sunrise, c.lat, c.lon, -18, true))],
+    ['Nautical dawn', hhmm(crossing(sunrise, c.lat, c.lon, -12, true))],
+    ['Civil dawn', hhmm(crossing(sunrise, c.lat, c.lon, -6, true))],
     ['Sunrise', hhmm(sunrise)],
     ['Golden hour ends', hhmm(morningGolden)],
     ['Golden hour starts', hhmm(eveningGolden)],
     ['Sunset', hhmm(sunset)],
+    ['Civil dusk', hhmm(crossing(sunset, c.lat, c.lon, -6, false))],
+    ['Nautical dusk', hhmm(crossing(sunset, c.lat, c.lon, -12, false))],
+    ['Astronomical dusk', hhmm(crossing(sunset, c.lat, c.lon, -18, false))],
     ['Daylight', mins(len)],
     delta == null ? null
       : ['Tomorrow', `${delta >= 0 ? '+' : '−'}${Math.abs(Math.round(delta / 60))} min`],
-    moonTimes ? ['Moonrise', hhmm(moonTimes.rise)] : null,
-    moonTimes ? ['Moonset', hhmm(moonTimes.set)] : null,
+    ['Moonrise', moonToday ? hhmm(moonTimes.rise) : 'Unavailable'],
+    ['Moonset', moonToday ? hhmm(moonTimes.set) : 'Unavailable'],
   ].filter(Boolean);
   $('sky').innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><span>${v}</span></div>`).join('');
   stamp('sky', 3600);
@@ -88,10 +97,14 @@ function renderSky() {
 // The phase and illumination are already worked out locally in pro.js; only the rise and set
 // times want ephemerides, and one request a day is cheaper than carrying Meeus.
 let moonTimes = null;
+const moonDay = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
 async function loadMoon() {
   const c = coords();
   if (c.lat == null) return;
-  const day = new Date().toISOString().slice(0, 10);
+  const day = moonDay();
   const off = -new Date().getTimezoneOffset();
   const sign = off < 0 ? '-' : '+';
   const offset = `${sign}${String(Math.floor(Math.abs(off) / 60)).padStart(2, '0')}:${String(Math.abs(off) % 60).padStart(2, '0')}`;
@@ -100,6 +113,7 @@ async function loadMoon() {
   if (!r.ok) throw new Error(`${r.status}`);
   const p = (await r.json()).properties || {};
   moonTimes = {
+    lat: c.lat, lon: c.lon, day,
     rise: p.moonrise?.time ? new Date(p.moonrise.time) : null,
     set: p.moonset?.time ? new Date(p.moonset.time) : null,
   };
@@ -410,6 +424,10 @@ if (location.search.includes('selftest')) {
   console.assert(night < 0, 'env: sun is down at midnight');
   const cross = crossing(new Date(Date.UTC(2025, 2, 20, 6, 0)), 51.48, 0, 6, true);
   console.assert(cross && cross.getTime() > Date.UTC(2025, 2, 20, 6, 0), 'env: morning 6° crossing found');
+  const astro = crossing(new Date(Date.UTC(2025, 2, 20, 6)), 51.48, 0, -18, true);
+  const civil = crossing(new Date(Date.UTC(2025, 2, 20, 6)), 51.48, 0, -6, true);
+  console.assert(astro && civil && astro < civil && civil < cross, 'env: astronomical dawn precedes civil dawn and golden hour');
+  console.assert(crossing(new Date(Date.UTC(2025, 5, 21, 6)), 89, 0, -18, true) === null, 'env: polar summer has no astronomical dawn');
   // 20/30°C day = mean 25, base 10 => 15 GDD; a freezing day contributes nothing.
   console.assert(gdd([{ tempMin: 20, tempMax: 30 }]) === 15, 'env: gdd base 10');
   console.assert(gdd([{ tempMin: -5, tempMax: 5 }]) === 0, 'env: cold day earns no gdd');

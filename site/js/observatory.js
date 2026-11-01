@@ -13,10 +13,20 @@ export function initObservatory() {
   head.firstElementChild.append($('hero-place'), $('clock-date'));
   head.lastElementChild.append($('hero-clock'));
   head.append($('hero-alerts'));
+  const view = document.createElement('div');
+  view.className = 'weather-view';
+  view.setAttribute('role', 'group');
+  view.setAttribute('aria-label', 'Weather view');
+  view.innerHTML = '<button type="button" data-weather-view="radar" aria-pressed="true">Radar</button><button type="button" data-weather-view="outlook" aria-pressed="false">Forecast &amp; sky</button>';
+  view.addEventListener('click', e => {
+    const button = e.target.closest('[data-weather-view]');
+    if (button) saveSettings({deskRadar: button.dataset.weatherView === 'radar'});
+  });
+  head.append(view);
   desk.insertBefore(head, stack);
   const grid = document.createElement('div');
   grid.id = 'observatory-grid';
-  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar" aria-label="Local HookEcho radar"><div class="observatory-radar-off"><p>Radar preview is off</p><span>Open live radar, or enable the Weather radar panel in Settings.</span></div></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
+  grid.innerHTML = `<div id="observatory-left"></div><section id="observatory-radar" aria-label="Local HookEcho radar"></section><aside id="observatory-signals"><h2>Local signals &amp; alerts</h2><div id="observatory-local" class="kv-rows"><div class="muted">Waiting for local readings</div></div></aside>`;
   grid.prepend(grid.querySelector('#observatory-radar'));
   stack.prepend(grid);
   const left = $('observatory-left');

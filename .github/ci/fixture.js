@@ -75,6 +75,16 @@ addEventListener('load', () => {
   console.assert(document.querySelector('#observatory-radar #gauges'), 'Gauges are integrated into radar');
   const stylePicker = document.getElementById('gauge-style');
   console.assert(stylePicker.options.length === 5, 'All five styles ship');
+  const outlookButton = document.querySelector('[data-weather-view="outlook"]');
+  const radarButton = document.querySelector('[data-weather-view="radar"]');
+  outlookButton.click();
+  console.assert(document.getElementById('desk').classList.contains('outlook-view') && document.getElementById('desk-radar').hidden, 'Outlook replaces radar');
+  console.assert(!document.getElementById('desk-radar-frame').getAttribute('src'), 'Outlook unloads radar document');
+  console.assert(!document.getElementById('outlook-astronomy').hidden && outlookButton.getAttribute('aria-pressed') === 'true', 'Outlook exposes astronomy and selected view');
+  console.assert(JSON.parse(localStorage.getItem('wd.settings')).deskRadar === false && !document.getElementById('set-desk-radar').checked, 'View choice persists and syncs Settings');
+  console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height < 200, 'Radar off leaves no empty map area');
+  radarButton.click();
+  console.assert(!document.getElementById('desk-radar').hidden && document.getElementById('outlook-astronomy').hidden && radarButton.getAttribute('aria-pressed') === 'true', 'Radar view restores map');
   const rainBeforeStyle = document.querySelector('#g-rain .ginner b').textContent;
   for (const style of ['chrome','neon','dial','pixel','orbit']) {
     stylePicker.value = style; stylePicker.dispatchEvent(new Event('change'));
@@ -119,6 +129,15 @@ addEventListener('load', () => {
     dispatchEvent(new CustomEvent('wd:ws-obs', { detail: o }));
     console.assert(document.getElementById('observatory-local').textContent.includes('gusts'), 'Local signals refresh with station observations');
     const settle = () => new Promise(resolve => requestAnimationFrame(resolve));
+    await settle();
+    const skySource = document.getElementById('sky');
+    console.assert(['Sunrise','Sunset','Astronomical dawn','Astronomical dusk','Moonrise','Moonset'].every(label => skySource.textContent.includes(label)), 'Astronomy includes sun, twilight and moon events');
+    console.assert(document.getElementById('outlook-sky-times').textContent === skySource.textContent.replaceAll('--','—'), 'Outlook mirrors current astronomy readings');
+    const savedSky = skySource.innerHTML;
+    skySource.innerHTML = '<div>Sun and twilight times unavailable for this location</div>';
+    await settle();
+    console.assert(document.getElementById('outlook-sky-times').textContent === skySource.textContent, 'Unavailable source replaces old astronomy times with an explanation');
+    skySource.innerHTML = savedSky;
     await settle();
     console.assert(document.querySelectorAll('.status-tile').length === 3, 'Status cards show air quality, moon and sunset');
     for (const kind of ['aqi','sky','health']) {

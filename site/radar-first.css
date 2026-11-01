@@ -1,4 +1,19 @@
 /* Keep the existing live cards and detail actions; give the radar the first screen. */
+.weather-view { display:flex; gap:3px; padding:3px; border:1px solid var(--line); border-radius:9px; background:var(--panel); order:4; }
+.weather-view button { min-height:36px; padding:6px 12px; border:1px solid transparent; border-radius:6px; background:none; color:var(--muted); font:inherit; font-size:12px; cursor:pointer; white-space:nowrap; }
+.weather-view button[aria-pressed="true"] { color:var(--text); background:var(--panel2); border-color:var(--line); }
+#desk.outlook-view #observatory-radar { height:auto; min-height:0; }
+#desk.outlook-view #observatory-left { grid-row:2 / span 2; }
+#desk #outlook-astronomy { grid-column:2; grid-row:2; padding:20px; }
+#desk #outlook-astronomy[hidden] { display:none; }
+#outlook-sky-times > div { display:flex; justify-content:space-between; gap:16px; padding:5px 0; border-bottom:1px solid var(--line); font-size:12px; }
+#outlook-sky-times > div > :last-child { text-align:right; font-variant-numeric:tabular-nums; }
+#outlook-moon-next { font-size:12px; color:var(--muted); line-height:1.6; margin-bottom:0; }
+@media(max-width:700px) {
+  #desk.outlook-view #observatory-left, #desk #outlook-astronomy { grid-column:1; grid-row:auto; }
+  .weather-view { margin-left:auto; }
+}
+
 html body > header { min-height:54px; padding:8px 16px; gap:12px; }
 html header #brand { width:32px; height:32px; }
 html header h1 { font-size:23px; }

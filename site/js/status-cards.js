@@ -21,6 +21,13 @@ export function initStatusCards(signals) {
   device.innerHTML = '<span aria-hidden="true">⌁</span><span><strong id="status-device-title">Device health unavailable</strong><small id="status-device-copy">View connection details</small></span><i aria-hidden="true"></i>';
   signals.insertBefore(tiles, $('observatory-local'));
   signals.append(device);
+  const astronomy = document.createElement('section');
+  astronomy.id = 'outlook-astronomy';
+  astronomy.className = 'card';
+  astronomy.hidden = true;
+  astronomy.setAttribute('aria-labelledby', 'outlook-astronomy-title');
+  astronomy.innerHTML = '<h2 id="outlook-astronomy-title">Sun, moon &amp; twilight</h2><p class="observatory-note">Today · device local time · twilight and moon phase are estimates. — means unavailable or no event.</p><div class="kv-rows" id="outlook-sky-times"></div><p id="outlook-moon-next"></p>';
+  signals.before(astronomy);
   signals.addEventListener('click', e => {
     const button = e.target.closest('[data-signal-detail]');
     if (!button) return;
@@ -40,12 +47,15 @@ export function initStatusCards(signals) {
     tiles.querySelector('.status-meter i').style.width = `${known ? Math.min(value / 500, 1) * 100 : 0}%`;
     tiles.querySelector('.status-air').dataset.band = aqi.className;
     const sky = rows('sky');
+    $('outlook-sky-times').replaceChildren(...[...$('sky').children].map(row => row.cloneNode(true)));
+    for (const value of $('outlook-sky-times').querySelectorAll('span:last-child')) if (value.textContent === '--') value.textContent = '—';
     $('status-sunset').textContent = sky.Sunset && sky.Sunset !== '--' ? sky.Sunset : '—';
     $('status-golden').textContent = sky['Golden hour starts'] && sky['Golden hour starts'] !== '--' ? `Golden hour starts ${sky['Golden hour starts']}` : 'Golden hour unavailable';
     const m = moon();
     $('status-moon-icon').innerHTML = m.name === 'Full' ? '<span class="status-full-moon"></span>' : moonGlyph(m.age, 36);
     $('status-moon-phase').textContent = `${m.name}${m.name.toLowerCase().includes('moon') ? '' : ' moon'}`;
     $('status-moon-light').textContent = `${m.illum}% illuminated`;
+    $('outlook-moon-next').textContent = `${m.name} · ${m.illum}% illuminated · next ${m.nextName.toLowerCase()} around ${m.nextDate.toLocaleDateString([], {month:'short',day:'numeric'})}`;
     const health = rows('health'), failure = $('health').querySelector('.fail');
     device.dataset.state = failure ? 'attention' : health.Sensors ? 'reporting' : 'unknown';
     $('status-device-title').textContent = failure ? 'Station needs attention' : health.Sensors ? 'Station sensors reporting' : 'Device health unavailable';
