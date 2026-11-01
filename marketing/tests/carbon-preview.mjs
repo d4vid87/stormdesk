@@ -6,17 +6,18 @@ const buttons = ['weather', 'radar', 'history'].map(name => ({
   addEventListener(type, handler) { this.click = handler; },
   setAttribute(name, value) { this[name] = value; }
 }));
-const image = {}, caption = {};
+const image = {}, caption = {}, full = {};
 runInNewContext(readFileSync(new URL('../assets/carbon-preview.js', import.meta.url), 'utf8'), {
   document: {
     querySelectorAll: () => buttons,
-    querySelector: selector => selector === '#product-image' ? image : caption
+    querySelector: selector => selector === '#product-image' ? image : selector === '#product-full' ? full : caption
   }
 });
 for (const button of buttons) {
   button.click();
   assert.ok(existsSync(new URL('../' + image.src, import.meta.url)));
   assert.ok(image.alt && caption.textContent);
+  assert.equal(full.href, image.src, 'Full-size link follows the selected preview');
   assert.equal(button['aria-pressed'], 'true');
   assert.equal(buttons.filter(item => item['aria-pressed'] === 'true').length, 1);
   assert.match(caption.textContent.toLowerCase(), new RegExp('^' + button.dataset.preview));

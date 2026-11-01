@@ -2,21 +2,30 @@
 
 # StormDesk
 
-**Your weather, at a glance.** StormDesk opens in Graphite Silver with compact current conditions and eight gauges integrated above the full HookEcho radar. Orbit Glass is the default animated icon style; the radar shelf also offers Liquid Chrome, Neon Trace, Precision Dial, and Pixel Pulse. Your choice stays on this screen. Forecasts, local signals, astronomy, and device health remain below the radar, with History and Settings in the top navigation. Reduced motion and Eco mode remain supported.
+**More radar. Your weather.** StormDesk brings eight compact gauges, the full [HookEcho](https://hookecho.io/) radar viewer, forecasts, and station history into one app. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-Choose a location to start. A personal weather station is optional; readings that are unavailable stay visible and clearly labeled. StormDesk supports Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse, and other compatible sources.
+[Open the app](https://app.mystormdesk.com/) · [Download 4.6.1](https://github.com/d4vid87/stormdesk/releases/tag/v4.6.1) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-The navigation has three destinations: **Weather**, **Radar**, and **History**. Radar gives HookEcho’s map the screen, with official warnings and emergencies along the bottom. History begins with clear temperature, rain, wind, and pressure snapshots and opens detailed charts on demand.
+![StormDesk 4.6.1: compact Orbit Glass gauges above the actual HookEcho radar](docs/stormdesk-461-weather.jpg)
 
-New installs open in **Graphite Silver**. Choose **Settings → Appearance → Theme** for all ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, and existing saved choices are preserved. Each screen remembers its choice. No StormDesk account, subscription, or ads.
+*Current 4.6.1 interface, captured October 31, 2026. Station readings use labeled demo data. Radar is a capture of the real HookEcho viewer; screenshots are not current weather.*
 
-[Try StormDesk](https://app.mystormdesk.com/) · [Download](https://github.com/d4vid87/stormdesk/releases/latest) · [Website](https://mystormdesk.com/) · [Get help](https://github.com/d4vid87/stormdesk/issues)
+### What’s new in 4.6.1
 
-![A demo-data tour of StormDesk’s Observatory dashboard, HookEcho radar, History, and theme settings](docs/stormdesk-hero.gif)
+- **More room for radar:** Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity, and Dew point sit directly above the map.
+- **Orbit Glass by default:** choose Liquid Chrome, Neon Trace, Precision Dial, or Pixel Pulse from the radar shelf. Each screen remembers its style; reduced motion is supported.
+- **Weather beyond the map:** up to ten forecast days, provider/model selection, saved places, and local context where data is available.
+- **A useful station archive:** import previews, maintenance notes, reversible exclusions, supported cloud recovery, extra sensor channels, and printable reports on your installed host.
+- **More reliable refreshes:** bounded request caches, retry handling, and clearly labeled saved readings during outages. TLS and updater dependencies are refreshed.
 
-The interface images illustrate StormDesk workflows with labeled demo station data; layouts vary by release. HookEcho supplies the radar map. The latest packaged release is **4.6.1**, including the radar-first layout and all five gauge icon styles.
+### Choose your setup
 
-Stormdesk Lite remains available as a lighter browser interface for older devices: [open Lite](https://app.mystormdesk.com/lite/) or read its [design specification](design/stormdesk-lite/SPECIFICATION.md).
+| Start in the browser | Run your own host |
+| --- | --- |
+| Open [app.mystormdesk.com](https://app.mystormdesk.com/), choose a location, and use forecasts, radar, and supported cloud station data. | Install the desktop app, Linux browser-mode package, or Docker image to collect supported station readings and keep your archive locally. |
+| This browser keeps its own settings. No StormDesk account is required. | Leave the host running for collection and household screens. Use `/public` for read-only access. |
+
+Forecast and radar services need internet access. Station connection methods vary by platform; see [compatibility](https://mystormdesk.com/compatibility.html). [StormDesk Lite](https://app.mystormdesk.com/lite/) remains available for older browsers and lighter displays.
 
 ## Install StormDesk
 
@@ -36,6 +45,8 @@ If a Mac says it cannot verify StormDesk, open **System Settings → Privacy & S
 **Open Anyway**.
 
 ### Linux commands
+
+<details><summary>Optional local voice setup and spoken alerts</summary>
 
 For the optional **natural male voice** (Kokoro Michael), install [uv](https://docs.astral.sh/uv/),
 then run `python3 scripts/install-natural-voice.py` from this repository. Setup downloads about
@@ -58,6 +69,8 @@ after installing them. An embedded browser without speech support reports an err
 claiming an announcement played; use the Linux app's native fallback in that case.
 Warnings and watches bypass quiet hours just as official alert notifications already do; routine
 advisories stay silent. Closed-app and locked-phone announcements are not supported.
+
+</details>
 
 For Ubuntu, Debian, or Linux Mint:
 
@@ -108,7 +121,7 @@ StormDesk Lite by default; choose **Full dashboard** there if the device can han
 2. Choose the matching location to see current conditions and the forecast.
 3. If you have a personal station, connect it under **Settings → My station**.
 
-The top metrics stay in this order: **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity**. Station readings appear where available; forecast estimates and unavailable measurements are labeled. The forecast list shows up to ten days, depending on what the provider supplies.
+The top metrics stay in this order: **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity, Dew point**. Station readings appear where available; forecast estimates and unavailable measurements are labeled. The forecast list shows up to ten days, depending on what the provider supplies.
 
 Tempest owners need a personal-use token from **tempestwx.com → Settings → Data Authorizations**.
 StormDesk can find the stations connected to that token, so you do not need to hunt for sensor
@@ -129,7 +142,7 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 
 ## What you get
 
-- **Weather** — seven top metrics, compact current conditions, up to ten forecast days, and central HookEcho radar.
+- **Weather** — eight compact gauges above full HookEcho radar, current conditions, and up to ten forecast days below the map.
 - **Local context** — nearby official alerts, local signals, sunrise and sunset, moon details, and device health when the source provides it.
 - **Radar** — live HookEcho radar with warnings and playback.
 - **History** — keyboard-accessible charts and reading tables, records, comparisons, rainfall events, and your weather archive.
@@ -152,63 +165,37 @@ Use **Remember this station** in Settings after configuring each station. The he
 
 Under **Settings → More tools → Weather sources, sensors & camera**, choose a forecast model and official warning source for the selected place. Optional Weather panels show pollen, local PurpleAir readings, a NOAA river gauge, a camera snapshot, and outdoor activity windows. Coverage and setup requirements are in [Additional weather sources](docs/provider-setup.md); detailed archive instructions are in the [technical reference](docs/technical-reference.md#archive-review-and-sensor-history).
 
-## On smaller screens
+## See the current app
 
-The same Weather and Radar pages adapt to phone-sized screens. The top metrics keep their order while the forecast, radar, and local context stack to fit the display.
-
-<img src="docs/stormdesk-dashboard-mobile.png" alt="Weather on a phone-sized screen" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Radar on a phone-sized screen" width="280">
-
-## Screenshots
-
-| Weather | Radar | History |
-| --- | --- | --- |
-| ![Graphite Silver Observatory dashboard with seven metrics, forecast, radar, and local context](docs/stormdesk-dashboard.png) | ![Focused HookEcho radar and warning banner](docs/stormdesk-radar.png) | ![History snapshot cards](docs/stormdesk-data.png) |
-
-![Expanded weather details and forecast analysis](docs/stormdesk-outlook.png)
-
-<details><summary>Explore all ten dark themes</summary>
-
-| Graphite Silver (default) | Midnight Violet |
+| Dedicated Radar | Station History |
 | --- | --- |
-| ![Graphite Silver](docs/stormdesk-theme-graphite.png) | ![Midnight Violet](docs/stormdesk-theme-violet.png) |
+| ![Full HookEcho radar view in StormDesk 4.6.1](docs/stormdesk-461-radar.jpg) | ![History cards and charts with sample archive readings](docs/stormdesk-461-history.jpg) |
 
-| Carbon Lime | Ocean Abyss |
+| Forecast & local signals | Searchable Settings |
 | --- | --- |
-| ![Carbon Lime](docs/stormdesk-theme-carbon.png) | ![Ocean Abyss](docs/stormdesk-theme-abyss.png) |
+| ![Ten forecast days, air quality, daylight and station health with demo data](docs/stormdesk-461-forecast.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
 
-| Night Spruce | Oxblood Rose |
+### Five gauge styles
+
+Use **Gauge style** above the radar. These static close-ups show the first four gauges; the app includes animations for all eight.
+
+| Style | Preview |
 | --- | --- |
-| ![Night Spruce](docs/stormdesk-theme-spruce.png) | ![Oxblood Rose](docs/stormdesk-theme-oxblood.png) |
+| **Orbit Glass · default** | ![Orbit Glass gauge icons](docs/stormdesk-461-gauge-orbit.jpg) |
+| Liquid Chrome | ![Liquid Chrome gauge icons](docs/stormdesk-461-gauge-liquid.jpg) |
+| Neon Trace | ![Neon Trace gauge icons](docs/stormdesk-461-gauge-neon.jpg) |
+| Precision Dial | ![Precision Dial gauge icons](docs/stormdesk-461-gauge-dial.jpg) |
+| Pixel Pulse | ![Pixel Pulse gauge icons](docs/stormdesk-461-gauge-pixel.jpg) |
 
-| Burnished Copper | Electric Indigo |
-| --- | --- |
-| ![Burnished Copper](docs/stormdesk-theme-copper.png) | ![Electric Indigo](docs/stormdesk-theme-indigo.png) |
+Graphite Silver is the fresh-install palette. **Settings → Appearance → Theme** includes nine more dark palettes and classic light, high-contrast, and e-ink choices. Saved preferences are preserved.
 
-| Petrol Citron | Espresso Gold |
-| --- | --- |
-| ![Petrol Citron](docs/stormdesk-theme-petrol.png) | ![Espresso Gold](docs/stormdesk-theme-espresso.png) |
+### On your phone
 
-Classic themes, including light, high contrast, and e-ink options, remain available in Settings. Saved theme choices survive the update.
+The compact gauge shelf scrolls horizontally, leaving room for the map. Weather, Radar, and History remain one tap away.
 
-</details>
+<img src="docs/stormdesk-461-mobile.jpg" alt="StormDesk 4.6.1 on a phone-sized screen with Orbit Glass and HookEcho radar" width="300">
 
-<details><summary>Welcome, Settings and phone layouts</summary>
-
-![Cards welcome with three clear setup paths](docs/stormdesk-welcome.png)
-
-Start with **Find my weather**, **Bring my station**, or **Join my home**. Location search is the recommended first step; station credentials and connection controls appear only when needed.
-
-![Settings home with six clear categories](docs/stormdesk-settings.png)
-
-Settings opens to six searchable cards: **Everyday, Appearance, Alerts & sound, My station, Radar, and More tools**. Open a card for focused controls; use **Save changes** to apply form edits. Calibration, reporting, integrations and backups remain available in expandable groups.
-
-![Appearance settings](docs/stormdesk-settings-appearance.png)
-
-![Settings home on a phone](docs/stormdesk-settings-mobile.png)
-
-<img src="docs/stormdesk-dashboard-mobile.png" alt="Weather on a phone" width="280"> <img src="docs/stormdesk-radar-mobile.png" alt="Radar on a phone" width="280">
-
-</details>
+All interface captures above use sample station data. Forecast, sensor, and regional alert availability depend on the connected sources.
 
 ## Supported weather stations
 

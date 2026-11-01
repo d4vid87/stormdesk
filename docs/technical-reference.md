@@ -10,17 +10,17 @@ embedded here and centered on the station.
 
 If StormDesk is useful to you, please [give the project a star](https://github.com/d4vid87/stormdesk/stargazers).
 
-![StormDesk Weather, Radar, History, and Appearance with labeled demo data](stormdesk-hero.gif)
+![StormDesk 4.6.1 with Orbit Glass gauges integrated above HookEcho radar](stormdesk-461-weather.jpg)
 
-![The Graphite Silver Observatory dashboard with forecast, HookEcho radar, and local context](stormdesk-dashboard.png)
+![StormDesk 4.6.1 History using sample station observations](stormdesk-461-history.jpg)
 
-![StormDesk Radar using HookEcho with live reflectivity and an official warning banner](stormdesk-radar.png)
+These captures show the shipped 4.6.1 interface with demo station readings; the HookEcho map was captured October 31, 2026.
 
 ## The three destinations
 
 On Samsung Smart Hub/Family Hub, ChromeOS, and small-memory browsers, the hosted dashboard opens **StormDesk Lite** before loading the full dashboard modules. Lite has Today, Forecast, still Radar, and basic History. A full dashboard boot that fails once also opens Lite on the next visit. Use `?full=1` to retry the full dashboard. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
 
-- **Weather** uses the Observatory layout: seven top metrics, compact current conditions and a forecast list on the left, HookEcho radar in the center (enabled by default for new screens; saved on/off choices are preserved), and local signals, alerts, astronomy, and device health on the right. The list shows up to ten forecast days; providers may supply fewer. A live local clock and a banner for nearby official warnings and emergencies sit in the header. **More weather details & analysis** retains the timeline, additional charts, and advanced tools.
+- **Weather** places eight compact gauges above the full HookEcho radar, with current conditions, a local clock, and supported nearby warnings in the header. Orbit Glass is the default icon style; four alternatives are selectable on the radar shelf. Scroll below the map for up to ten forecast days, local signals, astronomy, and device health. Provider coverage determines which readings are available.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 
@@ -32,9 +32,9 @@ The welcome screen offers three setup cards: **Find my weather** (town or postco
 
 Settings now opens to a searchable home with six category cards: Everyday, Appearance, Alerts & sound, My station, Radar, and More tools. Specialist controls expand on demand. Save changes applies form edits; location selection, speech enablement and action buttons apply immediately.
 
-Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [theme screenshots](../README.md#screenshots).
+Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [current interface and gauge styles](../README.md#see-the-current-app).
 
-The latest packaged release is **4.6.1**, including the radar-first layout and all five gauge icon styles. Screenshots may illustrate an earlier layout; existing installations receive the new interface when updated.
+The latest packaged release is **4.6.1**, including the radar-first layout and all five gauge icon styles. The screenshots above show that release; existing installations receive the interface when updated.
 
 The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Radar → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 
@@ -55,7 +55,7 @@ briefing on a tablet nobody has touched since boot waits for the first tap.
 `Settings → Dim the screen overnight` fades a wall panel down over the hour after sunset and back
 up over the hour before sunrise, using the station's own sun times.
 
-The seven top Weather metrics keep their order. Appearance changes their colors without changing the layout.
+The eight top Weather metrics keep their order. Appearance changes their colors without changing the layout.
 
 `Settings → LAN dashboard port` moves the server off 8088 (restart to apply); the window title
 always shows the address a tablet should open.
@@ -148,7 +148,7 @@ See [Additional weather sources](provider-setup.md) for credentials, network req
 
 ## Fixed gauge arrangement
 
-The seven top Weather metrics load automatically in the same order across mouse, touch, keyboard, reload, and restart. Earlier saved layouts remain in storage for existing installations, but no longer change the visible arrangement. Desktop, tablet, and phone layouts adapt without a separate editing mode. Additional charts and tools remain under **More weather details & analysis**.
+The eight top Weather metrics load automatically in the same order across mouse, touch, keyboard, reload, and restart. Earlier saved layouts remain in storage for existing installations, but no longer change the visible arrangement. Desktop, tablet, and phone layouts adapt without a separate editing mode. Additional charts and tools remain under **More weather details & analysis**.
 
 ## Tests
 

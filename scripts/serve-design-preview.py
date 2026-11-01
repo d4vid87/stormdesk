@@ -18,14 +18,21 @@ with TemporaryDirectory(prefix='stormdesk-preview-') as temp:
     (target/'js/boot.js').write_text(boot)
     fixture=(root/'.github/ci/fixture.js').read_text().split("addEventListener('load'")[0]
     fixture+=r'''
-const shift = 5 * 3600;
-fc.forecast.daily.forEach(d => { d.day_start_local+=shift; d.sunrise+=shift; d.sunset+=shift; });
+const offset = -Number(new Intl.DateTimeFormat('en-US', {timeZone:'America/Chicago',timeZoneName:'shortOffset'}).formatToParts(new Date(now*1000)).find(p=>p.type==='timeZoneName').value.match(/GMT([+-]\d+)/)?.[1] || 0) * 3600;
+const shift = Math.floor((now-offset)/86400)*86400+offset-day;
+fc.forecast.daily.forEach(d => {
+ const futureOffset = -Number(new Intl.DateTimeFormat('en-US', {timeZone:'America/Chicago',timeZoneName:'shortOffset'}).formatToParts(new Date((d.day_start_local+shift)*1000)).find(p=>p.type==='timeZoneName').value.match(/GMT([+-]\d+)/)?.[1] || 0)*3600;
+ const delta = shift+futureOffset-offset;
+ d.day_start_local+=delta; d.sunrise+=delta; d.sunset+=delta;
+});
+const captureDays = fc.forecast.daily.map(d=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago'}).format(new Date(d.day_start_local*1000)));
+console.assert(new Set(captureDays).size===captureDays.length, 'Capture forecast dates must stay distinct across daylight saving changes');
 fc.current_conditions.sea_level_pressure=29.95;
 fc._provenance='DEMO DATA · illustrative station readings';
 const observations=Array.from({length:336},(_,i)=>[now-(335-i)*1800,1,2+Math.sin(i/9),4+Math.abs(Math.sin(i/11))*3,180+Math.sin(i/13)*40,3,1012+Math.sin(i/16)*2,22+Math.sin(i/8)*4,60+Math.sin(i/8)*12,20000,3,350,i%50===0?0.4:0,0,0,0,2.71,1,3]);
 const captureTheme=new URLSearchParams(location.search).get('theme');
 const prior=JSON.parse(localStorage.getItem('wd.settings')||'{}');
-localStorage.setItem('wd.settings',JSON.stringify({...prior,token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'Fort Worth · DEMO DATA',lat:32.75,lon:-97.33,units:'imperial',theme:'dark',palette:captureTheme||prior.palette||'graphite',deskRadar:true,eco:'off',motion:new URLSearchParams(location.search).get('motion')||'off',nightDim:false,kioskCycleSec:0,nearbyRadius:0,speakAlerts:false,webNotif:false}));
+localStorage.setItem('wd.settings',JSON.stringify({token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'Fort Worth · DEMO DATA',lat:32.75,lon:-97.33,units:'imperial',theme:'dark',palette:captureTheme||prior.palette||'graphite',deskRadar:true,eco:'off',motion:new URLSearchParams(location.search).get('motion')||'auto',nightDim:false,kioskCycleSec:0,nearbyRadius:0,speakAlerts:false,webNotif:false}));
 const realFetch=window.fetch.bind(window);
 window.fetch=async (input,options)=>{
  const u=new URL(typeof input==='string'?input:input.url,location.href);

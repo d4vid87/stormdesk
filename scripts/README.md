@@ -19,4 +19,6 @@ ffmpeg -y -framerate 2 -i shots/marketing/frame-%03d.png -vf 'scale=1280:-2:flag
 
 Review the screenshots before publishing. They can show the source interface ahead of a packaged release.
 
-The current browser captures also use `serve-design-preview.py` for isolated, labeled sample data and a recorded HookEcho map. Settings captures include the six-card home, Appearance page, and phone home. The tour includes the new settings views.
+The current 4.6.1 captures use `python scripts/serve-design-preview.py 8099` with an isolated browser origin. This resets the sample station configuration on each load, labels it **Fort Worth · DEMO DATA**, and uses the actual HookEcho viewer by default. `?motion=off` opts into the recorded still-map fixture instead. The sample forecast dates follow America/Chicago, including daylight-saving changes.
+
+The versioned `docs/stormdesk-461-*.jpg` captures are mirrored in `marketing/images/`. Desktop views are 1600×1000, phone 390×844, social 1200×630, and gauge close-ups 696×74. The README and website identify the sample data and capture date. Capture through the browser tools, inspect every view, and keep personal station settings and credentials out of public images. These assets document the shipped 4.6.1 interface; no new installer version is implied by a website-only refresh.
