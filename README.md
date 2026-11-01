@@ -2,22 +2,22 @@
 
 # StormDesk
 
-**Your forecast. Your sky.** StormDesk opens with animated glass forecast cards, sunrise, sunset, moon and twilight, plus eight compact gauges. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
+**Your forecast. Your sky.** StormDesk opens with Forecast desk: ten animated forecast cards, a readable hourly outlook, compact astronomy, eight larger Orbit Glass gauges, and a bold seconds clock. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.7.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.7.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.8.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.8.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-![StormDesk 4.7.0: animated forecast cards and sun, moon and twilight with Orbit Glass gauges](docs/stormdesk-470-weather.jpg)
+![StormDesk 4.8.0: animated forecast cards and sun, moon and twilight with Orbit Glass gauges](docs/stormdesk-480-weather.jpg)
 
-*The 4.7.0 opening view, captured October 31, 2026 with labeled demo readings. Screenshots are not current weather.*
+*The 4.8.0 opening view, captured November 1, 2026 with labeled demo readings. Screenshots are not current weather.*
 
-### What’s new in 4.7.0
+### What’s new in 4.8.0
 
-- **Forecast first:** every new session opens Forecast & sky, including upgrades. Toggle radar on when needed, or open the dedicated Radar tab.
-- **Animated glass forecast cards:** a larger Today card, up to ten days, and selectable day details.
-- **A living sky:** sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and civil, nautical and astronomical twilight. Times depend on available data; twilight and moon phase are estimates.
-- **A simpler dashboard:** Local signals, the 48-hour model section and Outdoor activity windows have been removed from Weather.
-- **Orbit Glass stays the default:** all five gauge styles remain included. Motion respects accessibility preferences and pauses when the Weather screen is hidden.
-- **Radar off means off:** the embedded viewer unloads when you switch back to Forecast & sky.
+- **Forecast desk:** all ten forecast days near the top, larger live gauges, and a centered hours/minutes/seconds clock.
+- **Readable hourly weather:** select the next 24 hours or tomorrow; inspect temperature, precipitation chance, wind, gusts, feels-like temperature, humidity, cloud cover and UV.
+- **More useful context:** upcoming precipitation, daily totals, visibility, cloud cover, estimated convective cloud base and freezing-level altitude. Coverage depends on the provider; unavailable readings stay clearly marked.
+- **Compact astronomy:** sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and expandable twilight times beside the forecast.
+- **Five gauge styles:** Orbit Glass remains the default. Existing units, themes and reduced-motion settings are preserved.
+- **Full HookEcho radar:** switch to the actual viewer whenever needed. It unloads when you return to Forecast & sky.
 
 ### Choose your setup
 
@@ -143,7 +143,7 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 
 ## What you get
 
-- **Weather** — eight compact gauges above full HookEcho radar, current conditions, and up to ten forecast days below the map.
+- **Weather** — Forecast desk opens first with eight larger gauges, up to ten forecast days, hourly weather, compact astronomy and atmospheric context. Toggle the full HookEcho radar on when needed.
 - **Local context** — nearby official alerts, local signals, sunrise and sunset, moon details, and device health when the source provides it.
 - **Radar** — live HookEcho radar with warnings and playback.
 - **History** — keyboard-accessible charts and reading tables, records, comparisons, rainfall events, and your weather archive.
@@ -174,7 +174,7 @@ Under **Settings → More tools → Weather sources, sensors & camera**, choose 
 
 | Forecast & sky | Searchable Settings |
 | --- | --- |
-| ![Animated forecast cards with sun, moon and twilight using demo data](docs/stormdesk-470-weather.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
+| ![Animated forecast cards with sun, moon and twilight using demo data](docs/stormdesk-480-weather.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
 
 ### Five gauge styles
 

@@ -1,5 +1,5 @@
 const previews = {
-  weather: ['images/stormdesk-470-weather.jpg', 'StormDesk 4.7.0 with glass forecast cards, astronomy and labeled demo station data', 'Weather / Forecast & sky opens first. Animated glass cards, sun, moon and twilight; sample station data.'],
+  weather: ['images/stormdesk-480-weather.jpg', 'StormDesk 4.8.0 with glass forecast cards, astronomy and labeled demo station data', 'Weather / Forecast desk opens first. Ten days, hourly weather, larger gauges and compact astronomy; sample station data.'],
   radar: ['images/stormdesk-461-radar.jpg', 'StormDesk radar view powered by HookEcho', 'Radar / A focused HookEcho map with an official warning banner. Recorded interface; not live radar.'],
   history: ['images/stormdesk-461-history.jpg', 'StormDesk history view with temperature, rain, and wind charts', 'History / See the trend, compare readings, and explore your station archive. Recorded interface; not live readings.']
 };
