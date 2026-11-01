@@ -22,6 +22,25 @@ export function precipitationOutlook(fc, now = Date.now() / 1000) {
     days: (fc?.forecast?.daily || []).filter(d => d.day_start_local > now).slice(0, 2) };
 }
 
+// Fill only gaps in the primary forecast, matching timestamps rather than array positions.
+export function withForecastContext(base, model) {
+  if (!base || !model) return base;
+  const current = {...base.current_conditions};
+  for (const key of ['visibility','cloud_cover','cloud_base_estimate','freezing_level'])
+    if (!Number.isFinite(current[key])) current[key] = model.current_conditions?.[key];
+  const modelHours = new Map((model.forecast?.hourly || []).map(h => [Math.floor(h.time / 3600), h]));
+  const modelDays = new Map((model.forecast?.daily || []).map(d => [d.day_start_local, d]));
+  return {...base, current_conditions:current, forecast:{...base.forecast,
+    hourly:(base.forecast?.hourly || []).map(h => {
+      const hour = {...h}, extra = modelHours.get(Math.floor(h.time / 3600));
+      for (const key of ['cloud_cover','feels_like']) if (!Number.isFinite(hour[key])) hour[key] = extra?.[key];
+      return hour;
+    }),
+    daily:(base.forecast?.daily || []).map(d => Number.isFinite(d.precip_accum) ? d : {...d,
+      precip_accum:modelDays.get(d.day_start_local)?.precip_accum, _amountSource:'Open-Meteo'})
+  }};
+}
+
 const $ = id => document.getElementById(id);
 const node = (tag, className, text) => {
   const el = document.createElement(tag);
@@ -67,6 +86,8 @@ export function initForecastDesk() {
   const precipBody = node('div'); precip.append(precipBody);
   const atmosphere = panel('forecast-atmosphere', 'Atmosphere', sidebar);
   const airBody = node('div', 'fd-air-grid'); atmosphere.append(airBody);
+  const sourceNote = node('p', 'fd-note'); atmosphere.append(sourceNote);
+  let supplemental = null;
   let fc = forecast(), context = cacheContext('forecast'), tomorrow = false, selected = null;
   const narrow = matchMedia('(max-width: 1100px)');
   const value = (label, reading, hint) => {
@@ -74,7 +95,7 @@ export function initForecastDesk() {
     if (hint) box.append(node('small', 'fd-note', hint)); return box;
   };
   function renderHourly() {
-    const hours = forecastHours(fc, tomorrow, narrow.matches ? 4 : 8);
+    const hours = forecastHours(withForecastContext(fc, supplemental), tomorrow, narrow.matches ? 4 : 8);
     buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(tomorrow === !!i)));
     note.textContent = `${fc?._cached ? 'Saved forecast' : 'Forecast'} · ${narrow.matches ? 6 : 3}-hour steps · device local time`;
     table.replaceChildren(); detail.replaceChildren();
@@ -105,7 +126,9 @@ export function initForecastDesk() {
   function render() {
     renderHourly();
     precipBody.replaceChildren(); airBody.replaceChildren();
-    const outlook = precipitationOutlook(fc), c = fc?.current_conditions || {};
+    const combined = withForecastContext(fc, supplemental);
+    const outlook = precipitationOutlook(combined), c = combined?.current_conditions || {};
+    sourceNote.textContent = supplemental ? 'Supplementary model estimates: Open-Meteo' : 'Availability depends on your forecast provider.';
     const lead = node('div', 'fd-precip-lead');
     if (outlook.next) {
       const d = outlook.next;
@@ -113,7 +136,7 @@ export function initForecastDesk() {
     } else lead.append(value(outlook.low ? 'Low precipitation chances' : 'Precipitation timing unavailable', outlook.low ? 'Below 20%' : '—', outlook.low ? 'Across the available next 48 hours' : 'This provider has no hourly probability for this period'));
     precipBody.append(lead);
     const days = node('div', 'fd-rain-days');
-    for (const d of outlook.days) days.append(value(new Date(d.day_start_local * 1000).toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'}), `${num(d.precip_accum, 2)} ${U.precip()}`, `${chance(d.precip_probability)} chance · forecast total`));
+    for (const d of outlook.days) days.append(value(new Date(d.day_start_local * 1000).toLocaleDateString([], {weekday:'short',month:'short',day:'numeric'}), `${num(d.precip_accum, 2)} ${U.precip()}`, `${chance(d.precip_probability)} chance · ${d._amountSource ? d._amountSource + ' ' : ''}forecast total`));
     precipBody.append(days);
     const metric = settings().units === 'metric';
     const height = n => Number.isFinite(n) ? `${num(n * (metric ? 1 : 3.28084))} ${metric ? 'm' : 'ft'}` : '—';
@@ -123,9 +146,13 @@ export function initForecastDesk() {
       value('Freezing level', height(c.freezing_level), 'Model altitude above sea level'));
     atmosphere.title = 'Unavailable provider readings are shown as —. Cloud base is a temperature/dew-point approximation for convective clouds.';
   }
+  window.addEventListener('wd:forecast-context', e => {
+    if (e.detail.context !== cacheContext('forecast')) return;
+    supplemental = e.detail.forecast; render();
+  });
   window.addEventListener('wd:forecast', e => { fc = e.detail; context = cacheContext('forecast'); render(); });
   window.addEventListener('wd:settings', () => {
-    if (context !== cacheContext('forecast')) { fc = null; selected = null; context = cacheContext('forecast'); }
+    if (context !== cacheContext('forecast')) { fc = null; supplemental = null; selected = null; context = cacheContext('forecast'); }
     render();
   });
   narrow.addEventListener('change', renderHourly);

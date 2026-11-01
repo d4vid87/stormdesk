@@ -12,6 +12,7 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 - Ship Forecast desk as the opening Weather view: larger Orbit Glass readings, a centered hours/minutes/seconds clock, all ten forecast days near the top, and compact sun, moon and twilight beside them. All five gauge styles and the full HookEcho radar remain available.
 - Add a selectable hourly outlook for the next 24 hours and tomorrow, showing temperature, precipitation chance, wind and gusts, with feels-like temperature, humidity, cloud cover and UV details.
 - Replace repeated pressure/solar/rain-rate panels with upcoming precipitation, forecast daily totals, visibility, cloud cover, estimated convective cloud base and freezing-level altitude. Availability depends on the forecast provider; missing readings remain unavailable. Cloud base is an estimate above ground, not a measured ceiling.
+- Fill missing Tempest atmosphere fields and precipitation totals from the existing Open-Meteo request, without replacing station readings or adding another polling job.
 - Reuse the existing forecast feed and local animated icons. Retain units, reduced-motion preferences, station/archive behavior, and forecast/radar switching.
 
 ### Fixed

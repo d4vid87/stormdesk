@@ -519,8 +519,10 @@ export function nowcast(lat = coords().lat, lon = coords().lon) {
 export function dailyPrecip(lat = coords().lat, lon = coords().lon) {
   const imperial = settings().units !== 'metric';
   return getJSON(`https://api.open-meteo.com/v1/forecast?${qs({
-    latitude: lat, longitude: lon, daily: 'precipitation_sum', forecast_days: 7, timezone: 'auto',
-    ...(imperial ? { precipitation_unit: 'inch' } : {}),
+    latitude: lat, longitude: lon, daily: 'precipitation_sum', forecast_days: 10, timezone: 'auto', timeformat: 'unixtime',
+    current: 'temperature_2m,dew_point_2m',
+    hourly: 'visibility,cloud_cover,freezing_level_height,apparent_temperature',
+    ...(imperial ? { temperature_unit: 'fahrenheit', precipitation_unit: 'inch' } : {}),
   })}`);
 }
 

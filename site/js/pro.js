@@ -2,7 +2,7 @@
 // 48h combined chart, day cards, dial gauges. Driven by the wd:forecast event.
 import * as api from './api.js';
 import { settings, coords, U, num, timeStr, deg2compass, every, everyVisible, msToWind, windToMs, stormMode } from './app.js';
-import { forecast as deskForecast, severeAlerts } from './desk.js';
+import { forecast as deskForecast, severeAlerts, cacheContext } from './desk.js';
 import * as icon from './icons.js';
 import { readingInfo, modelAgreement } from './weather-context.js';
 import { gaugeIcon } from './gauge-icons.js';
@@ -582,10 +582,17 @@ async function loadConsensus() {
 
 async function loadQpf() {
   if (coords().lat == null) return;
+  const context = cacheContext('forecast');
   try {
     const j = await api.dailyPrecip();
+    if (context !== cacheContext('forecast')) return;
     qpf = j.daily?.precipitation_sum || null;
-  } catch { qpf = null; }
+    window.dispatchEvent(new CustomEvent('wd:forecast-context', {detail:{context, forecast:api.shapeOm(j)}}));
+  } catch {
+    if (context !== cacheContext('forecast')) return;
+    qpf = null;
+    window.dispatchEvent(new CustomEvent('wd:forecast-context', {detail:{context, forecast:null}}));
+  }
 }
 
 export function renderPro(fc = deskForecast()) {

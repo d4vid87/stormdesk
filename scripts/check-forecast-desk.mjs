@@ -5,6 +5,17 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../site/js/forecast-desk.js', import.meta.url), 'utf8').replace(/^import .*;\n/gm, '').replace(/^export /gm, '');
 const c = vm.createContext({ Date, timeStr: () => '' });
 vm.runInContext(source, c);
+const original = {current_conditions:{visibility:0},forecast:{daily:[{day_start_local:0},{day_start_local:86400}],hourly:[{time:3600,cloud_cover:0},{time:7200}]}};
+const model = {current_conditions:{visibility:10000,cloud_cover:80},forecast:{daily:[{day_start_local:86400,precip_accum:0.3}],hourly:[{time:7200,cloud_cover:75},{time:3600,cloud_cover:90}]}};
+const combined = c.withForecastContext(original, model);
+assert.equal(combined.current_conditions.visibility,0,'Primary zero readings win over supplementary estimates');
+assert.equal(combined.current_conditions.cloud_cover,80);
+assert.equal(combined.forecast.hourly[0].cloud_cover,0);
+assert.equal(combined.forecast.hourly[1].cloud_cover,75,'Hours match by timestamp, not array index');
+assert.equal(combined.forecast.daily[0].precip_accum,undefined);
+assert.equal(combined.forecast.daily[1].precip_accum,0.3);
+assert.equal(original.forecast.hourly[1].cloud_cover,undefined,'Context never mutates the primary station feed');
+assert.equal(c.withForecastContext(null,model),null);
 const now = 18000;
 const fc = { forecast: {
   daily: [0, 90000, 176400, 262800].map(day_start_local => ({ day_start_local })),
@@ -46,4 +57,15 @@ assert.ok(Math.abs(converted.current_conditions.freezing_level - 3000) < 0.01);
 assert.ok(Math.abs(converted.forecast.hourly[0].freezing_level - 3000) < 0.01);
 units='metric'; payload.current.temperature_2m=20; payload.current.dew_point_2m=10;
 assert.equal(provider.shapeOm(payload).current_conditions.cloud_base_estimate,1250);
+const pro = readFileSync(new URL('../site/js/pro.js', import.meta.url), 'utf8');
+let identity = 'A', finish;
+const events = [];
+const qpfContext = vm.createContext({coords:()=>({lat:32.75}),cacheContext:()=>identity,
+  api:{dailyPrecip:()=>new Promise(resolve=>{finish=resolve;}),shapeOm:j=>j},
+  window:{dispatchEvent:e=>events.push(e)},CustomEvent:class {constructor(type,options){this.type=type;this.detail=options.detail;}}});
+vm.runInContext('let qpf = null;\n' + pro.slice(pro.indexOf('async function loadQpf()'),pro.indexOf('export function renderPro')),qpfContext);
+const old = qpfContext.loadQpf(); identity='B'; finish({daily:{precipitation_sum:[1]}}); await old;
+assert.equal(events.length,0,'An old-place model request cannot update the new forecast');
+const fresh = qpfContext.loadQpf(); finish({daily:{precipitation_sum:[0.2]}}); await fresh;
+assert.equal(events[0].detail.context,'B');
 console.log('Forecast desk: provider day boundaries, missing values, forecast windows and normalized atmosphere passed.');
