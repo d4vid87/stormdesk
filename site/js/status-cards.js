@@ -26,7 +26,19 @@ export function initStatusCards(signals) {
   astronomy.className = 'card';
   astronomy.hidden = true;
   astronomy.setAttribute('aria-labelledby', 'outlook-astronomy-title');
-  astronomy.innerHTML = '<h2 id="outlook-astronomy-title">Sun, moon &amp; twilight</h2><p class="observatory-note">Today · device local time · twilight and moon phase are estimates. — means unavailable or no event.</p><div class="kv-rows" id="outlook-sky-times"></div><p id="outlook-moon-next"></p>';
+  astronomy.innerHTML = `<div class="sky-heading"><div><span class="sky-eyebrow">THE SKY ABOVE</span><h2 id="outlook-astronomy-title">Sun, moon &amp; twilight</h2></div><span class="sky-live">Today</span></div>
+    <div class="solar-scene">
+      <div class="solar-haze" aria-hidden="true"></div>
+      <svg class="solar-orbit" viewBox="0 0 480 210" aria-hidden="true"><path class="solar-track" d="M35 180 A205 155 0 0 1 445 180"/><path class="solar-trace" d="M35 180 A205 155 0 0 1 445 180"/><path class="solar-horizon" d="M20 180H460"/><circle class="solar-star" cx="240" cy="25" r="13"/><g class="solar-rays"><path d="M240 2V7M240 43V48M217 25H222M258 25H263M224 9L228 13M252 37L256 41M224 41L228 37M252 13L256 9"/></g></svg>
+      <div class="solar-duration"><span>DAYLIGHT</span><strong data-sky-value="Daylight">—</strong><small>Tomorrow <span data-sky-value="Tomorrow">—</span></small></div>
+      <div class="sun-events"><div><span>↗ SUNRISE</span><strong data-sky-value="Sunrise">—</strong></div><div><span>↘ SUNSET</span><strong data-sky-value="Sunset">—</strong></div></div>
+    </div>
+    <div class="lunar-scene"><div class="lunar-stars" aria-hidden="true"></div><div id="outlook-moon-orb" aria-hidden="true"></div><div class="lunar-copy"><span class="sky-eyebrow">TONIGHT'S MOON</span><h3 id="outlook-moon-phase">—</h3><p id="outlook-moon-light"></p><p id="outlook-moon-next"></p></div></div>
+    <div class="moon-events"><div><span>MOONRISE</span><strong data-sky-value="Moonrise">—</strong></div><div><span>MOONSET</span><strong data-sky-value="Moonset">—</strong></div><div><span>GOLDEN HOUR</span><strong data-sky-value="Golden hour starts">—</strong></div></div>
+    <div class="twilight-heading"><h3>The edges of daylight</h3><span>Dawn / dusk</span></div>
+    <div class="twilight-cards">${['Civil','Nautical','Astronomical'].map((name,i) => `<div class="twilight-card twilight-${i}"><i aria-hidden="true"></i><span>${name}</span><strong data-sky-value="${name} dawn">—</strong><small data-sky-value="${name} dusk">—</small></div>`).join('')}</div>
+    <details class="sky-details"><summary>All sun &amp; moon times</summary><div class="kv-rows" id="outlook-sky-times"></div></details>
+    <p class="sky-footnote">Device local time · twilight &amp; moon phase are estimates.<br>— means unavailable or no event. Sun arc is illustrative.</p>`;
   signals.before(astronomy);
   signals.addEventListener('click', e => {
     const button = e.target.closest('[data-signal-detail]');
@@ -47,6 +59,10 @@ export function initStatusCards(signals) {
     tiles.querySelector('.status-meter i').style.width = `${known ? Math.min(value / 500, 1) * 100 : 0}%`;
     tiles.querySelector('.status-air').dataset.band = aqi.className;
     const sky = rows('sky');
+    for (const field of astronomy.querySelectorAll('[data-sky-value]')) {
+      const value = sky[field.dataset.skyValue];
+      field.textContent = value && value !== '--' ? value : '—';
+    }
     $('outlook-sky-times').replaceChildren(...[...$('sky').children].map(row => row.cloneNode(true)));
     for (const value of $('outlook-sky-times').querySelectorAll('span:last-child')) if (value.textContent === '--') value.textContent = '—';
     $('status-sunset').textContent = sky.Sunset && sky.Sunset !== '--' ? sky.Sunset : '—';
@@ -55,7 +71,15 @@ export function initStatusCards(signals) {
     $('status-moon-icon').innerHTML = m.name === 'Full' ? '<span class="status-full-moon"></span>' : moonGlyph(m.age, 36);
     $('status-moon-phase').textContent = `${m.name}${m.name.toLowerCase().includes('moon') ? '' : ' moon'}`;
     $('status-moon-light').textContent = `${m.illum}% illuminated`;
-    $('outlook-moon-next').textContent = `${m.name} · ${m.illum}% illuminated · next ${m.nextName.toLowerCase()} around ${m.nextDate.toLocaleDateString([], {month:'short',day:'numeric'})}`;
+    $('outlook-moon-phase').textContent = m.name;
+    $('outlook-moon-light').textContent = `${m.illum}% illuminated`;
+    $('outlook-moon-next').textContent = `Next ${m.nextName.toLowerCase()} · around ${m.nextDate.toLocaleDateString([], {month:'short',day:'numeric'})}`;
+    const orb = $('outlook-moon-orb');
+    const phase = `${m.name}-${m.illum}`;
+    if (orb.dataset.phase !== phase) {
+      orb.dataset.phase = phase;
+      orb.innerHTML = moonGlyph(m.age, 100);
+    }
     const health = rows('health'), failure = $('health').querySelector('.fail');
     device.dataset.state = failure ? 'attention' : health.Sensors ? 'reporting' : 'unknown';
     $('status-device-title').textContent = failure ? 'Station needs attention' : health.Sensors ? 'Station sensors reporting' : 'Device health unavailable';

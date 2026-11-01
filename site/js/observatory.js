@@ -55,6 +55,7 @@ export function initObservatory() {
   state.append($('hero-live'), $('hero-batt'));
   health.insertBefore(state, $('health'));
   initStatusCards(signals);
+  signals.hidden = true;
   // Retain render targets for shared modules without exposing the retired dashboard section.
   const extra = document.createElement('div');
   extra.hidden = true;
@@ -62,6 +63,7 @@ export function initObservatory() {
   const outlook = document.createElement('details');
   outlook.className = 'card';
   outlook.id = 'advanced-outlook';
+  outlook.hidden = true;
   outlook.innerHTML = '<summary>48-hour forecast &amp; model range</summary>';
   outlook.append($('desk-outlook'));
   stack.append(outlook);

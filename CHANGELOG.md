@@ -6,6 +6,18 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.7.0] - 2026-11-01
+
+### Changed
+- Forecast & sky is the opening Weather view on every new session, including upgrades. HookEcho radar stays available through the view switch and the dedicated Radar tab.
+- Animated glass forecast cards with an expanded Today tile and day details, plus an astronomy scene showing sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and civil, nautical and astronomical twilight.
+- Keep Graphite styling and all five gauge styles, with Orbit Glass as the default. Animation respects reduced-motion preferences and pauses when the Weather screen is hidden.
+- Remove the Local signals block, 48-hour forecast/model section and Outdoor activity windows from the Weather dashboard. Existing header alert notifications remain available.
+
+### Fixed
+- Turning radar off unloads the viewer and cancels pending map startup.
+- Missing astronomy data clears old values. Moonrise/set results are scoped to the current location and local date.
+
 ## [4.6.1] - 2026-10-31
 
 ### Fixed

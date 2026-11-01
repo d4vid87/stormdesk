@@ -983,8 +983,8 @@ function changelog() {
   if (!seen) return; // a fresh install has nothing to be new since
   notify({
     title: `StormDesk ${APP_VERSION}`,
-    body: 'New: a past-and-future Weather Timeline with confidence, guided Health Center, complete '
-      + 'portable backup and restore, and an automatic browser fallback when Linux cannot draw the native window.',
+    body: 'New: Forecast & sky opens first, with animated glass forecast cards, sunrise, sunset, moon and twilight. '
+      + 'HookEcho radar remains one click away. Orbit Glass gauges and all five styles are included.',
   });
 }
 

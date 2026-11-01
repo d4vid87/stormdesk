@@ -9,7 +9,7 @@ for(const [saved,expected] of [[null,'graphite'],[{palette:'oled'},'oled'],[{pal
  const context=vm.createContext({structuredClone,localStorage:{getItem:()=>saved===null?null:JSON.stringify(saved)}});
  vm.runInContext(settingsCode,context);
  assert.equal(vm.runInContext('settings().palette',context),expected);
- assert.equal(vm.runInContext('settings().deskRadar',context),saved?.deskRadar ?? true);
+ assert.equal(vm.runInContext('settings().deskRadar',context),false,'new sessions open Forecast & sky, even after a saved radar session');
  if(saved?.theme)assert.equal(vm.runInContext('settings().theme',context),saved.theme);
 }
 const palettes=['graphite','violet','carbon','abyss','spruce','oxblood','copper','indigo','petrol','espresso'];
@@ -22,4 +22,4 @@ for(const id of palettes){
 }
 assert.match(html,/<option value="graphite">Graphite Silver \(default\)<\/option>/);
 for(const id of ['oled','blue','light','contrast','ember','auto','solarized','solarized-light','contrast-light','eink'])assert.ok(html.includes('value="'+id+'"'));
-console.log('PASS: Graphite and radar-on defaults, saved preferences preserved, all ten complete dark palettes, classic themes retained.');
+console.log('PASS: Graphite and forecast-first startup, other saved preferences preserved, all ten complete dark palettes, classic themes retained.');

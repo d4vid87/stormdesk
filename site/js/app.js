@@ -32,8 +32,8 @@ const DEFAULTS = {
   // '' = whichever radar site is nearest the station. The camera itself lives in `wd.radar`,
   // written once a second by the embedded viewer — not here, where it would re-init the app.
   radarSite: '',
-  // Show HookEcho in the Weather workspace by default; each screen can turn it off.
-  deskRadar: true,
+  // Forecast & sky is the opening view; radar is available on demand.
+  deskRadar: false,
   // Bring the radar back on screen by itself when NWS has something serious out.
   stormAuto: true,
   // Stations the user can flip between from the header. One token, one set of preferences —
@@ -106,6 +106,8 @@ const DEFAULTS = {
 // New installations use the defaults; existing screens keep their saved choices.
 const FIRST_RUN = localStorage.getItem('wd.settings') == null;
 let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'graphite' : '' });
+// A new session always opens on the forecast, including upgrades from radar-first versions.
+_settings.deskRadar = false;
 
 // Presentation belongs to the screen in front of the user; station and alert behavior belongs
 // to the household host. Existing installs already have these values locally, so this is also
