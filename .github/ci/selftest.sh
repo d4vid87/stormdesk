@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Loads the site in headless Chrome at three motion levels and three screen sizes, fails on any
+# Loads the site in headless Chrome at three motion levels and four screen sizes, fails on any
 # console.assert, and leaves a screenshot of each. No bundler, no test runner: the site is plain
 # ES modules, so "does it compile" means "did boot reach the end", which is the sentinel below.
 #
@@ -36,7 +36,7 @@ for _ in $(seq 30); do curl -sf "http://127.0.0.1:$PORT/" >/dev/null && break; s
 
 fail=0
 for motion in full lite off; do
-  for size in 1920,1080 780,360 412,915; do
+  for size in 3440,1440 1920,1080 780,360 412,915; do
     url="http://127.0.0.1:$PORT/?selftest&motion=$motion"
     log="$DIR/$motion-$size.log"
     dom="$DIR/$motion-$size.html"
@@ -68,5 +68,5 @@ for motion in full lite off; do
   done
 done
 
-[ "$fail" = 0 ] && echo "selftest: 9 runs clean, screenshots in $OUT"
+[ "$fail" = 0 ] && echo "selftest: 12 runs clean, screenshots in $OUT"
 exit "$fail"

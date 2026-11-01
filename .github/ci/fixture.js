@@ -173,6 +173,21 @@ addEventListener('load', () => {
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.2,sensor_status:0}})); await settle();
     console.assert(document.querySelector('.status-device').dataset.state === 'attention', 'Low battery stays visible on the device card');
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77,sensor_status:0}})); await settle();
+    outlookButton.click();
+    await document.fonts.ready;
+    await settle();
+    const desk = document.getElementById('desk');
+    console.assert(desk.scrollWidth <= desk.clientWidth + 1, 'Forecast desk stays within the browser width');
+    if (innerWidth >= 1350 && innerHeight >= 900) {
+      console.assert([...document.querySelectorAll('#daycards > .daycard')].every(card => card.getBoundingClientRect().bottom <= innerHeight), 'All ten forecast days remain above the fold on desktop');
+    }
+    if (innerWidth >= 2400 && innerHeight >= 1200) {
+      const left = document.getElementById('observatory-left').getBoundingClientRect();
+      const right = document.getElementById('forecast-sidebar').getBoundingClientRect();
+      console.assert(Math.abs(left.bottom - right.bottom) < 2 && left.bottom >= innerHeight - 32, 'Both forecast columns fill the available height');
+      console.assert(desk.scrollHeight <= desk.clientHeight + 2, 'Ultrawide forecast fits without vertical overflow');
+      console.assert(parseFloat(getComputedStyle(document.querySelector('#g-rain b')).fontSize) > 36, 'Ultrawide readings scale up for readability');
+    }
     document.documentElement.dataset.fixture = 'ok';
   });
 });
