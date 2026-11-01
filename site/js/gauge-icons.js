@@ -38,4 +38,3 @@ export { styles, names, icon };
 const labels = {'g-rain':'Rain','g-ltg':'Lightning','g-wind':'Wind','g-wbgt':'WBGT','g-uv':'UV index','g-press':'Pressure','g-hum':'Humidity','g-dew':'Dew point'};
 export const gaugeStyle = value => styles.some(style => style.id === value) ? value : 'orbit';
 export const gaugeIcon = (id, style, unavailable) => icon(labels[id], gaugeStyle(style), unavailable);
-
