@@ -16,7 +16,7 @@ Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container imag
 
 ### Fixed
 - New hourly panels respect provider day boundaries across daylight-saving changes and clear old-place data when the location or units change.
-- Normalize additional Open-Meteo forecast fields, including nighttime hourly icons and daily wind/precipitation values.
+- Normalize additional Open-Meteo forecast fields, including nighttime hourly icons and daily wind/precipitation values. Convert provider visibility and freezing-height units to metres before display, including imperial responses.
 
 ## [4.7.0] - 2026-11-01
 

@@ -87,7 +87,7 @@ export function initForecastDesk() {
       b.setAttribute('aria-pressed', String(h.time === selected));
       b.setAttribute('aria-label', `${time(h.time)}, ${h.conditions || 'Conditions unavailable'}, ${num(h.air_temperature)}${U.temp()}. Rain chance ${chance(h.precip_probability)}, wind ${num(h.wind_avg)} ${U.wind()}, gust ${num(h.wind_gust)} ${U.wind()}. Show details`);
       b.append(node('span', '', time(h.time)), icon(h.icon), node('strong', '', `${num(h.air_temperature)}°`));
-      b.onclick = () => { selected = h.time; renderHourly(); }; table.append(b);
+      b.onclick = () => { selected = h.time; renderHourly(); table.querySelector('[aria-pressed="true"]')?.focus({preventScroll:true}); }; table.append(b);
     });
     for (const [label, key] of [['Rain chance', 'precip_probability'], [`Wind · ${U.wind()}`, 'wind_avg'], [`Gust · ${U.wind()}`, 'wind_gust']]) {
       table.append(node('span', 'fd-hour-label', label));

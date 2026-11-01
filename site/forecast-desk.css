@@ -93,7 +93,7 @@ html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-
 .fd-panel button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 @media(max-width:1350px) {
   #desk.outlook-view #daycards { grid-template-columns:repeat(5,minmax(0,1fr)); }
-  html #desk.outlook-view #daycards > .daycard { min-height:160px; padding:7px; }
+  html #desk.outlook-view #daycards > .daycard,html #desk.outlook-view #daycards > .daycard:first-child { min-height:160px; padding:7px; }
   #desk.outlook-view #daycards .dc-head { flex-direction:row; }
   #desk.outlook-view #gauges h3 { font-size:10px; padding-left:33px; }
   #desk.outlook-view #gauges .wx-icon { width:29px; height:29px; }
