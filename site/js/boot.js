@@ -18,6 +18,7 @@ import { initLayout, snapshot, restore, hiddenPanels, unhide, panelIds, tabOf, s
 import { initUdp } from './udp.js';
 import { initOutlook } from './outlook.js';
 import { initDetail } from './detail.js';
+import { initEnvironmentDashboard } from './environment-dashboard.js';
 import { timelineSettings } from './timeline-settings.js';
 import { applyMotion } from './motion.js';
 
@@ -32,7 +33,9 @@ function initHome() {
 }
 function initHistory() {
   if (!historyModules) {
-    historyModules = Promise.all([import('./boards.js'), import('./timeline.js')]).then(([boards, timeline]) => {
+    historyModules = Promise.all([import('./boards.js'), import('./timeline.js'), import('./archive-workbench.js'), import('./sensor-channels.js')]).then(([boards, timeline, archive, sensors]) => {
+      archive.initArchiveWorkbench();
+      sensors.initSensorChannels();
       boards.initBoards();
       timeline.initTimeline();
       return [boards, timeline];
@@ -143,7 +146,7 @@ export function mayPush(pulled = rev !== null) {
 // the server anything (the Home Assistant test button) can wait for it.
 let pendingSettings = {};
 async function pushConfig(retried = false) {
-  if (syncing || PUBLIC || !mayPush()) return Promise.resolve();
+  if (syncing || PUBLIC || !mayPush()) return false;
   const changed = pendingSettings;
   pendingSettings = {};
   const r = await fetch(`${SRV}/config`, {
@@ -151,7 +154,7 @@ async function pushConfig(retried = false) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ _rev: rev ?? 0, settings: Object.keys(changed).length ? changed : sharedSettings() }),
   }).catch(() => null);
-  if (!r) { pendingSettings = { ...changed, ...pendingSettings }; return; }
+  if (!r) { pendingSettings = { ...changed, ...pendingSettings }; return false; }
   const j = await r.json().catch(() => null);
   if (r.status === 409 && j && !retried) {
     rev = j._rev;
@@ -160,6 +163,8 @@ async function pushConfig(retried = false) {
     return pushConfig(true);
   }
   if (r.ok && typeof j?._rev === 'number') rev = j._rev;
+  if (!r.ok) pendingSettings = { ...changed, ...pendingSettings };
+  return r.ok;
 }
 
 let pushTimer;
@@ -325,11 +330,6 @@ function renderDiag() {
         const ago = Math.max(0, Math.round(Date.now() / 1000 - v.at));
         return `<div>${src} · ${v.rows} rows · ${v.ok ? '' : 'error: '}${v.what} · ${ago}s ago</div>`;
       });
-      // One archive, one timeline: two consoles reporting without an ingest key interleave
-      // their rows and the trends read as noise. The real fix is per-station rows (3.3.0).
-      const writing = Object.values(d).filter((v) => v.rows > 0).length;
-      if (writing > 1) rows.push('<div class="warn">two stations are reporting here — their rows '
-        + 'interleave into one archive. Set an ingest key so only yours is stored.</div>');
       el.innerHTML = rows.join('') || 'No station has reported here yet.';
     })
     .catch(() => { el.innerHTML = ''; });
@@ -647,8 +647,10 @@ $('btn-save').onclick = async () => {
 // station meta fills name/lat/lon and the Tempest device id when blank
 async function hydrateStation() {
   if (!configured()) return;
+  const identity = profileIdentity(settings());
   try {
     const j = await api.station();
+    if (identity !== profileIdentity(settings())) return;
     const st = j.stations?.[0];
     // A valid token for the wrong account answers 200 with an empty list, and the old silent
     // return left the whole dashboard blank with nothing to go on.
@@ -765,6 +767,7 @@ async function wizardFind() {
 {
   const sel = $('wiz-source');
   let placeOnly = true;
+  let searchVersion = 0;
   sel.innerHTML = $('set-source').innerHTML;
   sel.options[0].textContent = 'Tempest';
   const target = () => {
@@ -780,11 +783,14 @@ async function wizardFind() {
   };
   sel.onchange = target;
   const find = async () => {
+    const version = ++searchVersion;
     const q = $('wiz-place').value.trim();
+    $('wiz-place-list').textContent = q ? 'Searching…' : 'Enter a city or postcode.';
+    $('wiz-place-list').setAttribute('aria-busy', String(!!q));
     if (!q) return;
-    $('wiz-place-list').innerHTML = '<div class="muted">looking…</div>';
     try {
       const hits = (await api.geocode(q)).features || [];
+      if (version !== searchVersion) return;
       $('wiz-place-list').replaceChildren(...hits.map((h, i) => {
         const button = document.createElement('button');
         button.className = 'place-hit'; button.dataset.hit = i;
@@ -829,12 +835,19 @@ async function wizardFind() {
         };
       });
     } catch (e) {
-      $('wiz-place-list').textContent = e.message;
+      if (version === searchVersion) $('wiz-place-list').textContent = `Search failed. ${e.message} Try again.`;
+    } finally {
+      if (version === searchVersion) $('wiz-place-list').setAttribute('aria-busy', 'false');
     }
   };
   $('btn-wiz-wll').onclick = () => findWll($('wiz-wll-host'), $('wiz-target'));
   $('btn-wiz-place').onclick = find;
-  $('wiz-place').onkeydown = (e) => { if (e.key === 'Enter') find(); };
+  $('wiz-place').onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing) find(); };
+  $('wiz-place').oninput = () => {
+    ++searchVersion;
+    $('wiz-place-list').textContent = '';
+    $('wiz-place-list').setAttribute('aria-busy', 'false');
+  };
   const choose = (station) => {
     placeOnly = !station;
     $('wizard-choices').hidden = true;
@@ -959,7 +972,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-observatory-20260926`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-orbit-20261031`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about
@@ -978,38 +991,48 @@ function changelog() {
 // --- saved stations ---
 //
 // One token usually reaches several stations (a second house, a parent's Tempest, the club's).
-// Switching swaps the four identity fields and refetches; everything else — units, layout,
-// rules, broker — is the user's and stays put.
-function renderStations() {
-  const list = settings().savedStations || [];
-  const sel = $('station-switch');
-  sel.hidden = list.length < 2;
-  sel.innerHTML = list.map((s, i) => `<option value="${i}">${s.name || s.id}</option>`).join('');
-  const at = list.findIndex((s) => String(s.id) === String(settings().stationId));
-  if (at >= 0) sel.value = String(at);
+// Profiles retain station credentials, source choices and alert rules. Units and layout stay shared.
+const PROFILE_KEYS = ['stationId','deviceId','stationSource','stationName','token','lat','lon','elevationM','wllHost','awnApiKey','awnAppKey','lacrosseEmail','lacrossePass','ingestKey','rules','notif','windGustAlert','forecastProvider','alertRegion','ecowittAppKey','ecowittApiKey','ecowittMac','purpleAirHost','riverGauge','cameraUrl','activity'];
+function profileIdentity(s) { return JSON.stringify([s.stationSource||'',s.stationId||'',s.deviceId||'',s.wllHost||'',s.lacrosseEmail||'',s.ecowittMac||'',s.ingestKey||'',s.awnApiKey||'']); }
+function stationProfile(s) { return Object.fromEntries(PROFILE_KEYS.map(k => [k, s[k] !== undefined ? s[k] : (k === 'rules' ? [] : ['lat','lon','elevationM','activity'].includes(k) ? null : '')])); }
 
-  $('station-list').innerHTML = list.length
-    ? list.map((s, i) => `<div class="row" style="margin:0">
-        <span class="place-hit" style="flex:1">${s.name || s.id}</span>
-        <button class="sig-x" data-station="${i}">×</button></div>`).join('')
-    : '<div class="muted" style="font-size:12px">No saved stations</div>';
-  $('station-list').querySelectorAll('[data-station]').forEach((b) => {
-    b.onclick = () => {
-      const next = [...(settings().savedStations || [])];
-      next.splice(+b.dataset.station, 1);
-      saveSettings({ savedStations: next });
-      renderStations();
-    };
+function renderStations() {
+  const list=settings().savedStations||[],sel=$('station-switch');
+  sel.hidden=PUBLIC||list.length<2;sel.replaceChildren();
+  const box=$('station-list');box.replaceChildren();
+  if(!list.length)box.textContent='No saved stations';
+  list.forEach((s,i)=>{
+    const option=document.createElement('option');option.value=String(i);option.textContent=s.name||s.id;sel.append(option);
+    const row=document.createElement('div');row.className='row';
+    const name=document.createElement('span');name.textContent=s.name||s.id;row.append(name);
+    const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.setAttribute('aria-label',`Remove ${s.name||s.id} from saved stations`);
+    remove.onclick=()=>{saveSettings({savedStations:(settings().savedStations||[]).filter((_,n)=>n!==i)});renderStations();};
+    row.append(remove);box.append(row);
   });
+  const at=list.findIndex(s=>settings().activeStationProfile?s.id===settings().activeStationProfile:String(s.id)===String(settings().stationId));
+  if(at>=0)sel.value=String(at);
 }
 
 async function switchStation(s) {
-  saveSettings({ stationId: String(s.id), deviceId: s.deviceId || '', lat: s.lat, lon: s.lon, stationName: s.name });
-  // The radar camera belongs to the station we just left.
-  radarView = null;
-  store('wd.radar', null);
+  const selector=$('station-switch');
+  if(selector.disabled)return;
+  selector.disabled=true;
+  try {
+  const before=settings(), list=(before.savedStations||[]).map(item=>item.id===before.activeStationProfile&&profileIdentity(item.profile||{})===profileIdentity(before)?{...item,profile:stationProfile(before)}:item);
+  const patch=s.profile?{...s.profile}:stationProfile({stationId:String(s.id),deviceId:s.deviceId||'',lat:s.lat,lon:s.lon,stationName:s.name,token:before.token,stationSource:'',rules:[],notif:before.notif,windGustAlert:before.windGustAlert,forecastProvider:'auto',alertRegion:'US'});
+  saveSettings({...patch,activePlace:null,activeStationProfile:s.id,savedStations:list});
+  clearTimeout(pushTimer);
+  if (!await pushConfig()) {
+    saveSettings({...stationProfile(before),activePlace:before.activePlace,activeStationProfile:before.activeStationProfile,savedStations:before.savedStations});
+    fillDrawer();renderStations();
+    notify({title:'Station switch failed',body:'The server did not save the station change. Your previous station is still selected; check the connection and try again.'});
+    return;
+  }
+  radarView=null;store('wd.radar',null);
   await hydrateStation();
-  refreshAll();
+  await pushConfig();
+  fillDrawer();renderStations();refreshAll();
+  } finally { selector.disabled=false; }
 }
 
 $('station-switch').onchange = (e) => {
@@ -1018,11 +1041,13 @@ $('station-switch').onchange = (e) => {
 };
 
 $('btn-station-save').onclick = () => {
-  const s = settings();
-  if (!s.stationId) return;
-  const list = (s.savedStations || []).filter((x) => String(x.id) !== String(s.stationId));
-  list.push({ id: String(s.stationId), name: s.stationName || s.stationId, deviceId: s.deviceId, lat: s.lat, lon: s.lon });
-  saveSettings({ savedStations: list });
+  const s=settings();
+  if(!s.stationId&&!s.stationSource){notify({title:'Connect a station before saving a profile'});return;}
+  const existing=(s.savedStations||[]).find(x=>x.profile&&profileIdentity(x.profile)===profileIdentity(s));
+  const id=existing?.id||('station-'+(globalThis.crypto?.randomUUID?.()||Date.now()));
+  const list=(s.savedStations||[]).filter(x=>x.id!==id);
+  list.push({id,name:s.stationName||s.stationId||s.stationSource,profile:stationProfile(s)});
+  saveSettings({savedStations:list,activeStationProfile:id});
   renderStations();
 };
 
@@ -1340,7 +1365,7 @@ window.addEventListener('wd:refresh', () => {
 // HookEcho (own NEXRAD viewer) instead of the weathermap build. Deep link is
 // `#goto=SITE,lon,lat,zoom[,extras]` — note lon before lat, and unknown extras are ignored by
 // older builds, so adding to this string can never break a deployed viewer.
-const RADAR = 'https://hookecho.pages.dev/';
+const RADAR = 'https://app.hookecho.io/';
 
 // The NEXRAD + TDWR registry, generated from HookEcho's own site table
 // (`cargo run -p wxdata --example sites_json`). Frozen data — a live endpoint would be coupling
@@ -1398,12 +1423,22 @@ export function radarUrl(zoom, embed = true) {
 // Held in memory and flushed every few seconds: a pan posts once a second, and a localStorage
 // write per frame is the panning stutter.
 let radarView = null, radarFlush = 0;
+window.addEventListener('wd:radar-focus', ({ detail: p }) => {
+  if (!Number.isFinite(p?.lat) || Math.abs(p.lat) > 90 || !Number.isFinite(p?.lon) || Math.abs(p.lon) > 180) return;
+  radarView = { lat: p.lat, lon: p.lon, zoom: 7, site: nearestSite(p.lat, p.lon)?.id || radarSite(), basemap: 'dark' };
+  store('wd.radar', radarView);
+  document.querySelector('.tab[data-section="lab"]')?.click();
+  if (safeMode()) { if ($('lab-radar-still')) $('lab-radar-still').src = stillUrl(); }
+  else $('lab-frame').src = radarUrl(7, false);
+  document.querySelector('.tab[data-section="lab"]')?.focus();
+});
 
 window.addEventListener('message', (e) => {
-  if (e.origin !== new URL(RADAR).origin) return;
+  if (e.origin !== new URL(RADAR).origin || ![$('desk-radar-frame')?.contentWindow, $('lab-frame')?.contentWindow].includes(e.source)) return;
   let v = e.data;
   try { v = typeof v === 'string' ? JSON.parse(v) : v; } catch { return; }
-  if (!v || v.hookecho !== 1) return;
+  if (!v || v.hookecho !== 1 || !Number.isFinite(v.lon) || Math.abs(v.lon) > 180
+    || !Number.isFinite(v.lat) || Math.abs(v.lat) > 90 || !Number.isFinite(v.zoom) || v.zoom < 0 || v.zoom > 24) return;
   radarView = v;
   radarAlive();
   if (radarFlush) return;
@@ -1415,8 +1450,11 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // The viewer is a third-party origin behind a tunnel: when it is down the iframe just stays blank
-// and the panel looks broken. No camera message within 20 s of loading it means unreachable.
+// and the panel looks broken. A missing load event or camera message triggers the timeout.
 let radarWatch = 0;
+$('desk-radar-frame').addEventListener('load', () => {
+  if ($('desk-radar-frame').getAttribute('src')?.startsWith(RADAR)) radarAlive();
+});
 function radarAlive() {
   clearTimeout(radarWatch);
   radarWatch = 0;
@@ -1476,7 +1514,7 @@ window.addEventListener('wd:section', (e) => {
     f.style.display = 'none';
     const refresh = () => { img.src = stillUrl(); };
     img.onerror = () => { caption.textContent = 'Radar snapshot unavailable · retrying in 5 minutes'; };
-    img.onload = () => { caption.textContent = 'Radar snapshot · refreshes every 5 minutes'; };
+    img.onload = () => { caption.textContent = `Snapshot received ${new Date().toLocaleTimeString()} · refreshes every 5 min · scan time unavailable`; };
     refresh();
     every('lab-radar-still', 300, refresh);
     return;
@@ -1521,7 +1559,7 @@ function showStill(panel) {
   panel.classList.add('loaded');
   const refresh = () => { img.src = stillUrl(); };
   img.onerror = () => { panel.classList.add('unreachable'); $('desk-radar-caption').textContent = 'Radar snapshot unavailable · retrying in 5 minutes'; };
-  img.onload = () => { panel.classList.remove('unreachable'); $('desk-radar-caption').textContent = 'Still image · 5 min · tap for the live map'; };
+  img.onload = () => { panel.classList.remove('unreachable'); $('desk-radar-caption').textContent = `Snapshot received ${new Date().toLocaleTimeString()} · scan time unavailable · tap for live map`; };
   img.onclick = () => document.querySelector('.tab[data-section="lab"]')?.click();
   refresh();
   every('radar-still', 300, refresh);
@@ -1548,7 +1586,8 @@ function loadDeskRadar() {
     return showStill(panel);
   }
   $('desk-radar-still').hidden = true;
-  $('desk-radar-caption').hidden = true;
+  $('desk-radar-caption').hidden = false;
+  $('desk-radar-caption').textContent = 'Interactive radar · scan time and playback are shown in the map';
   clearJob('radar-still');
   if (f.src || loadDeskRadar.armed) return;
   // First run: the drawer is open and typing the token matters more than the map. Closing the
@@ -1678,6 +1717,9 @@ pulled.then(() => {
   showWizard();
   hydrateStation().then(() => {
     loadDeskRadar();
+    organizeSettings();
+    initEnvironmentDashboard();
+    import('./sensor-channels.js').then(module => module.initSensorChannels()).catch(error => console.warn('Sensor health unavailable', error));
     initDesk(); initIntel(); initSignals(); refreshHistoryIfLoaded(); initAlmanac(); initEnv(); initPro(); initDetail(); initUdp(); initHome();
     every('server-alerts', 300, probeServerAlerts);
     (window.__WD_TIMINGS ||= {}).initialDeskRenderMs = Math.round(performance.now());

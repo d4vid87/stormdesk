@@ -4,33 +4,45 @@ import * as api from './api.js';
 import { settings, saveSettings, coords, refreshAll, notify } from './app.js';
 
 const $ = (id) => document.getElementById(id);
+let searchVersion = 0;
 
 export function renderPlaces() {
   const s = settings();
-  const active = s.activePlace;
-  const home = `<button class="place${active ? '' : ' on'}" data-id="">🏠 ${s.stationName || 'Station'}</button>`;
-  $('places').innerHTML = home + s.places.map((p) =>
-    `<button class="place${active === p.id ? ' on' : ''}" data-id="${p.id}">${p.name}<i data-del="${p.id}">×</i></button>`
-  ).join('');
-
-  $('places').querySelectorAll('.place').forEach((b) => {
-    b.onclick = (e) => {
-      if (e.target.dataset.del) {
-        const id = e.target.dataset.del;
-        saveSettings({
-          places: settings().places.filter((p) => p.id !== id),
-          activePlace: settings().activePlace === id ? null : settings().activePlace,
-        });
-        renderPlaces();
-        refreshAll();
-        return;
-      }
-      saveSettings({ activePlace: b.dataset.id || null });
+  const places = [{ id: null, name: s.stationName || 'Station' }, ...s.places];
+  $('places').replaceChildren(...places.map((p, index) => {
+    const group = document.createElement('span');
+    group.className = 'saved-place';
+    const button = document.createElement('button');
+    const active = (s.activePlace || null) === p.id;
+    button.className = 'place' + (active ? ' on' : '');
+    button.textContent = (index ? '' : '🏠 ') + p.name;
+    button.setAttribute('aria-pressed', String(active));
+    button.onclick = () => {
+      saveSettings({ activePlace: p.id });
       renderPlaces();
-      updateHeader();
+      $('places').querySelector('[aria-pressed="true"]').focus();
       refreshAll();
     };
-  });
+    group.append(button);
+    if (index) {
+      const remove = document.createElement('button');
+      remove.className = 'place-remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${p.name}`);
+      remove.onclick = () => {
+        saveSettings({
+          places: settings().places.filter((place) => place.id !== p.id),
+          activePlace: settings().activePlace === p.id ? null : settings().activePlace,
+        });
+        renderPlaces();
+        const groups = $('places').children;
+        groups[Math.min(index, groups.length - 1)].querySelector('button').focus();
+        refreshAll();
+      };
+      group.append(remove);
+    }
+    return group;
+  }));
   updateHeader();
 }
 
@@ -40,19 +52,20 @@ function updateHeader() {
 }
 
 async function search() {
+  const version = ++searchVersion;
   const q = $('place-q').value.trim();
+  const results = $('place-results');
+  results.textContent = q ? 'Searching…' : 'Enter a city or postcode.';
+  results.setAttribute('aria-busy', String(!!q));
   if (!q) return;
-  $('place-results').innerHTML = '<div class="muted">searching…</div>';
   try {
     const j = await api.geocode(q);
-    $('place-results').innerHTML = (j.features || []).map((f, i) => {
-      const p = f.properties;
-      const label = api.placeLabel(p);
-      return `<button class="place-hit" data-i="${i}">${label}</button>`;
-    }).join('') || '<div class="muted">no matches</div>';
-    $('place-results').querySelectorAll('.place-hit').forEach((b) => {
-      b.onclick = () => {
-        const f = j.features[+b.dataset.i];
+    if (version !== searchVersion) return;
+    results.replaceChildren(...(j.features || []).map((f) => {
+      const button = document.createElement('button');
+      button.className = 'place-hit';
+      button.textContent = api.placeLabel(f.properties);
+      button.onclick = () => {
         const p = f.properties;
         const place = {
           id: String(Date.now()),
@@ -60,20 +73,32 @@ async function search() {
           lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0],
         };
         saveSettings({ places: [...settings().places, place], activePlace: place.id });
-        $('place-results').innerHTML = '';
+        ++searchVersion;
+        results.textContent = '';
         $('place-q').value = '';
         renderPlaces();
+        $('places').querySelector('[aria-pressed="true"]').focus();
         refreshAll();
       };
-    });
+      return button;
+    }));
+    if (!results.children.length) results.textContent = 'No matches. Try a nearby town or postcode.';
+    results.scrollIntoView({ block: 'nearest' });
   } catch (e) {
-    $('place-results').innerHTML = `<div class="fail">${e.message}</div>`;
+    if (version === searchVersion) results.textContent = `Search failed. ${e.message} Try again.`;
+  } finally {
+    if (version === searchVersion) results.setAttribute('aria-busy', 'false');
   }
 }
 
 export function initPlaces() {
   $('btn-place-search').onclick = search;
-  $('place-q').onkeydown = (e) => { if (e.key === 'Enter') search(); };
+  $('place-q').onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing) search(); };
+  $('place-q').oninput = () => {
+    ++searchVersion;
+    $('place-results').textContent = '';
+    $('place-results').setAttribute('aria-busy', 'false');
+  };
 
   // notification category toggles
   $('notif-toggles').querySelectorAll('input[data-cat]').forEach((cb) => {

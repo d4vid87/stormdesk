@@ -27,6 +27,10 @@ pub mod mqtt;
 pub mod server;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod store;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod archive;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod environment;
 
 #[cfg(feature = "gui")]
 mod gui;
@@ -91,6 +95,7 @@ pub fn start_services(data_dir: PathBuf, cfg_path: PathBuf) -> (std::sync::Arc<s
     let listener = state.clone();
     std::thread::spawn(move || server::listen_udp(listener));
     server::start_backfill(state.clone());
+    server::start_air(state.clone());
     cwop::start(state.data_dir.clone(), state.cfg_path.clone());
     cwop::start_relay(state.data_dir.clone(), state.cfg_path.clone());
     ingest::start_pollers(state.clone());

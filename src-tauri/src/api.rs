@@ -70,7 +70,7 @@ fn forecast(cfg: &std::path::Path) -> Option<serde_json::Value> {
 fn current(conn: &rusqlite::Connection) -> Option<serde_json::Value> {
     let cols = store::FIELDS.join(", ");
     let (ts, vals) = conn
-        .query_row(&format!("SELECT ts, {cols} FROM obs ORDER BY ts DESC LIMIT 1"), [], |r| {
+        .query_row(&format!("SELECT ts, {cols} FROM usable_obs ORDER BY ts DESC LIMIT 1"), [], |r| {
             let ts: i64 = r.get(0)?;
             let mut v = Vec::with_capacity(store::FIELDS.len());
             for i in 1..=store::FIELDS.len() {
@@ -95,7 +95,7 @@ fn current(conn: &rusqlite::Connection) -> Option<serde_json::Value> {
     if let Some(p) = at("pressure") {
         let was = conn
             .query_row(
-                "SELECT pressure FROM obs WHERE ts <= ?1 AND pressure IS NOT NULL ORDER BY ts DESC LIMIT 1",
+                "SELECT pressure FROM usable_obs WHERE ts <= ?1 AND pressure IS NOT NULL ORDER BY ts DESC LIMIT 1",
                 [ts - 3 * 3600],
                 |r| r.get::<_, Option<f64>>(0),
             )

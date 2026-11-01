@@ -8,14 +8,17 @@ import { syncSpokenAlerts } from './app.js';
 // reload would otherwise leave the whole page at `--`; in-session failures already keep the DOM.
 function cacheContext(kind) {
   const s = settings(), c = coords();
-  return `${kind}:${s.stationSource || 'tempest'}:${s.stationId || ''}:${c.lat ?? ''}:${c.lon ?? ''}:${s.units}:${s.windUnit || ''}`;
+  return `${kind}:${s.stationSource || 'tempest'}:${s.stationId || ''}:${c.lat ?? ''}:${c.lon ?? ''}:${s.units}:${s.windUnit || ''}:${s.places.find(p => p.id === s.activePlace)?.forecastProvider || s.forecastProvider || 'auto'}:${JSON.stringify([s.deviceId||'',s.activeStationProfile||'',s.wllHost||'',s.lacrosseEmail||'',s.ecowittMac||''])}`;
 }
 
-async function cached(kind, fetcher) {
+async function cached(kind, fetcher, onSaved) {
   const key = `wd.cache.${cacheContext(kind)}`;
+  const saved = load(key, null);
+  if (saved && onSaved) onSaved(saved);
   try {
     const j = await fetcher();
-    store(key, j);
+    j._savedAt = Date.now();
+    if (key === `wd.cache.${cacheContext(kind)}`) store(key, j);
     return { j, fresh: true };
   } catch (e) {
     const j = load(key, null);
@@ -33,7 +36,7 @@ let toldFcFail = false;
 let severe = [];
 export const severeAlerts = () => severe;
 
-let latestForecast = null;
+let latestForecast = null, forecastContext = null;
 export const forecast = () => latestForecast;
 
 const $ = (id) => document.getElementById(id);
@@ -87,32 +90,37 @@ export function renderHeroAlerts(feats, status = '') {
 
 export async function refreshDesk() {
   const timingStarted = performance.now();
-  // Not `configured()`: an Ecowitt or a Davis has no Tempest forecast, and `api.betterForecast`
-  // hands those installs the open-meteo payload in the same shape — which needs a location and
-  // nothing else, so an install with only a saved place gets a forecast too.
   if (!hasSource() && !hasLocation()) return;
   const requestContext = cacheContext('forecast');
-  let res;
+  const publish = (fc, fresh) => {
+    if (requestContext !== cacheContext('forecast')) return;
+    latestForecast = fc;
+    forecastContext = requestContext;
+    fc._cached = !fresh;
+    fc._provider = fc._forecastSource || 'Forecast estimate';
+    fc._provenance = `${fresh ? '' : 'Saved · '}${(fc.current_conditions._station || fc._forecastSource === 'Tempest') && !settings().activePlace
+      ? 'Station where available · forecast otherwise' : 'Forecast estimates'}`;
+    renderCurrent(fc.current_conditions, fresh);
+    renderTenDay(fc.forecast.daily);
+    $('tenday').setAttribute('aria-description', `${fc._forecastSource || 'Forecast'}${fc._forecastFallback ? ' · ' + fc._forecastFallback : ''}`);
+    if (fresh) stamp('tenday', 300);
+    else $('tenday').classList.add('stale');
+    window.dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
+  };
   try {
-    res = await cached('forecast', api.betterForecast);
+    const res = await cached('forecast', api.betterForecast, fc => { if (!latestForecast || forecastContext !== requestContext) publish(fc, false); });
+    if (requestContext !== cacheContext('forecast')) return;
+    if (res.fresh) toldFcFail = false;
+    else if (!toldFcFail) {
+      toldFcFail = true;
+      notify({ title: 'Forecast stale — showing saved weather', body: res.err.message });
+    }
+    publish(res.j, res.fresh);
   } catch (e) {
+    if (requestContext !== cacheContext('forecast')) return;
     if (!toldFcFail) { toldFcFail = true; notify({ title: 'Forecast failed', body: e.message }); }
     throw e;
   }
-  const { j: fc, fresh } = res;
-  if (requestContext !== cacheContext('forecast')) return;
-  if (fresh) toldFcFail = false;
-  else if (!toldFcFail) {
-    toldFcFail = true;
-    notify({ title: 'Forecast stale — showing cached copy', body: res.err.message });
-  }
-  latestForecast = fc;
-  fc._provenance = `${fresh ? '' : 'Cached · '}${(fc.current_conditions._station || (hasSource() && !settings().stationSource)) && !settings().activePlace
-    ? 'Station where available · forecast otherwise' : 'Forecast estimates · no station connected'}`;
-  renderCurrent(fc.current_conditions);
-  renderTenDay(fc.forecast.daily);
-  if (fresh) stamp('tenday', 300);
-  window.dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   (window.__WD_TIMINGS ||= {}).forecastRefreshMs = Math.round(performance.now() - timingStarted);
 }
 
@@ -129,17 +137,18 @@ document.addEventListener('visibilitychange', () => {
 });
 
 window.addEventListener('wd:ws-obs', (e) => {
-  if (!latestForecast) return;
+  if (!latestForecast || forecastContext !== cacheContext('forecast')) return;
   if (document.hidden) { pendingObs = e.detail; return; }
+  if (settings().activePlace) return;
   api.overlayStation(latestForecast.current_conditions, e.detail, latestForecast.elevation);
-  renderCurrent(latestForecast.current_conditions);
+  renderCurrent(latestForecast.current_conditions, !latestForecast._cached || latestForecast.current_conditions._sources?.wind_gust?.at === e.detail[api.OBS.time]);
   window.dispatchEvent(new CustomEvent('wd:current', { detail: latestForecast }));
 });
 
-function renderCurrent(c) {
+function renderCurrent(c, fresh = true) {
   if (!c) return;
   document.title = `${num(c.air_temperature)}${U.temp()} · StormDesk`;
-  if (c.wind_gust >= settings().windGustAlert) {
+  if (fresh && c.wind_gust >= settings().windGustAlert) {
     notify({
       id: `gust-${Math.floor(c.time / 1800)}`, category: 'wind',
       title: 'High wind', body: `Gust ${num(c.wind_gust, 1)} ${U.wind()}`,
@@ -164,6 +173,7 @@ export async function refreshAlerts() {
   let j;
   try { j = await api.alerts(); }
   catch (error) {
+    if (requestedPlace !== JSON.stringify(coords())) return;
     const unsupported = /^404\b/.test(error.message);
     const message = unsupported ? 'NWS alerts are available in the United States only' : 'Alert feed unavailable · check official sources';
     renderHeroAlerts(null, message);
@@ -239,15 +249,18 @@ const aqiLabel = (v) => ({ good: 'Good', mod: 'Moderate', usg: 'Unhealthy (sensi
 export async function refreshObs() {
   if (!configured()) return;
   const requestContext = cacheContext('observation');
-  const { j, fresh } = await cached('observation', api.stationObs);
-  if (requestContext !== cacheContext('observation')) return;
-  const o = j.obs?.[0];
-  if (!o) return;
-  if (fresh) stamp('hero', settings().refreshSec);
-  // stn obs has no conditions/icon — keep the ones from the last better_forecast
-  const cc = latestForecast?.current_conditions;
-  renderCurrent({ ...o, conditions: cc?.conditions, icon: cc?.icon, time: o.timestamp });
-  window.dispatchEvent(new CustomEvent('wd:obs', { detail: o }));
+  const publish = (j, fresh) => {
+    if (requestContext !== cacheContext('observation')) return;
+    const o = j.obs?.[0];
+    if (!o) return;
+    if (fresh) stamp('hero', settings().refreshSec);
+    const cc = latestForecast?.current_conditions;
+    o._cached = !fresh;
+    renderCurrent({ ...o, conditions: cc?.conditions, icon: cc?.icon, time: o.timestamp }, fresh);
+    window.dispatchEvent(new CustomEvent('wd:obs', { detail: o }));
+  };
+  const { j, fresh } = await cached('observation', api.stationObs, saved => publish(saved, false));
+  publish(j, fresh);
 }
 
 export function initDesk() {

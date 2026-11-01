@@ -5,7 +5,7 @@
 // The JSONL files are imported once and then left alone forever — they are the escape hatch if
 // this file is ever wrong, and they cost nothing to keep.
 
-use rusqlite::{params_from_iter, Connection};
+use rusqlite::{params_from_iter, Connection, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 /// obs_st tuple layout minus its leading timestamp, same order as `site/js/api.js` OBS.
@@ -40,6 +40,33 @@ pub fn db_path(data_dir: &Path) -> PathBuf {
     data_dir.join("stormdesk.db")
 }
 
+/// Select a station archive without moving or overwriting the original installation's file.
+pub fn station_db_path(data_dir: &Path, cfg: &Path) -> PathBuf {
+    station_db_path_for(data_dir, &crate::server::station_fingerprint(cfg))
+}
+
+pub fn station_db_path_for(data_dir: &Path, identity: &str) -> PathBuf {
+    use sha2::{Digest, Sha256};
+    use std::sync::{Mutex, OnceLock};
+    static BINDINGS: OnceLock<Mutex<std::collections::HashMap<PathBuf, String>>> = OnceLock::new();
+    let legacy = db_path(data_dir);
+    if identity == "none" { return legacy; }
+    let mut bindings = BINDINGS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    let bound = if let Some(bound) = bindings.get(&legacy) {
+        Some(bound.clone())
+    } else {
+        let bound = open(&legacy).ok().and_then(|conn| {
+            conn.execute("INSERT OR IGNORE INTO meta(key,value) VALUES ('station_fingerprint',?1)", [identity]).ok()?;
+            meta_get(&conn, "station_fingerprint")
+        });
+        if let Some(bound) = &bound { bindings.insert(legacy.clone(), bound.clone()); }
+        bound
+    };
+    if bound.as_deref() == Some(identity) { return legacy; }
+    let hash = format!("{:x}", Sha256::digest(identity.as_bytes()));
+    data_dir.join("stations").join(format!("{hash}.db"))
+}
+
 /// Open (and if need be create) the archive. Every caller gets its own connection — WAL means
 /// the UDP writer and a reading request thread don't block each other.
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
@@ -52,9 +79,35 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.execute_batch(&format!(
         "CREATE TABLE IF NOT EXISTS obs (ts INTEGER PRIMARY KEY, {}, src INTEGER NOT NULL DEFAULT 0);
-         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);",
+         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+         CREATE TABLE IF NOT EXISTS notes (
+           id INTEGER PRIMARY KEY, ts INTEGER NOT NULL, until INTEGER NOT NULL,
+           kind TEXT NOT NULL, text TEXT NOT NULL, value REAL);
+         CREATE INDEX IF NOT EXISTS notes_exclusions ON notes(ts,until) WHERE kind='exclude';
+         CREATE TABLE IF NOT EXISTS channels (
+           ts INTEGER NOT NULL, name TEXT NOT NULL, value REAL NOT NULL, unit TEXT NOT NULL,
+           PRIMARY KEY(ts,name));
+         CREATE VIEW IF NOT EXISTS usable_obs AS SELECT * FROM obs
+           WHERE NOT EXISTS (SELECT 1 FROM notes WHERE kind='exclude' AND obs.ts BETWEEN notes.ts AND notes.until);
+         CREATE TABLE IF NOT EXISTS daily_cache (tz INTEGER PRIMARY KEY, until INTEGER NOT NULL, body TEXT NOT NULL);
+         CREATE TRIGGER IF NOT EXISTS notes_insert AFTER INSERT ON notes BEGIN DELETE FROM daily_cache; END;
+         CREATE TRIGGER IF NOT EXISTS notes_delete AFTER DELETE ON notes BEGIN DELETE FROM daily_cache; END;
+         CREATE TRIGGER IF NOT EXISTS notes_update AFTER UPDATE ON notes BEGIN DELETE FROM daily_cache; END;
+         CREATE TRIGGER IF NOT EXISTS daily_cache_insert AFTER INSERT ON obs BEGIN
+           DELETE FROM daily_cache WHERE NEW.ts < until;
+         END;
+         CREATE TRIGGER IF NOT EXISTS daily_cache_delete AFTER DELETE ON obs BEGIN
+           DELETE FROM daily_cache WHERE OLD.ts < until;
+         END;
+         CREATE TRIGGER IF NOT EXISTS daily_cache_update AFTER UPDATE ON obs BEGIN
+           DELETE FROM daily_cache WHERE OLD.ts < until OR NEW.ts < until;
+         END;",
         FIELDS.iter().map(|f| format!("{f} REAL")).collect::<Vec<_>>().join(", ")
     ))?;
+    if meta_get(&conn,"summary_format").as_deref()!=Some("2") {
+        conn.execute("DELETE FROM daily_cache",[])?;
+        meta_set(&conn,"summary_format","2");
+    }
     Ok(conn)
 }
 
@@ -172,20 +225,69 @@ pub fn day_start(now: i64, tz_off_min: i64) -> i64 {
     (now + off).div_euclid(86400) * 86400 - off
 }
 
-/// Everything before today. This is the expensive half — a full-table GROUP BY of every reading
-/// the archive holds — and it is also the half that cannot change any more, so the server caches
-/// it across requests and only today's row is recomputed.
+/// Persist completed days; append only the newly completed range at midnight.
+/// Triggers invalidate summaries when historical observations are inserted, edited or deleted.
 pub fn daily_head_json(conn: &Connection, tz_off_min: i64, day_start: i64) -> String {
-    rows_json(
-        conn,
-        "SELECT strftime('%Y-%m-%d', ts + ?1, 'unixepoch'),
-                MIN(temp), MAX(temp), MAX(wind_gust), SUM(rain), SUM(strikes), MIN(battery)
-         FROM obs WHERE ts < ?2 GROUP BY 1 ORDER BY 1",
-        tz_off_min,
-        day_start,
-    )
-    .map(|v| format!("[{}]", v.join(",")))
-    .unwrap_or_else(|| "[]".into())
+    let cached = (|| -> rusqlite::Result<String> {
+        // The read and write share a snapshot so a concurrent backfill cannot cache stale totals.
+        let tx = conn.unchecked_transaction()?;
+        let saved: Option<(i64, String)> = tx
+            .query_row(
+                "SELECT until, body FROM daily_cache WHERE tz = ?1",
+                [tz_off_min],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let (from, head) = saved
+            .filter(|(until, _)| *until <= day_start)
+            .unwrap_or((i64::MIN, "[]".into()));
+        if from == day_start {
+            return Ok(head);
+        }
+        let mut stmt = tx.prepare(
+            "SELECT strftime('%Y-%m-%d', ts + ?1, 'unixepoch'),
+                    MIN(temp), MAX(temp), MAX(wind_gust), SUM(rain), SUM(strikes), MIN(battery), COUNT(*), MIN(ts), MAX(ts), SUM(COALESCE(report_interval,1))
+             FROM usable_obs WHERE ts >= ?2 AND ts < ?3 GROUP BY 1 ORDER BY 1",
+        )?;
+        let rows = stmt.query_map(
+            rusqlite::params![tz_off_min * 60, from, day_start],
+            daily_row,
+        )?;
+        let additions = rows.collect::<rusqlite::Result<Vec<_>>>()?.join(",");
+        drop(stmt);
+        let body = if additions.is_empty() {
+            head
+        } else if head == "[]" {
+            format!("[{additions}]")
+        } else {
+            format!("{},{additions}]", head.trim_end_matches(']'))
+        };
+        tx.execute(
+            "INSERT INTO daily_cache(tz, until, body) VALUES (?1, ?2, ?3)
+                    ON CONFLICT(tz) DO UPDATE SET until = excluded.until, body = excluded.body",
+            rusqlite::params![tz_off_min, day_start, body],
+        )?;
+        // Offsets change with DST; keep the cache bounded across viewers and settings changes.
+        tx.execute(
+            "DELETE FROM daily_cache WHERE tz NOT IN
+                    (SELECT tz FROM daily_cache ORDER BY until DESC, tz LIMIT 8)",
+            [],
+        )?;
+        tx.commit()?;
+        Ok(body)
+    })();
+    cached.unwrap_or_else(|_| {
+        rows_json(
+            conn,
+            "SELECT strftime('%Y-%m-%d', ts + ?1, 'unixepoch'),
+                MIN(temp), MAX(temp), MAX(wind_gust), SUM(rain), SUM(strikes), MIN(battery), COUNT(*), MIN(ts), MAX(ts), SUM(COALESCE(report_interval,1))
+         FROM usable_obs WHERE ts < ?2 GROUP BY 1 ORDER BY 1",
+            tz_off_min,
+            day_start,
+        )
+        .map(|v| format!("[{}]", v.join(",")))
+        .unwrap_or_else(|| "[]".into())
+    })
 }
 
 /// Today, over the primary key range — an index lookup rather than a scan. `None` on a day with
@@ -194,8 +296,8 @@ pub fn daily_today_row(conn: &Connection, tz_off_min: i64, day_start: i64) -> Op
     rows_json(
         conn,
         "SELECT strftime('%Y-%m-%d', ts + ?1, 'unixepoch'),
-                MIN(temp), MAX(temp), MAX(wind_gust), SUM(rain), SUM(strikes), MIN(battery)
-         FROM obs WHERE ts >= ?2 GROUP BY 1 ORDER BY 1",
+                MIN(temp), MAX(temp), MAX(wind_gust), SUM(rain), SUM(strikes), MIN(battery), COUNT(*), MIN(ts), MAX(ts), SUM(COALESCE(report_interval,1))
+         FROM usable_obs WHERE ts >= ?2 GROUP BY 1 ORDER BY 1",
         tz_off_min,
         day_start,
     )?
@@ -213,20 +315,18 @@ pub fn daily_join(head: &str, today: Option<&str>) -> String {
 
 fn rows_json(conn: &Connection, sql: &str, tz_off_min: i64, day_start: i64) -> Option<Vec<String>> {
     let mut stmt = conn.prepare(sql).ok()?;
+    let rows = stmt.query_map([tz_off_min * 60, day_start], daily_row);
+    rows.ok()
+        .and_then(|it| it.collect::<rusqlite::Result<Vec<_>>>().ok())
+}
+
+fn daily_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<String> {
     let n = |v: Option<f64>| v.map(|x| x.to_string()).unwrap_or_else(|| "null".into());
-    let rows = stmt.query_map([tz_off_min * 60, day_start], |r| {
-        Ok(format!(
-            "{{\"day\":\"{}\",\"tempMin\":{},\"tempMax\":{},\"gustMax\":{},\"rain\":{},\"strikes\":{},\"battMin\":{}}}",
-            r.get::<_, String>(0)?,
-            n(r.get(1)?),
-            n(r.get(2)?),
-            n(r.get(3)?),
-            n(r.get(4)?),
-            n(r.get(5)?),
-            n(r.get(6)?)
-        ))
-    });
-    rows.ok().map(|it| it.flatten().collect())
+    Ok(format!(
+        "{{\"day\":\"{}\",\"tempMin\":{},\"tempMax\":{},\"gustMax\":{},\"rain\":{},\"strikes\":{},\"battMin\":{},\"readings\":{},\"first\":{},\"last\":{},\"sampleMinutes\":{}}}",
+        r.get::<_, String>(0)?, n(r.get(1)?), n(r.get(2)?), n(r.get(3)?),
+        n(r.get(4)?), n(r.get(5)?), n(r.get(6)?), r.get::<_,i64>(7)?, r.get::<_,i64>(8)?, r.get::<_,i64>(9)?, n(r.get(10)?)
+    ))
 }
 
 /// Delete the oldest week of readings that is older than `cutoff`, and say how many went.
@@ -240,7 +340,8 @@ fn rows_json(conn: &Connection, sql: &str, tz_off_min: i64, day_start: i64) -> O
 /// the file plateaus rather than shrinks; `sqlite3 stormdesk.db VACUUM` with the app stopped is
 /// the escape hatch if the size ever actually matters.
 pub fn prune(conn: &Connection, cutoff: i64) -> usize {
-    conn.execute(
+    let channels=conn.execute("DELETE FROM channels WHERE ts < MIN(?1,(SELECT MIN(ts) FROM channels)+7*86400)",[cutoff]).unwrap_or(0);
+    channels + conn.execute(
         "DELETE FROM obs WHERE ts < MIN(?1, (SELECT MIN(ts) FROM obs) + 7*86400)",
         [cutoff],
     )
@@ -254,7 +355,7 @@ pub fn prune(conn: &Connection, cutoff: i64) -> usize {
 pub fn tuples_json(conn: &Connection, from: i64, to: i64) -> String {
     let cols = FIELDS.join(", ");
     let mut stmt = match conn.prepare(&format!(
-        "SELECT ts, {cols} FROM obs WHERE ts >= ?1 AND ts <= ?2 ORDER BY ts"
+        "SELECT ts, {cols} FROM usable_obs WHERE ts >= ?1 AND ts <= ?2 ORDER BY ts"
     )) {
         Ok(s) => s,
         Err(_) => return "{\"obs\":[]}".into(),
@@ -357,7 +458,7 @@ impl CsvPager {
         self.buf.clear();
         self.at = 0;
         let sql = format!(
-            "SELECT ts, {} FROM obs WHERE ts > ?1 ORDER BY ts LIMIT 10000",
+            "SELECT ts, {} FROM usable_obs WHERE ts > ?1 ORDER BY ts LIMIT 10000",
             FIELDS.join(", ")
         );
         let Ok(mut stmt) = self.conn.prepare(&sql) else {
@@ -418,7 +519,7 @@ pub fn backup_to(conn: &Connection, dest: &Path) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub const BACKUP_FORMAT: i64 = 1;
+pub const BACKUP_FORMAT: i64 = 2;
 
 /// A `.wdbak` is a normal SQLite snapshot with two reserved metadata rows. It can still be
 /// opened with sqlite3 when StormDesk is gone, which is a better recovery format than a custom
@@ -512,8 +613,15 @@ pub fn replace_from_bundle(conn: &Connection, path: &Path) -> rusqlite::Result<(
         "ATTACH DATABASE ?1 AS restore",
         [path.to_string_lossy().to_string()],
     )?;
+    let mut ancillary = String::new();
+    for table in ["notes", "channels"] {
+        ancillary.push_str(&format!("DELETE FROM {table};"));
+        let exists: i64 = conn.query_row("SELECT COUNT(*) FROM restore.sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))?;
+        if exists > 0 { ancillary.push_str(&format!("INSERT INTO {table} SELECT * FROM restore.{table};")); }
+    }
     let sql = format!(
         "BEGIN IMMEDIATE;
+        {ancillary}
         DELETE FROM obs;
         INSERT INTO obs ({cols}) SELECT {cols} FROM restore.obs;
         DELETE FROM meta;
@@ -535,7 +643,7 @@ pub fn replace_from_bundle(conn: &Connection, path: &Path) -> rusqlite::Result<(
 ///
 /// The token rides in the query string of every request here, so failures are reported by status
 /// code only — a formatted `ureq` error echoes the URL, and this goes to a log file.
-pub fn backfill(conn: &Connection, token: &str, device_id: &str) -> bool {
+pub fn backfill_checked<G>(conn: &Connection, token: &str, device_id: &str, gate: impl Fn() -> Option<G>) -> bool {
     if meta_get(conn, "backfill_done").is_some() || token.is_empty() || device_id.is_empty() {
         return meta_get(conn, "backfill_done").is_some();
     }
@@ -556,6 +664,7 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) -> bool {
     let mut empty = 0;
     let mut retries = 0;
     while empty < 3 {
+        if gate().is_none() { return false; }
         let start = cursor - chunk;
         let url = format!(
             "https://swd.weatherflow.com/swd/rest/observations/device/{device_id}?token={token}&time_start={start}&time_end={cursor}"
@@ -612,6 +721,7 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) -> bool {
                     .unwrap_or_default()
             })
             .collect();
+        let Some(guard) = gate() else { return false; };
         let mut added = 0;
         for o in &rows {
             if insert(conn, o, SRC_BACKFILL) {
@@ -626,8 +736,10 @@ pub fn backfill(conn: &Connection, token: &str, device_id: &str) -> bool {
         cursor = start;
         meta_set(conn, "backfill_cursor", &cursor.to_string());
         meta_set(conn, "backfill_error", "");
+        drop(guard);
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
+    let Some(_guard) = gate() else { return false; };
     meta_set(conn, "backfill_done", "1");
     eprintln!("stormdesk: backfill complete");
     true
@@ -734,6 +846,15 @@ mod tests {
 
     /// The cache key for /history/daily: no COUNT(*), and it still moves when the archive does.
     #[test]
+    fn cancelled_backfill_never_requests_or_writes() {
+        let c=open(Path::new(":memory:")).unwrap();
+        insert(&c,&obs(1000,20.0,0.0),SRC_UDP);
+        assert!(!backfill_checked(&c,"token","7",|| None::<()>));
+        assert_eq!(stamp(&c),(1000,1000));
+        assert!(meta_get(&c,"backfill_cursor").is_none());
+    }
+
+    #[test]
     fn stamp_is_the_range_not_a_count() {
         let conn = open(std::path::Path::new(":memory:")).unwrap();
         assert_eq!(stamp(&conn), (0, 0));
@@ -745,18 +866,7 @@ mod tests {
         assert_eq!(stamp(&conn), (100, 500));
     }
     fn mem() -> Connection {
-        let c = Connection::open_in_memory().unwrap();
-        c.execute_batch(&format!(
-            "CREATE TABLE obs (ts INTEGER PRIMARY KEY, {}, src INTEGER NOT NULL DEFAULT 0);
-             CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);",
-            FIELDS
-                .iter()
-                .map(|f| format!("{f} REAL"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ))
-        .unwrap();
-        c
+        open(Path::new(":memory:")).unwrap()
     }
 
     fn obs(ts: i64, temp: f64, rain: f64) -> Vec<Option<f64>> {
@@ -787,6 +897,79 @@ mod tests {
     }
 
     #[test]
+    fn daily_cache_survives_reopen_and_invalidates_historical_changes() {
+        let path = std::env::temp_dir().join(format!(
+            "stormdesk-summary-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let day = 1_700_006_400;
+        let c = open(&path).unwrap();
+        insert(&c, &obs(day - 60, 10.0, 1.0), SRC_UDP);
+        let first = daily_head_json(&c, 0, day);
+        assert!(first.contains("\"tempMax\":10"));
+        drop(c);
+        let c = open(&path).unwrap();
+        assert_eq!(
+            c.query_row("SELECT COUNT(*) FROM daily_cache", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(daily_head_json(&c, 0, day), first);
+        insert(&c, &obs(day + 60, 20.0, 2.0), SRC_UDP);
+        assert_eq!(daily_head_json(&c, 0, day), first);
+        let next = daily_head_json(&c, 0, day + 86400);
+        assert_eq!(
+            serde_json::from_str::<Vec<serde_json::Value>>(&next)
+                .unwrap()
+                .len(),
+            2
+        );
+        insert(&c, &obs(day - 120, 30.0, 3.0), SRC_BACKFILL);
+        assert!(daily_head_json(&c, 0, day + 86400).contains("\"tempMax\":30"));
+        c.execute("UPDATE obs SET temp = 40 WHERE ts = ?1", [day - 120])
+            .unwrap();
+        assert!(daily_head_json(&c, 0, day + 86400).contains("\"tempMax\":40"));
+        c.execute("DELETE FROM obs WHERE ts < ?1", [day]).unwrap();
+        let trimmed = daily_head_json(&c, 0, day + 86400);
+        assert!(!trimmed.contains("2023-11-14"));
+        assert_eq!(
+            serde_json::from_str::<Vec<serde_json::Value>>(&trimmed)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(daily_head_json(&c, -300, day + 5 * 3600).contains("2023-11-14"));
+        drop(c);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    #[ignore = "five-year synthetic archive performance measurement"]
+    fn benchmark_daily_cache() {
+        let c = open(std::path::Path::new(":memory:")).unwrap();
+        c.execute_batch(
+            "WITH RECURSIVE n(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM n WHERE x<2627999)
+            INSERT INTO obs(ts,temp,wind_gust,rain,strikes,battery)
+            SELECT 1609459200+x*60,20+x%10,8,0.001,0,2.6 FROM n;",
+        )
+        .unwrap();
+        let start = std::time::Instant::now();
+        let cold = daily_head_json(&c, 0, 1767139200);
+        let cold_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let start = std::time::Instant::now();
+        assert_eq!(daily_head_json(&c, 0, 1767139200), cold);
+        let warm_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let start = std::time::Instant::now();
+        daily_head_json(&c, 0, 1767225600);
+        eprintln!("5-year archive: cold {cold_ms:.2} ms, cached {warm_ms:.2} ms, midnight append {:.2} ms", start.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    #[test]
     fn daily_rows_follow_the_viewer_s_timezone() {
         let c = mem();
         // 2023-11-15 04:00 UTC is still the 14th in US Central
@@ -803,6 +986,7 @@ mod tests {
         let day = 86_400i64;
         for d in [0i64, 5, 10, 20, 30] {
             insert(&c, &obs(d * day, 20.0, 0.0), SRC_UDP);
+            c.execute("INSERT INTO channels(ts,name,value,unit) VALUES (?1,'soil_moisture_1',50,'%')",[d*day]).unwrap();
         }
         let cutoff = 25 * day;
         let mut rounds = 0;
@@ -818,9 +1002,13 @@ mod tests {
             "only the rows past the cutoff are left"
         );
         assert_eq!(prune(&c, cutoff), 0, "a settled archive is a no-op");
+        assert_eq!(c.query_row("SELECT COUNT(*) FROM channels",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        assert_eq!(c.query_row("SELECT MIN(ts) FROM channels",[],|r|r.get::<_,i64>(0)).unwrap(),30*day);
 
         let empty = open(std::path::Path::new(":memory:")).unwrap();
         assert_eq!(prune(&empty, cutoff), 0, "an empty archive is not an error");
+        empty.execute("INSERT INTO channels(ts,name,value,unit) VALUES (1,'purpleair_pm25_a',10,'µg/m³')",[]).unwrap();
+        assert_eq!(prune(&empty,cutoff),1,"channel-only archives also make pruning progress");
     }
 
     /// The expensive half of /history/daily is everything before today, and it must not change

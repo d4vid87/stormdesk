@@ -21,6 +21,10 @@ jobs:
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: cargo check --manifest-path src-tauri/Cargo.toml --no-default-features
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/check-archive-server.mjs
 
   site:
     runs-on: ubuntu-latest
@@ -28,11 +32,25 @@ jobs:
       CHROME: google-chrome
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - run: node marketing/tests/carbon-preview.mjs
       - run: node marketing/tests/color-studio.mjs
       - run: node scripts/check-shell-cache.mjs
+      - run: node scripts/check-scheduler.mjs
+      - run: node scripts/check-weather-context.mjs
+      - run: node scripts/check-station-switch.mjs
+      - run: node scripts/check-weather-reliability.mjs
+      - run: node scripts/check-weather-providers.mjs
+      - run: node scripts/check-archive-tools.mjs
+      - run: node scripts/check-chart-accessibility.mjs
+      - run: node scripts/check-archive-workbench.mjs
+      - run: node scripts/check-weather-experience.mjs
+      - run: node scripts/check-places.mjs
       - run: node scripts/check-themes.mjs
       - run: node scripts/check-field-instruments.mjs
+      - run: node scripts/check-gauge-icons.mjs
       - run: node scripts/check-browser-compat.mjs
       - run: node scripts/check-stormdesk-lite.mjs
       - run: node scripts/check-lite-readings.mjs

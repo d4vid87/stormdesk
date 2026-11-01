@@ -109,7 +109,42 @@ the whole dashboard back to full speed — and brings the radar panel up if it w
 
 A panel that has stopped updating keeps its last good numbers and marks itself with its age in the
 corner, rather than blanking or lying. The forecast and current observations are cached, so a
-reload during an outage still renders something.
+reload paints saved weather immediately while refreshing in the background. Each reading's detail shows its source and timestamp; station measurements and forecast estimates keep separate provenance.
+
+The 48-hour outlook, ensemble range, station comparison, and selected analysis panels fetch only when visible. Requests for the same feed share an in-flight request and a feed-specific freshness window; provider cache limits and Retry-After responses shorten caching or delay retries. Live observation bursts render once per animation frame.
+
+History's **Compare with** control overlays the previous period or the same period last year for the selected 24 hours or 7 days. Dashed purple lines identify the comparison, and clicking them opens the original observation time. Missing comparison data leaves the current period visible. Completed daily summaries persist in SQLite and append at midnight; backfills, edits, and retention deletes invalidate them automatically. Raw observations remain the source of truth.
+
+Forecast rows show temperature spread between available models, with coverage limited to the model feed's first three days. This measures disagreement, not accuracy or probability. Radar warnings provide **Read warnings** and a button to center their warning area (or configured location) on the radar. Snapshot captions show receipt time; the embed does not expose scan timestamps or playback state to StormDesk.
+
+## Archive review and sensor history
+
+The full dashboard's **History → Archive review, notes & reports** reads the selected station's desktop/server archive. Choose a period ending date and one to seven days, then **Load period**. Review requests are limited to 50,000 observations; choose a shorter period if needed. Editing requires an editor connection to the host. Changing station invalidates an open edit or import preview, preventing it from being written into another archive.
+
+- **Review sensor quality** flags implausible values, large temperature jumps, potentially stuck temperature/pressure readings, and sustained temperature shifts. These are prompts for investigation, not automatic fault diagnoses. Enter a reason before selecting **Exclude period**. Exclusions remove readings from charts, records, summaries, and normal CSV exports; original rows remain visible in review and in complete backups. **Maintenance notes & manual snow → Restore readings** removes an exclusion.
+- **Maintenance notes & manual snow** records a local observation time, a note, and optionally new snowfall or snow depth in millimetres. Manual snow remains separate from forecast snow and measured liquid rain. Entries can be deleted individually.
+- **Missing periods & recovery** lists gaps longer than three expected report intervals. **Recover selected period** requests the displayed range in one-day chunks, reports progress, and preserves existing timestamps. Tempest uses its token/device ID; Ecowitt needs its application key, API key, and MAC address. Available history and resolution vary by provider. See [Archive repair](provider-setup.md#archive-repair).
+- **Import CSV history** accepts StormDesk CSV and supported named WeeWX columns. Select SI (°C, m/s, hPa, mm), US (°F, mph, inHg, inches), or WeeWX metric (°C, km/h, hPa, cm) explicitly. Times must be epoch seconds or ISO dates with a UTC offset; the separate UTC option treats offset-free dates as UTC, not the computer's local time. Preview shows the range, duplicate timestamps, and ignored columns. Each file is limited to 4 MB and 10,000 rows. Invalid batches do not partially write, and existing timestamps are never overwritten.
+- **Rain events** groups recorded rainfall until a six-hour break. It shows event rain, peak interval-average intensity, gust, and strikes. Events crossing the selected range boundary may be incomplete.
+- **Hourly temperature heatmap** shows local-hour means in °C; missing or excluded readings remain blank. Repeated daylight-saving clock hours share a cell. **Seasonal calendar & printable reports** selects a month or whole year, links daily calendar cells to reading details, and provides **Print / save PDF**. Its tabular measurements use SI units and include reading counts and sampled minutes. Incomplete coverage can understate rain totals.
+
+Charts support keyboard navigation: focus a chart, use Left/Right for readings, Up/Down for series, Home/End for endpoints, and Enter to open reading details where available. A paged reading table supplies the same values without requiring pointer interaction.
+
+**History → Additional sensors** provides the last 24 hours of supported indoor temperature/humidity, extra temperature/humidity, soil temperature/moisture, leaf wetness, PM2.5, CO₂, and battery channels. Channel support depends on the station's upload fields. Ecowitt-compatible uploads, supported Ambient uploads, Davis indoor readings/battery flags, and compatible RTL433 reports retain their channel units independently of the main Tempest-shaped observation.
+
+Battery reports distinguish low/normal flags, voltage, and percentage; a flag is never treated as volts. Old flag reports show **Unknown**, and voltage alone does not imply a healthy battery. Additional battery readings appear in the Settings Health Center; fresh low flags can notify through the existing station-notification path.
+
+The **Sensor alert** form saves an above/below threshold and hold duration for the selected channel. Thresholds use the displayed *stored* unit (including °C even when the chart displays °F). The host checks these rules each minute while running, including when the page is closed. Hold durations advance with observation timestamps; repeatedly reading the same sample does not establish a longer hold. Missing, future, excluded, or over-ten-minute-old samples do not trigger them. Saved sensor alerts have stable IDs and can be reviewed or removed in the panel; notification delivery uses the existing rule settings.
+
+## Optional weather sources and panels
+
+Open **Settings → More tools → Weather sources, sensors & camera** and use **Save weather sources**. Forecast provider and official warning source apply to the selected saved place, or to home when no away place is selected. Other inputs apply to the home station.
+
+Automatic forecasts use Tempest where configured or Open-Meteo; GFS, ECMWF, ICON, and GEM can also be selected through Open-Meteo. A failed selected source can fall back to automatic Open-Meteo, with the forecast source/fallback identified. Official warnings support US NWS and Canadian ECCC; original warning text is retained.
+
+Configured Weather panels provide European seasonal pollen forecasts, a local PurpleAir's observed PM2.5, NOAA river-gauge observations and published thresholds, and an HTTP(S) weather-camera image. Panels fetch while visible. Camera captions report receipt time because a generic snapshot URL does not establish capture time. **Outdoor activity windows** groups consecutive forecast hours meeting chosen temperature, wind, rain-chance, and daylight limits; walking, cycling, outdoor-work, and custom presets are available.
+
+See [Additional weather sources](provider-setup.md) for credentials, network requirements, geographic coverage, stale-data handling, and provider limitations.
 
 ## Fixed gauge arrangement
 
@@ -122,6 +157,8 @@ conversion. `bash .github/ci/selftest.sh` loads the whole site in headless Chrom
 levels and three screen sizes, fails on any in-page self-check, and leaves a screenshot of each in
 `shots/` (`CHROME=chromium` if that is what you have). Both run on every pull request.
 
+`node scripts/check-archive-server.mjs` builds and runs an isolated headless server with temporary data to check archive edits, exclusions, CSV-import transactions, station switching, sensor ingestion, and credential redaction over HTTP. `check-archive-tools.mjs`, `check-archive-workbench.mjs`, `check-chart-accessibility.mjs`, and `check-weather-providers.mjs` cover the corresponding calculations and interface/provider contracts. These checks do not establish live sensor compatibility or external-provider availability.
+
 ## Data sources
 
 | Feature | Endpoint |
@@ -131,11 +168,16 @@ levels and three screen sizes, fails on any in-page self-check, and leaves a scr
 | The same, straight off the hub's LAN broadcast (desktop app only) | UDP `50222` |
 | Watches and warnings, gridpoint forecast | `api.weather.gov` |
 | Multi-model agreement, 15-minute nowcast, AQI | `api.open-meteo.com` |
-| Radar | [HookEcho](https://hookecho.io/) at `hookecho.pages.dev` |
+| Radar | [HookEcho](https://hookecho.io/) at `app.hookecho.io` |
 | Place search | `photon.komoot.io` |
 | County drought class | `usdmdataservices.unl.edu` + `geo.fcc.gov` (via the app's own server) |
 | Still radar image | `img.hookecho.io` |
 | Other brands of station (see below) | your own LAN, `rt.ambientweather.net` |
+| Pollen | `air-quality-api.open-meteo.com` |
+| Canadian official warnings | ECCC GeoMet at `api.weather.gc.ca` |
+| River gauges | NOAA NWPS at `api.water.noaa.gov` |
+| Local PM2.5 | configured PurpleAir's private address, fixed `/json` path |
+| Ecowitt archive recovery | `api.ecowitt.net` |
 
 ## Other weather stations
 
@@ -199,14 +241,12 @@ tagged separately in the archive so they can be deleted on their own if it ever 
 
 Notes that apply to all of them:
 
-- **One station per install.** The archive keys on the timestamp with no room for a second
-  station; two consoles pointed at one app would interleave.
+- **Separate saved stations.** Configure a station and choose **Remember this station**, then repeat for another. The header switch appears when at least two are saved. Each station keeps a separate archive and saved source/rule settings. Collection follows the active station; this is not simultaneous collection from every saved station. Ambient Weather Network uses the selected station's MAC address when a station ID is supplied. Removing a profile leaves its archive on disk.
 - **Rain and lightning** arrive as running daily totals and are stored as per-interval amounts.
-  A restart forfeits one interval — a minute of rain, once.
+  Counters persist with each successful observation and resume after a short restart. A missing or over-one-day-old seed starts without inventing an interval.
 - **Ingest key.** Leave it blank on a network you trust (the same trust model as `/config`, below).
   Set it and the console has to report to `/ingest/<key>` instead.
-- **Battery and sensor health** stay blank: every other brand reports a flag rather than a voltage,
-  and the health card's thresholds are a Tempest's.
+- **Battery and extra sensor channels** retain their actual units in a separate channel archive. Known low-battery flags are shown as low/normal, distinct from voltage and percentage; missing or stale status remains unknown. See [Archive review and sensor history](#archive-review-and-sensor-history) for supported channels and threshold alerts.
 
 ## Smart home
 
@@ -380,9 +420,7 @@ devices, Fire OS 6 and newer. The phone build talks to WeatherFlow's websocket o
 listens for the hub's LAN broadcasts nor serves the dashboard to other devices, both of which stay
 desktop jobs. Paste the token once per device.
 
-**The observation archive.** The desktop app keeps every observation the hub broadcasts in a
-SQLite database at `<app data>/stormdesk.db`. On first run of v3 it imports the v2 JSONL log and
-then leaves those files alone forever as a backup.
+**The observation archive.** The desktop app stores readings for the selected station in SQLite. The original station retains `<app data>/stormdesk.db`; additional station identities use separate files under `<app data>/stations/`. Notes, exclusions, manual snow, extra channels, counters, and daily-summary caches belong to that station's database. On first run of v3 it imports the v2 JSONL log and then leaves those files alone forever as a backup.
 
 About thirty seconds after start it also **backfills from WeatherFlow**: it walks backwards from
 the oldest observation it holds, four days at a time, one request a second, until the station's own
@@ -396,11 +434,9 @@ incoming reading never has to wait for it. There is no undo and most stations ha
 restore from, so it asks once before shortening the window. The file itself does not shrink — the
 freed space is reused — and `sqlite3 stormdesk.db VACUUM` with the app stopped will reclaim it.
 
-`Settings → History CSV` hands the whole archive over as a spreadsheet. `Complete backup` downloads
-one `.wdbak` SQLite file containing the archive, settings, layouts, rules and metadata. `Restore
-backup` inspects it first, shows its station, row count and date range, then applies it only after
-confirmation. StormDesk keeps the previous state as `pre-restore.wdbak`; invalid or newer
-formats do not touch the running data.
+`Settings → More tools → Data & backups → History CSV` exports the selected station's usable observations in SI units; excluded readings are omitted. `Complete backup` downloads one format-2 `.wdbak` SQLite file containing that station's raw observations, notes, exclusions, manual snow, extra channels, and metadata, together with the shared settings, saved profiles, layouts, and rules. **Other stations' archive files are not bundled: select and back up each station separately.** They remain on disk when switching stations or removing a profile.
+
+`Restore backup` inspects the file and shows its station, row count, and date range before confirmation. It restores the backup's station into its own archive and applies the saved settings. Recovery snapshots preserve the previously active station as `pre-restore.wdbak` and the archive being replaced as `pre-restore-target.wdbak`; other station archives remain on disk. Older format-1 backups remain readable; they have no extra-channel or note tables. Invalid or newer formats do not touch the running data.
 
 **CWOP.** Put a callsign in `Settings → CWOP station ID` and the app reports your readings to the
 Citizen Weather Observer Program every ten minutes, where NOAA's MADIS feeds them to the models

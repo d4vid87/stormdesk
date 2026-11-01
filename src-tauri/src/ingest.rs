@@ -16,8 +16,7 @@
 // The imperial field vocabulary is shared across Ecowitt/Ambient/WU/AWN, so one mapping table
 // serves all four. WLL and rtl_433 get their names translated into that vocabulary first.
 //
-// ponytail: one station per install. The archive keys on timestamp with no station column, so
-// two consoles pointed here would interleave into one row set. Documented, not enforced.
+// Only the selected station is collected. Its identity selects a separate archive and counter set.
 
 use crate::server::{epoch, State};
 use crate::store;
@@ -190,10 +189,62 @@ fn tuple(f: &Fields, ts: f64, mem: &mut Mem) -> Vec<Option<f64>> {
     ]
 }
 
+#[derive(Debug)]
+struct Channel {
+    name: String,
+    value: f64,
+    unit: &'static str,
+}
+
+/// Explicit protocol fields only: upload credentials and arbitrary JSON never enter the archive.
+/// Ecowitt battery formats differ by device; flags must never be compared with Tempest volts.
+fn channels(f: &Fields) -> Vec<Channel> {
+    let mut out = Vec::new();
+    let mut add = |name: String, value: Option<f64>, unit, min: f64, max: f64| {
+        if let Some(value) = value.filter(|v| v.is_finite() && *v >= min && *v <= max) {
+            out.push(Channel { name, value, unit });
+        }
+    };
+    let temperature = |c: &str, fahrenheit: &str| {
+        num(f, &[c]).or_else(|| num(f, &[fahrenheit]).map(|v| (v - 32.0) / 1.8))
+    };
+    add("indoor_temperature".into(), temperature("tempinc", "tempinf"), "°C", -100.0, 100.0);
+    add("indoor_humidity".into(), num(f, &["humidityin"]), "%", 0.0, 100.0);
+    add("co2".into(), num(f, &["co2", "co2in"]), "ppm", 0.0, 100_000.0);
+    add("pm25".into(), num(f, &["pm25_co2", "pm25"]), "µg/m³", 0.0, 100_000.0);
+    for i in 1..=16 {
+        add(format!("soil_moisture_{i}"), num(f, &[&format!("soilmoisture{i}")]), "%", 0.0, 100.0);
+        add(format!("battery_soil_{i}"), num(f, &[&format!("soilbatt{i}")]), "V", 0.0, 20.0);
+        if i <= 8 {
+            add(format!("temperature_{i}"), temperature(&format!("temp{i}c"), &format!("temp{i}f")), "°C", -100.0, 100.0);
+            add(format!("humidity_{i}"), num(f, &[&format!("humidity{i}")]), "%", 0.0, 100.0);
+            add(format!("soil_temperature_{i}"), temperature(&format!("tf_ch{i}c"), &format!("tf_ch{i}")), "°C", -100.0, 100.0);
+            add(format!("leaf_wetness_{i}"), num(f, &[&format!("leafwetness_ch{i}")]), "%", 0.0, 100.0);
+            add(format!("pm25_{i}"), num(f, &[&format!("pm25_ch{i}")]), "µg/m³", 0.0, 100_000.0);
+            add(format!("battery_temperature_{i}"), num(f, &[&format!("batt{i}")]).filter(|v| *v == 0.0 || *v == 1.0), "low", 0.0, 1.0);
+            add(format!("battery_soil_temperature_{i}"), num(f, &[&format!("tf_batt{i}")]), "V", 0.0, 20.0);
+            add(format!("battery_pm25_{i}"), num(f, &[&format!("pm25batt{i}")]).filter(|v| v.fract() == 0.0).map(|v| v * 20.0), "%", 0.0, 100.0);
+        }
+    }
+    for (key, name) in [("wh25batt", "wh25"), ("wh26batt", "wh26"), ("wh65batt", "wh65"), ("trans_battery_flag", "davis")] {
+        add(format!("battery_{name}"), num(f, &[key]).filter(|v| *v == 0.0 || *v == 1.0), "low", 0.0, 1.0);
+    }
+    let flag = num(f, &["battery_low"]).filter(|v| *v == 0.0 || *v == 1.0)
+        .or_else(|| num(f, &["battery_ok"]).filter(|v| *v == 0.0 || *v == 1.0).map(|v| 1.0 - v));
+    add("battery_sensor".into(), flag, "low", 0.0, 1.0);
+    for (key, name) in [("wh40batt", "wh40"), ("wh68batt", "wh68"), ("wh80batt", "wh80"), ("wh85batt", "wh85"), ("wh90batt", "wh90"), ("console_batt", "console"), ("battery_v", "sensor_voltage")] {
+        add(format!("battery_{name}"), num(f, &[key]), "V", 0.0, 20.0);
+    }
+    for key in ["wh57batt", "co2_batt"] {
+        add(format!("battery_{}", key.trim_end_matches("batt")), num(f, &[key]).filter(|v| v.fract() == 0.0).map(|v| v * 20.0), "%", 0.0, 100.0);
+    }
+    out
+}
+
 // --- Running counters ---
 
 /// What the last stored report said, so a running total can be turned into an interval.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Mem {
     rain: Option<f64>,
     strikes: Option<f64>,
@@ -247,8 +298,8 @@ fn counter_key(origin: &str) -> String {
 /// Counters and throttle state, per source. One shared set used to serve every brand at once,
 /// which meant a Davis poll and an Ecowitt push starved each other, and one console's wrong
 /// clock stopped the lot.
-fn mem() -> &'static Mutex<HashMap<&'static str, Mem>> {
-    static M: OnceLock<Mutex<HashMap<&'static str, Mem>>> = OnceLock::new();
+fn mem() -> &'static Mutex<HashMap<String, Mem>> {
+    static M: OnceLock<Mutex<HashMap<String, Mem>>> = OnceLock::new();
     M.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -346,8 +397,28 @@ fn n(v: Option<f64>) -> String {
 /// The counters are only advanced on a report we keep — a differenced total against a report we
 /// threw away would drop that interval's rain on the floor.
 fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str) -> bool {
-    if state.maintenance.load(std::sync::atomic::Ordering::Relaxed) {
+    let identity = crate::server::station_fingerprint(&state.cfg_path);
+    take_for_station(state, f, raw_ts, src, origin, &identity)
+}
+
+fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str, expected: &str) -> bool {
+    // Config writes use this same lock: the selected archive cannot change midway through commit.
+    let _configuration = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+    if state.maintenance.load(std::sync::atomic::Ordering::Relaxed)
+        || crate::server::station_fingerprint(&state.cfg_path) != expected
+    {
         return false;
+    }
+    if origin == "push" {
+        let source = crate::setting(&state.cfg_path, "stationSource").unwrap_or_default();
+        let id = crate::setting(&state.cfg_path, "stationId").unwrap_or_default();
+        let mac = if matches!(source.as_str(), "ecowitt" | "push") {
+            crate::setting(&state.cfg_path, "ecowittMac").unwrap_or_default()
+        } else { String::new() };
+        if matches!(source.as_str(), "wll" | "awn" | "lacrosse" | "tempest")
+            || !push_identity_matches(&id, f) || !push_mac_matches(&mac, f) {
+            return false;
+        }
     }
     let at = epoch();
     // A console clock that is out by a day would otherwise scatter rows across the archive and
@@ -367,47 +438,60 @@ fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static 
         );
     }
 
+    let source = crate::setting(&state.cfg_path, "stationSource").unwrap_or_else(|| format!("\"{origin}\""));
+    let stable = ["passkey", "mac", "station_id", "id"].iter()
+        .find_map(|k| f.get(*k)).map(String::as_str).unwrap_or(origin);
+    let fallback = format!("{}:{}", source.trim_matches('"'), stable);
+    let configured = crate::server::station_fingerprint(&state.cfg_path);
+    let identity = if configured == "none" { fallback.clone() } else { configured };
+    let memory_key = format!("{identity}:{origin}");
     let mut all = mem().lock().unwrap();
     // First report of this run: pick the counters back up off disk, so an app that was restarted
     // (or updated) does not forfeit the rain that fell while it was down. A read connection —
     // holding the writer's mutex across a query is what starves the UDP listener.
-    let m = all.entry(origin).or_insert_with(|| {
+    let m = all.get(&memory_key).cloned().unwrap_or_else(|| {
         state
             .db()
             .and_then(|c| store::meta_get(&c, &counter_key(origin)))
             .map(|s| Mem::from_json(&s, at))
             .unwrap_or_default()
     });
-    if !keep(at, m, raw_ts) {
+    if !keep(at, &m, raw_ts) {
         drop(all);
         // Healthy: the poll is faster than the archive write gate. "throttled" read as a fault.
         note(origin, true, "ok · waiting for next write slot", false);
         return false;
     }
-    let t = tuple(f, ts, m);
-    m.last_ts = Some(ts);
-    m.last_wall = Some(at);
-    m.last_raw = Some(raw_ts);
-    let saved = m.json(at);
-    drop(all);
+    let mut next = m;
+    let t = tuple(f, ts, &mut next);
+    next.last_ts = Some(ts);
+    next.last_wall = Some(at);
+    next.last_raw = Some(raw_ts);
+    let saved = next.json(at);
+    let extras = channels(f);
     // One transaction: never announce success or advance counters unless the observation and
     // its rain/lightning state are durably committed together.
     let committed = state.with_db(|conn| {
-            let source = crate::setting(&state.cfg_path, "stationSource").unwrap_or_else(|| format!("\"{origin}\""));
-            let stable = ["PASSKEY", "passkey", "mac", "station_id", "ID"].iter()
-                .find_map(|k| f.get(*k)).map(String::as_str).unwrap_or(origin);
-            let fallback = format!("{}:{}", source.trim_matches('"'), stable);
+            if crate::server::station_fingerprint(&state.cfg_path) != expected {
+                return false;
+            }
             if !state.archive_accepts_as(conn, &fallback) {
                 return false;
             }
-            store_observation(conn, &t, src, &counter_key(origin), &saved)
+            store_observation_channels(conn, &t, src, &counter_key(origin), &saved, &extras)
         })
         .unwrap_or(false);
     if !committed {
+        drop(all);
         note(origin, false, "archive write failed", false);
         return false;
     }
+    all.insert(memory_key, next);
+    drop(all);
     note(origin, true, "stored", true);
+    if crate::server::station_fingerprint(&state.cfg_path) != expected {
+        return true; // The old station's row is safe, but its live reading is no longer selected.
+    }
     if let (Some(d), Some(c)) = (t[14], t[15]) {
         if c > 0.0 {
             publish(
@@ -431,11 +515,21 @@ fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static 
     true
 }
 
+#[cfg(test)]
 fn store_observation(conn: &mut rusqlite::Connection, tuple: &[Option<f64>], src: i64, key: &str, counters: &str) -> bool {
+    store_observation_channels(conn, tuple, src, key, counters, &[])
+}
+
+fn store_observation_channels(conn: &mut rusqlite::Connection, tuple: &[Option<f64>], src: i64, key: &str, counters: &str, extras: &[Channel]) -> bool {
     conn.transaction().ok().map(|tx| {
-        let inserted = store::insert(&tx, tuple, src);
-        if inserted { store::meta_set(&tx, key, counters); }
-        inserted && tx.commit().is_ok()
+        if !store::insert(&tx, tuple, src) { return false; }
+        for c in extras {
+            if tx.execute("INSERT INTO channels(ts,name,value,unit) VALUES (?1,?2,?3,?4)",
+                rusqlite::params![tuple[0], c.name, c.value, c.unit]).is_err() { return false; }
+        }
+        if tx.execute("INSERT INTO meta(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=?2",
+            [key, counters]).is_err() { return false; }
+        tx.commit().is_ok()
     }).unwrap_or(false)
 }
 
@@ -458,18 +552,59 @@ pub fn accept(state: &Arc<State>, url: &str, body: &str) -> u16 {
         }
     }
     let f = collect(url, body);
-    // Anything with no temperature and no wind in it is not a weather report — a console
-    // probing the path, or a browser that wandered in.
+    let source = crate::setting(&state.cfg_path, "stationSource").unwrap_or_default();
+    if matches!(source.as_str(), "wll" | "awn" | "lacrosse" | "tempest") {
+        return 409;
+    }
+    let configured = crate::setting(&state.cfg_path, "stationId").unwrap_or_default();
+    let mac = if matches!(source.as_str(), "ecowitt" | "push") {
+        crate::setting(&state.cfg_path, "ecowittMac").unwrap_or_default()
+    } else { String::new() };
+    if !push_identity_matches(&configured, &f) || !push_mac_matches(&mac, &f) {
+        note("push", false, "report belongs to a different station", false);
+        return 409;
+    }
+    // Extra-sensor-only stations are useful too; arbitrary non-weather fields are rejected.
     if num(&f, &["tempf", "temperature_c", "temp_c", "temp"]).is_none()
         && num(&f, &["windspeedmph", "wind_avg_m_s"]).is_none()
     {
-        note("push", false, "no temperature or wind in report", false);
+        if !channels(&f).is_empty() {
+            take(state, &f, epoch() as f64, SRC_INGEST, "push");
+            return 200;
+        }
+        note("push", false, "no supported measurements in report", false);
         return 400;
     }
     // Console clocks are wrong often enough that trusting `dateutc` would scatter rows across
     // the archive. What matters is when we heard it.
     take(state, &f, epoch() as f64, SRC_INGEST, "push");
     200
+}
+
+fn push_mac_matches(configured: &str, fields: &Fields) -> bool {
+    if configured.trim().is_empty() { return true; }
+    // PASSKEY identifies an authenticated upload, not the hardware MAC. MAC-less protocols
+    // cannot prove device identity; each station must use a distinct configured ingestKey.
+    let Some(actual) = fields.get("mac") else { return true; };
+    let normalize = |s: &str| s.trim().replace([':', '-'], "").to_ascii_uppercase();
+    let wanted = normalize(configured);
+    wanted.len() == 12 && wanted.bytes().all(|b| b.is_ascii_hexdigit()) && normalize(actual) == wanted
+}
+
+fn push_identity_matches(configured: &str, fields: &Fields) -> bool {
+    if configured.is_empty() { return true; }
+    if let Some(id) = fields.get("id").or_else(|| fields.get("station_id")) {
+        return id.eq_ignore_ascii_case(configured);
+    }
+    let normalized = |s: &str| s.replace([':', '-'], "").to_ascii_lowercase();
+    let wanted = normalized(configured);
+    // A Tempest numeric ID left in settings is not an Ecowitt MAC address or passkey.
+    if (wanted.len() == 12 || wanted.len() == 32) && wanted.bytes().all(|b| b.is_ascii_hexdigit()) {
+        if let Some(id) = fields.get("mac").or_else(|| fields.get("passkey")) {
+            return normalized(id) == wanted;
+        }
+    }
+    true
 }
 
 // --- Pollers ---
@@ -502,6 +637,9 @@ fn get(url: &str, origin: &'static str) -> Option<serde_json::Value> {
 /// 10-second poll is the same data at a resolution the gauge can't show; arm the UDP stream if
 /// somebody wants the fast needle.
 fn poll_wll(state: &Arc<State>, host: &str) {
+    let identity = crate::server::station_fingerprint(&state.cfg_path);
+    if crate::setting(&state.cfg_path, "stationSource").as_deref() != Some("wll")
+        || crate::setting(&state.cfg_path, "wllHost").as_deref() != Some(host) { return; }
     let Some(v) = get(&format!("http://{host}/v1/current_conditions"), "wll") else {
         return;
     };
@@ -511,7 +649,7 @@ fn poll_wll(state: &Arc<State>, host: &str) {
         .unwrap_or(epoch() as f64);
     let f = wll_fields(&v);
     if !f.is_empty() {
-        take(state, &f, ts, SRC_INGEST, "wll");
+        take_for_station(state, &f, ts, SRC_INGEST, "wll", &identity);
     }
 }
 
@@ -543,6 +681,7 @@ fn wll_fields(v: &serde_json::Value) -> Fields {
                 put(&mut f, "winddir", g("wind_dir_scalar_avg_last_1_min"));
                 put(&mut f, "solarradiation", g("solar_rad"));
                 put(&mut f, "uv", g("uv_index"));
+                put(&mut f, "trans_battery_flag", g("trans_battery_flag"));
                 // Davis reports rain as tip counts and tells you separately how big a tip is.
                 if let Some(counts) = g("rainfall_daily") {
                     f.insert(
@@ -555,6 +694,10 @@ fn wll_fields(v: &serde_json::Value) -> Fields {
                 if let Some(bar) = g("bar_absolute") {
                     f.insert("baromabsin".into(), bar.to_string());
                 }
+            }
+            4 => {
+                if let Some(temp) = g("temp_in") { f.insert("tempinf".into(), temp.to_string()); }
+                if let Some(hum) = g("hum_in") { f.insert("humidityin".into(), hum.to_string()); }
             }
             _ => {}
         }
@@ -577,11 +720,17 @@ fn rain_bucket_mm(c: &serde_json::Value) -> f64 {
 /// it has no local protocol at all. Also covers any Ambient console whose owner would rather
 /// not point it away from Ambient's own servers.
 fn poll_awn(state: &Arc<State>, api_key: &str, app_key: &str) {
+    let identity = crate::server::station_fingerprint(&state.cfg_path);
+    let selected = crate::setting(&state.cfg_path, "stationId").unwrap_or_default();
+    if crate::setting(&state.cfg_path, "stationSource").as_deref() != Some("awn")
+        || crate::setting(&state.cfg_path, "awnApiKey").as_deref() != Some(api_key)
+        || crate::setting(&state.cfg_path, "awnAppKey").as_deref() != Some(app_key) { return; }
     let url = format!(
         "https://rt.ambientweather.net/v1/devices?applicationKey={app_key}&apiKey={api_key}"
     );
     let Some(v) = get(&url, "awn") else { return };
-    let Some(last) = v.get(0).and_then(|d| d.get("lastData")) else {
+    let Some(last) = awn_device(&v, &selected).and_then(|d| d.get("lastData")) else {
+        note("awn", false, "selected station not found in account", false);
         return;
     };
     let mut f = Fields::new();
@@ -592,7 +741,15 @@ fn poll_awn(state: &Arc<State>, api_key: &str, app_key: &str) {
         .and_then(|t| t.as_f64())
         .map(|ms| ms / 1000.0)
         .unwrap_or(epoch() as f64);
-    take(state, &f, ts, SRC_CLOUD, "awn");
+    take_for_station(state, &f, ts, SRC_CLOUD, "awn", &identity);
+}
+
+fn awn_device<'a>(value: &'a serde_json::Value, selected: &str) -> Option<&'a serde_json::Value> {
+    let devices = value.as_array()?;
+    if selected.is_empty() { return devices.first(); }
+    let normalize = |s: &str| s.replace([':', '-'], "").to_ascii_lowercase();
+    let wanted = normalize(selected);
+    devices.iter().find(|device| device["macAddress"].as_str().is_some_and(|mac| normalize(mac) == wanted))
 }
 
 /// La Crosse. Unofficial: there is no published API, and this is the app's own — a Google
@@ -644,7 +801,9 @@ fn bearer(url: &str, token: &str) -> Option<serde_json::Value> {
     }
 }
 
-fn poll_lacrosse(state: &Arc<State>, token: &str) {
+fn poll_lacrosse(state: &Arc<State>, token: &str, identity: &str) {
+    if crate::setting(&state.cfg_path, "stationSource").as_deref() != Some("lacrosse")
+        || crate::server::station_fingerprint(&state.cfg_path) != identity { return; }
     const GW: &str = "https://lax-gateway.appspot.com/_ah/api/lacrosseClient/v1.1/active-user";
     let Some(locs) = bearer(&format!("{GW}/locations"), token) else {
         return;
@@ -708,7 +867,7 @@ fn poll_lacrosse(state: &Arc<State>, token: &str) {
         }
     }
     if !f.is_empty() {
-        take(state, &f, ts, SRC_CLOUD, "lacrosse");
+        take_for_station(state, &f, ts, SRC_CLOUD, "lacrosse", identity);
     }
 }
 
@@ -721,14 +880,14 @@ fn poll_lacrosse(state: &Arc<State>, token: &str) {
 pub fn start_pollers(state: Arc<State>) {
     std::thread::spawn(move || {
         let mut tick: u64 = 0;
-        let mut lax: Option<(String, u64)> = None; // token, minted at
+        let mut lax: Option<(String, u64, String)> = None; // token, minted at, station identity
         loop {
             std::thread::sleep(Duration::from_secs(10));
             tick += 1;
             let s = |k: &str| crate::setting(&state.cfg_path, k).unwrap_or_default();
 
             let wll = s("wllHost");
-            if !wll.is_empty() {
+            if s("stationSource") == "wll" && !wll.is_empty() {
                 poll_wll(&state, &wll);
             }
 
@@ -751,23 +910,24 @@ pub fn start_pollers(state: Arc<State>) {
             // A minute apart: the API allows one request a second, and the station behind it
             // uploads far more slowly than that.
             let (api, app) = (s("awnApiKey"), s("awnAppKey"));
-            if tick % 6 == 0 && !api.is_empty() && !app.is_empty() {
+            if s("stationSource") == "awn" && tick % 6 == 0 && !api.is_empty() && !app.is_empty() {
                 poll_awn(&state, &api, &app);
             }
 
             let (email, pass) = (s("lacrosseEmail"), s("lacrossePass"));
-            if tick % 12 == 0 && !email.is_empty() && !pass.is_empty() {
+            if s("stationSource") == "lacrosse" && tick % 12 == 0 && !email.is_empty() && !pass.is_empty() {
+                let identity = crate::server::station_fingerprint(&state.cfg_path);
                 // Tokens last an hour; mint a new one at fifty minutes rather than discover the
                 // expiry as a 401 on a station that then reads as offline.
                 let fresh = lax
                     .as_ref()
-                    .map(|(_, at)| epoch() - at < 3000)
+                    .map(|(_, at, id)| epoch().saturating_sub(*at) < 3000 && id == &identity)
                     .unwrap_or(false);
                 if !fresh {
-                    lax = lacrosse_token(&email, &pass).map(|t| (t, epoch()));
+                    lax = lacrosse_token(&email, &pass).map(|t| (t, epoch(), identity));
                 }
-                if let Some((t, _)) = lax.as_ref() {
-                    poll_lacrosse(&state, t);
+                if let Some((t, _, id)) = lax.as_ref() {
+                    poll_lacrosse(&state, t, id);
                 }
             }
         }
@@ -1122,5 +1282,116 @@ mod tests {
         assert!(!store_observation(&mut conn, &tuple, store::SRC_UDP, "counter:test", "advanced"));
         assert!(store::meta_get(&conn, "counter:test").is_none());
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+    }
+
+    #[test]
+    fn channel_units_flags_and_allowlist_are_preserved() {
+        let f = collect("/ingest", "tempinf=68&humidityin=45&temp1f=77&tf_ch1=50&soilmoisture1=32&pm25_ch1=8.5&co2=420&wh65batt=1&soilbatt1=1.4&wh57batt=3&batt1=0&battery_ok=1&PASSWORD=999&unknown=123&humidity2=101&temp2f=NaN&pm25_ch2=-1&batt2=0.5");
+        let got = channels(&f);
+        let value = |name: &str| got.iter().find(|c| c.name == name).map(|c| (c.value, c.unit));
+        assert_eq!(value("indoor_temperature"), Some((20.0, "°C")));
+        assert_eq!(value("temperature_1"), Some((25.0, "°C")));
+        assert_eq!(value("soil_temperature_1"), Some((10.0, "°C")));
+        assert_eq!(value("soil_moisture_1"), Some((32.0, "%")));
+        assert_eq!(value("pm25_1"), Some((8.5, "µg/m³")));
+        assert_eq!(value("co2"), Some((420.0, "ppm")));
+        assert_eq!(value("battery_wh65"), Some((1.0, "low")));
+        assert_eq!(value("battery_temperature_1"), Some((0.0, "low")));
+        assert_eq!(value("battery_sensor"), Some((0.0, "low")));
+        assert_eq!(value("battery_soil_1"), Some((1.4, "V")));
+        assert_eq!(value("battery_wh57"), Some((60.0, "%")));
+        for rejected in ["password", "unknown", "humidity_2", "temperature_2", "pm25_2", "battery_temperature_2"] {
+            assert!(value(rejected).is_none(), "{rejected}");
+        }
+        assert!(tuple(&f, 1.0, &mut Mem::default())[16].is_none(), "flags never become volts");
+    }
+
+    #[test]
+    fn channel_failure_rolls_back_observation_and_counters() {
+        let mut conn = store::open(std::path::Path::new(":memory:")).unwrap();
+        let mut row = vec![None; 19];
+        row[0] = Some(1_700_000_000.0);
+        let extras = channels(&collect("/ingest", "tempinf=68&wh65batt=1"));
+        conn.execute_batch("CREATE TRIGGER reject_channel BEFORE INSERT ON channels BEGIN SELECT RAISE(ABORT, 'test'); END;").unwrap();
+        assert!(!store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "new", &extras));
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        assert!(store::meta_get(&conn, "counters:push").is_none());
+        conn.execute_batch("DROP TRIGGER reject_channel;").unwrap();
+        assert!(store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "new", &extras));
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM channels", [], |r| r.get::<_, i64>(0)).unwrap(), 2);
+        assert!(!store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "duplicate", &extras));
+        assert_eq!(store::meta_get(&conn, "counters:push").as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn station_counters_do_not_share_a_source_slot() {
+        let mut map: HashMap<String, Mem> = HashMap::new();
+        map.insert("ecowitt:home:push".into(), Mem { rain: Some(50.0), last_wall: Some(1_000), ..Mem::default() });
+        let cabin = map.entry("ecowitt:cabin:push".into()).or_default();
+        assert!(keep(1_010, cabin, 1_010.0));
+        assert_eq!(delta(&mut cabin.rain, 2.0), 0.0);
+        assert_eq!(map["ecowitt:home:push"].rain, Some(50.0));
+    }
+
+    #[test]
+    fn push_identity_rejects_other_station_ids_and_macs() {
+        assert!(push_identity_matches("", &collect("/ingest", "ID=home")));
+        assert!(push_identity_matches("home", &collect("/ingest", "ID=HOME")));
+        assert!(!push_identity_matches("home", &collect("/ingest", "ID=cabin")));
+        assert!(push_identity_matches("aa:bb:cc:dd:ee:ff", &collect("/ingest", "PASSKEY=AABBCCDDEEFF")));
+        assert!(!push_identity_matches("aa:bb:cc:dd:ee:ff", &collect("/ingest", "PASSKEY=112233445566")));
+        assert!(push_identity_matches("12345", &collect("/ingest", "PASSKEY=AABBCCDDEEFF")), "a leftover Tempest ID is not a MAC");
+    }
+
+    #[test]
+    fn configured_ecowitt_mac_is_checked_without_confusing_passkeys() {
+        let wanted="AA:BB:CC:DD:EE:01";
+        assert!(push_mac_matches(wanted,&collect("/ingest","mac=aa-bb-cc-dd-ee-01")));
+        assert!(!push_mac_matches(wanted,&collect("/ingest","mac=AA:BB:CC:DD:EE:02")));
+        assert!(push_mac_matches(wanted,&collect("/ingest","PASSKEY=00112233445566778899aabbccddeeff")));
+        let dir=std::env::temp_dir().join(format!("wd-ingest-mac-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg=dir.join("config.json");
+        std::fs::write(&cfg,serde_json::json!({"settings":{"stationSource":"ecowitt","ecowittMac":wanted,"ingestKey":"upload-secret"}}).to_string()).unwrap();
+        let state=State::new(dir.clone(),cfg);
+        let expected=crate::server::station_fingerprint(&state.cfg_path);
+        let other=collect("/ingest","mac=AA:BB:CC:DD:EE:02&tempf=68");
+        assert!(!take_for_station(&state,&other,epoch() as f64,SRC_INGEST,"push",&expected));
+        assert_eq!(accept(&state,"/ingest?key=upload-secret","mac=AA:BB:CC:DD:EE:02&tempf=68"),409);
+        assert!(state.packets.lock().unwrap().is_empty());
+        assert_eq!(state.db().unwrap().query_row("SELECT COUNT(*) FROM obs",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+        let own=collect("/ingest","mac=aabbccddee01&tempf=68");
+        assert!(take_for_station(&state,&own,epoch() as f64,SRC_INGEST,"push",&expected));
+        assert_eq!(state.db().unwrap().query_row("SELECT COUNT(*) FROM obs",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        drop(state);
+        let _=std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_stale_poll_cannot_publish_or_write_to_the_selected_station() {
+        let dir = std::env::temp_dir().join(format!("wd-ingest-race-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        std::fs::write(&path, r#"{"settings":{"stationSource":"wll","wllHost":"new-station"}}"#).unwrap();
+        let state = State::new(dir.clone(), path);
+        let f = collect("/ingest", "tempf=68&windspeedmph=3&winddir=180&wh65batt=1");
+        assert!(!take_for_station(&state, &f, epoch() as f64, SRC_INGEST, "wll", "wll:old-station"));
+        assert!(state.packets.lock().unwrap().is_empty());
+        let conn = state.db().unwrap();
+        assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+        drop(conn);
+        drop(state);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn ambient_selects_the_requested_station_not_the_first_device() {
+        let devices = serde_json::json!([
+            {"macAddress": "AA:BB:CC:DD:EE:FF", "lastData": {"tempf": 70}},
+            {"macAddress": "11:22:33:44:55:66", "lastData": {"tempf": 30}}
+        ]);
+        assert_eq!(awn_device(&devices, "112233445566").unwrap()["lastData"]["tempf"], 30);
+        assert_eq!(awn_device(&devices, "").unwrap()["lastData"]["tempf"], 70);
+        assert!(awn_device(&devices, "unknown").is_none());
     }
 }

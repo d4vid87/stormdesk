@@ -2,7 +2,7 @@
 
 # StormDesk
 
-**Your weather, at a glance.** StormDesk’s Observatory dashboard opens in Graphite Silver, with a compact current-conditions card, a forecast list showing up to ten days, and HookEcho radar at the center. Local signals, alerts, astronomy, and device health share the right column. A live clock and nearby official warnings sit above the weather.
+**Your weather, at a glance.** StormDesk opens in Graphite Silver with compact current conditions and eight gauges integrated above the full HookEcho radar. Orbit Glass is the default animated icon style; the radar shelf also offers Liquid Chrome, Neon Trace, Precision Dial, and Pixel Pulse. Your choice stays on this screen. Forecasts, local signals, astronomy, and device health remain below the radar, with History and Settings in the top navigation. Reduced motion and Eco mode remain supported.
 
 Choose a location to start. A personal weather station is optional; readings that are unavailable stay visible and clearly labeled. StormDesk supports Tempest, Ecowitt, Ambient Weather, Davis, AcuRite, La Crosse, and other compatible sources.
 
@@ -132,10 +132,25 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 - **Weather** — seven top metrics, compact current conditions, up to ten forecast days, and central HookEcho radar.
 - **Local context** — nearby official alerts, local signals, sunrise and sunset, moon details, and device health when the source provides it.
 - **Radar** — live HookEcho radar with warnings and playback.
-- **History** — charts, records, model comparisons, rain totals, and your weather archive.
+- **History** — keyboard-accessible charts and reading tables, records, comparisons, rainfall events, and your weather archive.
 - **More weather details & analysis** — additional charts, the timeline, and advanced weather tools remain accessible from Weather.
 - **Alerts** — built-in warnings plus your own rules for wind, rain, heat, cold, and more.
-- **Backup** — one complete backup file for your settings and weather history.
+- **Backup** — one backup file for your settings and the selected station's history, notes, and extra sensors. Back up each saved station separately.
+
+## Explore your station history
+
+Open **History → Archive review, notes & reports** and load a period of one to seven days.
+
+- Review suspicious readings, record a reason before excluding them, and use **Restore readings** to undo an exclusion. Original observations remain in the archive.
+- Add maintenance notes, snowfall, or snow-depth measurements; inspect missing periods and recover supported Tempest or Ecowitt cloud history.
+- Preview a CSV import with its source units and time zone before saving. Existing timestamps are retained.
+- Explore rain events, an hourly temperature heatmap, and a seasonal rainfall calendar. Load a monthly or annual report, then use **Print / save PDF**.
+
+**History → Additional sensors** shows supported indoor, soil, air-quality, and battery channels. Select a sensor to inspect its chart/table or save a threshold alert. The station server evaluates these alerts while the page is closed.
+
+Use **Remember this station** in Settings after configuring each station. The header switch selects its separate archive and settings; collection follows the selected station. Removing a saved profile does not delete its archive.
+
+Under **Settings → More tools → Weather sources, sensors & camera**, choose a forecast model and official warning source for the selected place. Optional Weather panels show pollen, local PurpleAir readings, a NOAA river gauge, a camera snapshot, and outdoor activity windows. Coverage and setup requirements are in [Additional weather sources](docs/provider-setup.md); detailed archive instructions are in the [technical reference](docs/technical-reference.md#archive-review-and-sensor-history).
 
 ## On smaller screens
 

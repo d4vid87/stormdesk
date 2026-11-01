@@ -46,9 +46,10 @@ const cacheable = (url) => url.startsWith('https://api.weather.gov/');
 
 // Several panels ask for the same URL within a second of each other (two models pulls, the
 // station obs on the desk and in the gauges, /history/daily from three cards). One short memo
-// collapses those into one request; anything older than 30 s is refetched.
+// collapses those into one request; each feed keeps its own bounded freshness window.
 const memo = new Map();
-const MEMO_MS = 30000;
+const retryAfter = new Map();
+globalThis.addEventListener?.('wd:archive-change', () => memo.clear());
 const CACHE_MAX = 64;
 
 function trimCache(map) {
@@ -56,20 +57,38 @@ function trimCache(map) {
 }
 
 export async function getJSON(url, opts) {
-  const key = !opts || (!opts.method && !opts.headers && !opts.body) ? url : null;
-  if (key) {
-    const m = memo.get(key);
-    if (m && Date.now() - m.t < MEMO_MS) return m.p.then(structuredClone);
-    const p = fetchJSON(url, opts);
-    memo.set(key, { t: Date.now(), p });
-    trimCache(memo);
-    p.catch(() => memo.delete(key));
-    return p.then(structuredClone);
-  }
-  return fetchJSON(url, opts);
+  const s = settings();
+  const context = [s.stationSource,s.deviceId,s.stationId,s.activeStationProfile,s.wllHost,s.lacrosseEmail,s.ecowittMac,s.ingestKey,s.awnApiKey];
+  const key = !opts || !Object.keys(opts).length ? `${JSON.stringify(context)}:${url}` : null;
+  if (!key) return fetchJSON(url, opts);
+  const hit = memo.get(key);
+  if (hit && Date.now() < hit.until) return hit.p.then(structuredClone);
+  const entry = { until: Infinity };
+  entry.p = fetchJSON(url, opts, seconds => { entry.until = Date.now() + seconds * 1000; });
+  memo.set(key, entry);
+  trimCache(memo);
+  entry.p.catch(() => { if (memo.get(key) === entry) memo.delete(key); });
+  return entry.p.then(structuredClone);
 }
 
-async function fetchJSON(url, opts) {
+export function cacheSeconds(url, headers) {
+  const u = new URL(url, location.href);
+  let seconds = 30;
+  if (u.hostname === 'api.weather.gov' && u.pathname.startsWith('/points/')) seconds = 86400;
+  else if (u.hostname === 'air-quality-api.open-meteo.com') seconds = 1800;
+  else if (u.hostname === 'ensemble-api.open-meteo.com') seconds = 1800;
+  else if (u.hostname === 'api.open-meteo.com') seconds = u.searchParams.has('models') ? 900 : 300;
+  else if (u.hostname === 'swd.weatherflow.com' && u.pathname.endsWith('/better_forecast')) seconds = 300;
+  const control = headers?.get('Cache-Control') || '';
+  if (/no-store|no-cache/i.test(control)) return 0;
+  const maxAge = control.match(/(?:^|,)\s*max-age=(\d+)/i);
+  if (maxAge) seconds = Math.min(seconds, Math.max(0, Number(maxAge[1]) - (Number(headers.get('Age')) || 0)));
+  return seconds;
+}
+
+async function fetchJSON(url, opts, onCache = () => {}) {
+  const retry = retryAfter.get(url);
+  if (retry && retry > Date.now()) throw new Error(`Source temporarily unavailable — retry after ${new Date(retry).toLocaleTimeString()}`);
   // A wall tablet on a dropped Wi-Fi link otherwise leaves a fetch hanging for minutes and the
   // panel's next refresh never fires.
   let r;
@@ -85,13 +104,26 @@ async function fetchJSON(url, opts) {
     const where = url.split('?')[0];
     throw new Error(e.name === 'TimeoutError' ? `timed out (15s) — ${where}` : `network unreachable — ${where}`);
   }
-  if (r.status === 304 && hit) return structuredClone(hit.body);
+  if (r.status === 429 || r.status === 503) {
+    const value = r.headers.get('Retry-After');
+    const delay = value && /^\d+$/.test(value) ? Number(value) * 1000 : Date.parse(value) - Date.now();
+    retryAfter.set(url, Date.now() + Math.min(86400000, Math.max(1000, Number.isFinite(delay) ? delay : 60000)));
+    trimCache(retryAfter);
+  }
+  if (r.status === 304 && hit) {
+    onCache(Math.min(cacheSeconds(url, r.headers), hit.seconds));
+    if (/no-store/i.test(r.headers.get('Cache-Control') || '')) etags.delete(url);
+    return structuredClone(hit.body);
+  }
   if (!r.ok) throw new Error(`${r.status} ${r.statusText} — ${url.split('?')[0]}${errHint(r.status, url)}`);
   const body = await r.json();
-  const tag = cacheable(url) && r.headers.get('ETag');
+  retryAfter.delete(url);
+  onCache(cacheSeconds(url, r.headers));
+  const tag = cacheable(url) && !/no-store/i.test(r.headers.get('Cache-Control') || '') && r.headers.get('ETag');
   // Callers mutate what they get back (deviceObs converts in place), so the cache keeps its own
   // copy and hands out clones.
-  if (tag) { etags.set(url, { etag: tag, body: structuredClone(body) }); trimCache(etags); }
+  if (tag) { etags.set(url, { etag: tag, body: structuredClone(body), seconds: cacheSeconds(url, r.headers) }); trimCache(etags); }
+  else etags.delete(url);
   return body;
 }
 
@@ -203,18 +235,18 @@ export function siToDisplay(obs) {
 // The same window of history for a station that has no cloud behind it: our own archive, which
 // is where every ingested report lands whatever brand sent it. Shaped like `deviceObs` so
 // `pro.js` reads one or the other without knowing which.
-export async function localObs(hours = 3, at = null) {
+export async function localObs(hours = 3, at = null, until = null) {
   if (window.__TAURI__ && window.__WD_SRV === undefined) {
     const s = settings();
     if (!s.stationSource && s.token && /^\d+$/.test(s.deviceId)) {
-      const end = at ? Math.round(at / 1000) + 86400 : Math.floor(Date.now() / 1000);
+      const end = at ? Math.round(at / 1000) + 86400 : until ?? Math.floor(Date.now() / 1000);
       return deviceObs(s.deviceId, end - (at ? 48 : hours) * 3600, end);
     }
     throw new Error('History requires a configured Tempest account or a StormDesk desktop/server archive.');
   }
   // `at` is a moment someone clicked on a chart: a day either side of it, rather than the last
   // `hours` up to now, which for a point three weeks back is the wrong archive entirely.
-  const params = at ? { from: Math.round(at / 1000) - 86400, to: Math.round(at / 1000) + 86400 } : { hours };
+  const params = at ? { from: Math.round(at / 1000) - 86400, to: Math.round(at / 1000) + 86400 } : until == null ? { hours } : { from: until - hours * 3600, to: until };
   const j = await getJSON(`${window.__WD_SRV || ''}/history/tuples?${qs(params)}`);
   siToDisplay(j.obs || []);
   return j;
@@ -224,12 +256,25 @@ export async function localObs(hours = 3, at = null) {
 // payload. A station that is not a Tempest has no such endpoint — so build the same payload out
 // of open-meteo, which this app already leans on for six other panels, and every consumer stays
 // unaware. See `shapeOm`.
-export function betterForecast(stationId = settings().stationId) {
-  // A non-Tempest source routes to open-meteo even if a stale token survives in the config (#37).
-  if (settings().activePlace || !settings().token || settings().stationSource) return omForecast();
-  return getJSON(`${SWD}/better_forecast?${qs({
-    station_id: stationId, token: settings().token, ...unitParams(),
-  })}`);
+export async function betterForecast(stationId = settings().stationId) {
+  const s = settings(), place = s.places.find(p => p.id === s.activePlace);
+  const selected = place?.forecastProvider || s.forecastProvider || 'auto';
+  const models = { gfs: 'gfs_seamless', ecmwf: 'ecmwf_ifs025', icon: 'icon_seamless', gem: 'gem_seamless' };
+  if (selected === 'auto' && !s.activePlace && s.token && !s.stationSource) {
+    try {
+      const result = await getJSON(`${SWD}/better_forecast?${qs({station_id:stationId,token:s.token,...unitParams()})}`);
+      return {...result, _forecastSource:'Tempest'};
+    } catch {
+      const result = await omForecast();
+      return {...result, _forecastSource:'Open-Meteo automatic', _forecastFallback:'Tempest unavailable'};
+    }
+  }
+  const model = models[selected];
+  try { return {...await omForecast(coords().lat,coords().lon,model), _forecastSource:model || 'Open-Meteo automatic'}; }
+  catch (error) {
+    if (!model) throw error;
+    return {...await omForecast(), _forecastSource:'Open-Meteo automatic', _forecastFallback:`${selected} unavailable`};
+  }
 }
 
 // The station's own last reading, kept so the forecast payload can be overlaid with it: a
@@ -387,11 +432,15 @@ export function overlayStation(c, tuple, elevation) {
     sea_level_pressure: own(toSeaLevel(o[OBS.press], settings().elevationM ?? elevation,
       tempC(o[OBS.temp], metric))),
   };
-  for (const k in overlay) if (overlay[k] !== undefined) c[k] = overlay[k];
+  c._sources ||= {};
+  for (const k in overlay) if (overlay[k] !== undefined) {
+    c[k] = overlay[k];
+    c._sources[k] = { name: k === 'sea_level_pressure' ? 'Station · corrected to sea level' : 'Station observation', at: o[OBS.time] };
+  }
   return c;
 }
 
-export async function omForecast(lat = coords().lat, lon = coords().lon) {
+export async function omForecast(lat = coords().lat, lon = coords().lon, model = null) {
   const imperial = settings().units !== 'metric';
   const j = await getJSON(`https://api.open-meteo.com/v1/forecast?${qs({
     latitude: lat, longitude: lon,
@@ -402,6 +451,7 @@ export async function omForecast(lat = coords().lat, lon = coords().lon) {
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,'
       + 'precipitation_probability_max,precipitation_sum',
     forecast_days: 10, timezone: 'auto', timeformat: 'unixtime',
+    ...(model ? { models: model } : {}),
     wind_speed_unit: WIND_UNITS[windUnit()].om,
     ...(imperial ? { temperature_unit: 'fahrenheit', precipitation_unit: 'inch' } : {}),
   })}`);
@@ -410,7 +460,12 @@ export async function omForecast(lat = coords().lat, lon = coords().lon) {
 
 // --- NWS ---
 
-export function alerts(lat = coords().lat, lon = coords().lon) {
+export async function alerts(lat = coords().lat, lon = coords().lon) {
+  const s=settings(), p=s.places.find(p=>p.id===s.activePlace);
+  if ((p?.alertRegion || s.alertRegion) === 'CA') {
+    const {canadaAlerts}=await import('./weather-providers.js');
+    return canadaAlerts(lat,lon);
+  }
   return getJSON(`https://api.weather.gov/alerts/active?${qs({ point: `${lat},${lon}` })}`);
 }
 

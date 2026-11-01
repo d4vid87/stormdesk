@@ -300,7 +300,7 @@ function playRadar() {
   const frame = $('#radarViewer');
   if (!frame.src) {
     const point = coords();
-    frame.src = `https://hookecho.pages.dev/?embed#goto=${nearestSite()},${point.lon || ''},${point.lat || ''},6.5,bm:dark`;
+    frame.src = `https://app.hookecho.io/?embed#goto=${nearestSite()},${point.lon || ''},${point.lat || ''},6.5,bm:dark`;
   }
   frame.hidden = false;
   $('#radarStill').hidden = true;

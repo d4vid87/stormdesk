@@ -17,18 +17,26 @@ use std::time::Duration;
 /// Text the alert engine wants on the broker. It runs on its own thread and must not open a
 /// second connection to say one sentence, so it leaves messages here and the live session picks
 /// them up on its next tick. Bounded: a broker that is down for a week must not become a leak.
-fn outbox() -> &'static Mutex<Vec<(String, String)>> {
-    static O: OnceLock<Mutex<Vec<(String, String)>>> = OnceLock::new();
+struct QueuedMessage {
+    context: String,
+    suffix: String,
+    payload: String,
+}
+
+fn outbox() -> &'static Mutex<Vec<QueuedMessage>> {
+    static O: OnceLock<Mutex<Vec<QueuedMessage>>> = OnceLock::new();
     O.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-/// Queue one retained message for `stormdesk/<station>/<suffix>`.
-pub fn send(suffix: &str, payload: &str) {
+/// Queue one retained message for the alert's captured station/configuration only.
+pub fn send_for_station(context: &str, suffix: &str, payload: &str) {
     let mut q = outbox().lock().unwrap();
-    if q.len() >= 64 {
-        q.remove(0);
-    }
-    q.push((suffix.to_string(), payload.to_string()));
+    if q.len() >= 64 { q.remove(0); }
+    q.push(QueuedMessage { context: context.into(), suffix: suffix.into(), payload: payload.into() });
+}
+
+fn take_messages(queue: &mut Vec<QueuedMessage>, context: Option<&str>) -> Vec<QueuedMessage> {
+    queue.drain(..).filter(|message| Some(message.context.as_str()) == context).collect()
 }
 
 /// How often we look for a new row. The archive gains one a minute at best, so this is mostly
@@ -76,6 +84,7 @@ const DERIVED: [Derived; 4] = [
 ];
 
 struct Conf {
+    fingerprint: String,
     url: String,
     user: String,
     pass: String,
@@ -83,6 +92,12 @@ struct Conf {
     name: String,
     prefix: String,
     port: u16,
+}
+
+fn same_session(next: &Conf, current: &Conf) -> bool {
+    next.fingerprint == current.fingerprint && next.url == current.url
+        && next.station == current.station && next.prefix == current.prefix
+        && next.user == current.user && next.pass == current.pass
 }
 
 fn conf(cfg: &std::path::Path) -> Option<Conf> {
@@ -99,6 +114,7 @@ fn conf(cfg: &std::path::Path) -> Option<Conf> {
         p => p,
     };
     Some(Conf {
+        fingerprint: crate::server::station_fingerprint(cfg),
         url,
         user: get("mqttUser"),
         pass: get("mqttPass"),
@@ -238,7 +254,7 @@ pub fn press_trend(now_mb: f64, then_mb: f64) -> &'static str {
 fn newest(conn: &rusqlite::Connection) -> Option<(i64, Vec<Option<f64>>, Option<f64>)> {
     let cols = FIELDS.iter().map(|(c, ..)| *c).collect::<Vec<_>>().join(", ");
     let (ts, vals) = conn
-        .query_row(&format!("SELECT ts, {cols} FROM obs ORDER BY ts DESC LIMIT 1"), [], |r| {
+        .query_row(&format!("SELECT ts, {cols} FROM usable_obs ORDER BY ts DESC LIMIT 1"), [], |r| {
             let ts: i64 = r.get(0)?;
             let mut v = Vec::with_capacity(FIELDS.len());
             for i in 0..FIELDS.len() {
@@ -249,7 +265,7 @@ fn newest(conn: &rusqlite::Connection) -> Option<(i64, Vec<Option<f64>>, Option<
         .ok()?;
     let was = conn
         .query_row(
-            "SELECT pressure FROM obs WHERE ts <= ?1 AND pressure IS NOT NULL ORDER BY ts DESC LIMIT 1",
+            "SELECT pressure FROM usable_obs WHERE ts <= ?1 AND pressure IS NOT NULL ORDER BY ts DESC LIMIT 1",
             [ts - 3 * 3600],
             |r| r.get::<_, Option<f64>>(0),
         )
@@ -344,7 +360,7 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
         // A settings change means a different broker, station or prefix: drop the session and
         // let the caller build the next one.
         match conf(cfg_path) {
-            Some(next) if next.url == c.url && next.station == c.station && next.prefix == c.prefix => {}
+            Some(next) if same_session(&next, c) => {}
             _ => {
                 let _ = client.publish(
                     format!("stormdesk/{}/status", c.station),
@@ -358,19 +374,23 @@ fn session(data_dir: &std::path::Path, cfg_path: &std::path::Path, c: &Conf) {
         }
         // Anything the alert engine left for us, before the row: an alert is the message
         // people built the automation for.
-        for (suffix, payload) in outbox().lock().unwrap().drain(..) {
+        let context = crate::alerts::alert_context(cfg_path);
+        let messages = take_messages(&mut outbox().lock().unwrap(), context.as_deref());
+        for message in messages {
+            if !crate::alerts::context_current(cfg_path, &message.context)
+                || !conf(cfg_path).is_some_and(|next| same_session(&next, c)) { continue; }
             let _ = client.publish(
-                format!("stormdesk/{}/{}", c.station, suffix),
+                format!("stormdesk/{}/{}", c.station, message.suffix),
                 QoS::AtLeastOnce,
                 true,
-                payload,
+                message.payload,
             );
         }
         if last_announce.elapsed() >= REANNOUNCE {
             announce(&client, c);
             last_announce = std::time::Instant::now();
         }
-        let Ok(conn) = store::open(&store::db_path(data_dir)) else { continue };
+        let Ok(conn) = store::open(&store::station_db_path(data_dir, cfg_path)) else { continue };
         let Some((ts, vals, was)) = newest(&conn) else { continue };
         if ts == last_ts {
             continue;
@@ -451,6 +471,29 @@ pub fn start(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn queued_alerts_only_survive_for_their_original_context() {
+        let message = |context: &str, text: &str| QueuedMessage {
+            context: context.into(), suffix: "alert".into(), payload: text.into(),
+        };
+        let mut queue = vec![message("station-a/old-broker", "Old warning"),
+            message("station-b/new-broker", "Current warning")];
+        let selected = take_messages(&mut queue, Some("station-b/new-broker"));
+        assert!(queue.is_empty(), "obsolete messages are discarded");
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].payload, "Current warning");
+        queue.push(message("station-b/new-broker", "Clear"));
+        assert!(take_messages(&mut queue, None).is_empty(), "missing config cannot deliver");
+        let make = |fingerprint: &str, pass: &str| Conf {
+            fingerprint: fingerprint.into(), url: "mqtt://local".into(), user: "user".into(),
+            pass: pass.into(), station: "shared-topic".into(), name: "Station".into(),
+            prefix: "homeassistant".into(), port: 80,
+        };
+        assert!(!same_session(&make("device-a", "secret"), &make("device-b", "secret")));
+        assert!(!same_session(&make("device-a", "old"), &make("device-a", "new")));
+        assert!(same_session(&make("device-a", "secret"), &make("device-a", "secret")));
+    }
 
     #[test]
     fn broker_addresses_people_actually_paste() {

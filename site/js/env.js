@@ -3,7 +3,7 @@
 // Everything here is either arithmetic on numbers the dashboard already has, or a keyless
 // endpoint. No new token, no new account: the point of these cards is that they cost nothing to
 // keep on screen all day.
-import { settings, coords, U, num, notify, every, stamp, expires } from './app.js';
+import { settings, coords, U, num, notify, every, everyVisible, stamp, expires } from './app.js';
 import { forecast as deskForecast } from './desk.js';
 import * as api from './api.js';
 import { OBS, getJSON } from './api.js';
@@ -381,9 +381,9 @@ export function initEnv() {
   renderHealth(lastStatus);
   renderSky();
   renderSolar();
-  every('env-lastyear', 21600, () => renderLastYear().catch(() => {}));
+  everyVisible('env-lastyear', 21600, $('lastyear'), () => renderLastYear().catch(() => {}));
   every('env-moon', 21600, () => loadMoon().catch(() => {}));
-  every('env-garden', 21600, () => loadGarden().catch(() => {}));
+  everyVisible('env-garden', 21600, $('garden'), () => loadGarden().catch(() => {}));
   every('env-season', 3600, () => loadSeason().catch(() => {}));
   every('env-fire', 900, renderFire);
   every('env-health', 300, () => {

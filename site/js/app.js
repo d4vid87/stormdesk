@@ -4,6 +4,7 @@ export { shouldSpeak } from './speech.js';
 // Shell: settings store, nav, refresh scheduler, notification banners.
 
 const DEFAULTS = {
+  forecastProvider: 'auto', alertRegion: 'US', pollenEnabled: false, riverGauge: '', cameraUrl: '', purpleAirHost: '', ecowittAppKey: '', ecowittApiKey: '', ecowittMac: '',
   token: '', stationId: '', deviceId: '', lat: null, lon: null, stationName: '',
   // Metres above sea level, always — the drawer converts for whoever types feet. Null means
   // "use the forecast model's elevation for this grid square", which is right to a few metres
@@ -37,7 +38,7 @@ const DEFAULTS = {
   stormAuto: true,
   // Stations the user can flip between from the header. One token, one set of preferences —
   // only the identity fields change. [{ id, name, deviceId, lat, lon }]
-  savedStations: [],
+  savedStations: [], activeStationProfile: '',
   // Smart home: an MQTT broker to publish to, and a Home Assistant to read back from. Both dark
   // until filled in.
   mqttUrl: '', mqttUser: '', mqttPass: '', haUrl: '', haToken: '', haEntities: '',
@@ -59,7 +60,7 @@ const DEFAULTS = {
   eco: 'auto',
   // 'auto' | 'full' | 'lite' | 'off' — see motion.js. Auto means Full on a desktop and Lite on
   // the same hardware eco mode calls slow.
-  motion: 'auto',
+  motion: 'auto', gaugeStyle: 'orbit',
   // 'HH:MM' local, blank = off. A spoken summary at a fixed time — see intel.js briefing().
   briefTime: '',
   // 'auto' | 'safe' | 'gpu' — WebKitGTK renderer workarounds, read by the Rust side at launch.
@@ -111,7 +112,7 @@ let _settings = load('wd.settings', { ...DEFAULTS, palette: FIRST_RUN ? 'graphit
 // the migration: future host pulls simply stop replacing them.
 export const LOCAL_SETTING_KEYS = new Set([
   'activePlace', 'theme', 'accent', 'palette', 'density', 'fontScale', 'bigNumbers',
-  'motion', 'eco', 'kiosk', 'kioskCycleSec', 'nightDim', 'layoutLocked', 'hiddenTabs',
+  'gaugeStyle', 'motion', 'eco', 'kiosk', 'kioskCycleSec', 'nightDim', 'layoutLocked', 'hiddenTabs',
   'deskRadar', 'radarSite', 'heroSummary', 'clock24', 'render',
 ]);
 
@@ -517,11 +518,14 @@ export function expires(ms) {
 // runs once on the way back.
 export function every(name, seconds, fn) {
   const prev = jobs.get(name);
-  if (prev) clearInterval(prev.id);
+  if (prev) { clearInterval(prev.id); prev.observer?.disconnect(); }
   const job = { due: false, running: false, base: seconds };
   job.run = async () => {
+    if (jobs.get(name) !== job) return;
     if (document.hidden) { job.due = true; return; }
-    if (job.running) { job.due = true; return; }
+    // A slow request already covers this tick; catching up would poll without a pause.
+    if (job.running) return;
+    job.due = false;
     job.running = true;
     try { await fn(); } catch (e) { console.warn(`job ${name}:`, e.message); }
     finally {
@@ -533,6 +537,27 @@ export function every(name, seconds, fn) {
   job.id = setInterval(job.run, job.paced * 1000);
   jobs.set(name, job);
   job.run();
+}
+
+// Closed details and off-screen charts do not need their own network refresh.
+export function everyVisible(name, seconds, element, fn) {
+  let last = -Infinity;
+  const run = async () => {
+    if (!element || !element.getClientRects().length) return;
+    const rect = element.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > innerHeight) return;
+    if (Date.now() - last < paceFor(name, seconds) * 1000) return;
+    last = Date.now();
+    await fn();
+  };
+  every(name, seconds, run);
+  if (element && 'IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) jobs.get(name)?.run();
+    });
+    jobs.get(name).observer = observer;
+    observer.observe(element);
+  }
 }
 
 // The night window opens on its own; nothing else would notice.
@@ -605,6 +630,7 @@ export function clearJob(name) {
   const job = jobs.get(name);
   if (!job) return;
   clearInterval(job.id);
+  job.observer?.disconnect();
   jobs.delete(name);
 }
 

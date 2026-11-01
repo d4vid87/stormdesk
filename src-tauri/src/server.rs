@@ -39,9 +39,6 @@ pub struct State {
     pub packets: Mutex<HashMap<String, String>>,
     pub cfg_path: PathBuf,
     pub data_dir: PathBuf,
-    /// (tz, oldest ts, local midnight, everything before today) — see `/history/daily`. Today's
-    /// row is appended per request; the head only changes when the day turns or history is pruned.
-    daily: Mutex<Option<(i64, i64, i64, String)>>,
     /// The ingest path's connection, opened once and kept. Every reading used to open a fresh
     /// SQLite handle (file open, WAL header read, pragmas, schema check) a few times a second.
     /// ponytail: one writer mutex; per-thread connections if ingest ever exceeds a few rows/s.
@@ -49,11 +46,12 @@ pub struct State {
     sse: Mutex<Vec<SyncSender<String>>>,
     sse_n: AtomicUsize,
     pub backfill: Mutex<&'static str>,
-    config_write: Mutex<()>,
+    pub(crate) config_write: Mutex<()>,
     pairing: Mutex<Option<PairCode>>,
     pair_failures: Mutex<HashMap<String, (u64, u8)>>,
     started: u64,
     pub maintenance: AtomicBool,
+    archive_generation: AtomicUsize,
 }
 
 impl State {
@@ -63,7 +61,6 @@ impl State {
             packets: Mutex::new(HashMap::new()),
             cfg_path,
             data_dir,
-            daily: Mutex::new(None),
             writer: Mutex::new(None),
             sse: Mutex::new(Vec::new()),
             sse_n: AtomicUsize::new(0),
@@ -73,6 +70,7 @@ impl State {
             pair_failures: Mutex::new(HashMap::new()),
             started: now(),
             maintenance: AtomicBool::new(false),
+            archive_generation: AtomicUsize::new(0),
         })
     }
 
@@ -86,7 +84,7 @@ impl State {
     }
 
     pub fn db(&self) -> Option<rusqlite::Connection> {
-        store::open(&store::db_path(&self.data_dir)).ok()
+        store::open(&store::station_db_path(&self.data_dir, &self.cfg_path)).ok()
     }
 
     pub fn archive_accepts(&self, conn: &rusqlite::Connection) -> bool {
@@ -111,28 +109,48 @@ impl State {
     /// Run one write against the kept-open writer connection, opening it on first use.
     pub fn with_db<T>(&self, f: impl FnOnce(&mut rusqlite::Connection) -> T) -> Option<T> {
         let mut slot = self.writer.lock().ok()?;
-        if slot.is_none() {
-            *slot = store::open(&store::db_path(&self.data_dir)).ok();
+        let path = store::station_db_path(&self.data_dir, &self.cfg_path);
+        if slot.as_ref().and_then(|c| c.path()).map(Path::new) != Some(path.as_path()) {
+            *slot = store::open(&path).ok();
         }
         slot.as_mut().map(f)
     }
 }
 
-fn station_fingerprint(path: &Path) -> String {
+pub(crate) fn station_fingerprint(path: &Path) -> String {
     let cfg: serde_json::Value = serde_json::from_str(&read_config(path)).unwrap_or_default();
+    station_fingerprint_value(&cfg)
+}
+
+fn station_fingerprint_value(cfg: &serde_json::Value) -> String {
     let s = &cfg["settings"];
-    let source = s["stationSource"]
-        .as_str()
-        .filter(|x| !x.is_empty())
-        .unwrap_or("tempest");
+    let get = |key: &str| s[key].as_str().filter(|v| !v.trim().is_empty());
+    let source = get("stationSource").unwrap_or("tempest");
     let id = match source {
-        "tempest" => s["deviceId"].as_str().or_else(|| s["stationId"].as_str()),
-        "wll" => s["wllHost"].as_str(),
-        "lacrosse" => s["lacrosseEmail"].as_str(),
-        _ => s["stationId"].as_str().or_else(|| s["ingestKey"].as_str()),
+        "tempest" => get("deviceId").or_else(|| get("stationId")),
+        "wll" => get("wllHost"),
+        "lacrosse" => get("lacrosseEmail"),
+        _ => get("stationId").or_else(|| get("ingestKey")),
+    }.unwrap_or("");
+    if id.is_empty() && matches!(source, "ecowitt" | "push") {
+        if let Some(mac) = get("ecowittMac") { return format!("{source}:mac:{}", mac.trim().replace([':', '-'], "").to_ascii_uppercase()); }
     }
-    .unwrap_or("");
+    if id.is_empty() && source == "awn" {
+        if let Some(key) = get("awnApiKey") { return format!("awn:{}", token_hash(key)); }
+    }
     if id.is_empty() { "none".into() } else { format!("{source}:{id}") }
+}
+
+fn accepts_udp(cfg: &serde_json::Value, packet: &serde_json::Value) -> bool {
+    let s = &cfg["settings"];
+    if s["stationSource"].as_str().is_some_and(|v| !v.is_empty()) { return false; }
+    let configured = s["deviceId"].as_str().filter(|v| !v.is_empty());
+    let packet_device = packet["device_id"].as_i64().map(|v| v.to_string());
+    // Device-less hub packets cannot be attributed safely on a multi-station LAN.
+    match configured {
+        Some(id) => packet_device.as_deref() == Some(id),
+        None => station_fingerprint_value(cfg) == "none",
+    }
 }
 
 #[derive(Clone)]
@@ -211,7 +229,8 @@ fn authorized(state: &State, req: &Request) -> bool {
 }
 
 fn private_route(path: &str, method: &tiny_http::Method) -> bool {
-    path == "/diag"
+    path == "/history/review"
+        || path == "/diag"
         || path == "/health"
         || path == "/health/action"
         || path.starts_with("/ha/")
@@ -291,8 +310,11 @@ fn json(body: String) -> ResponseBox {
 ///
 /// `cwopId` is deliberately absent: a CWOP callsign is public by design (the network's passcode
 /// for receive-only stations is the constant -1), and redacting it would only break the badge.
-const SECRET_KEYS: [&str; 13] = [
+const SECRET_KEYS: [&str; 16] = [
     "token",
+    "ecowittAppKey",
+    "ecowittApiKey",
+    "ecowittMac",
     "mqttUser",
     "mqttPass",
     "haToken",
@@ -316,6 +338,9 @@ fn redact(config_json: &str) -> String {
         return "{}".into();
     };
     if let Some(s) = v.get_mut("settings").and_then(|s| s.as_object_mut()) {
+        if let Some(profiles)=s.get_mut("savedStations").and_then(|v|v.as_array_mut()) {
+            for profile in profiles { if let Some(p)=profile.get_mut("profile").and_then(|v|v.as_object_mut()) { for k in SECRET_KEYS { p.remove(k); } } }
+        }
         for k in SECRET_KEYS {
             if s.contains_key(k) {
                 s.insert(k.into(), serde_json::Value::String(String::new()));
@@ -723,6 +748,46 @@ fn is_ingest_path(path: &str) -> bool {
         || path == "/updateweatherstation.php"
 }
 
+fn restore_bundle(state: &State, path: &Path, recovery: &Path) -> Result<(), String> {
+    store::inspect_bundle(path)?;
+    let config = store::bundle_config(path)?;
+    let parsed: serde_json::Value = serde_json::from_str(&config).map_err(|_|"Invalid settings")?;
+    let backup = rusqlite::Connection::open_with_flags(path,rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|_|"Backup unavailable")?;
+    let configured = station_fingerprint_value(&parsed);
+    let identity = store::meta_get(&backup,"station_fingerprint").unwrap_or_else(||configured.clone());
+    if configured != "none" && identity != configured { return Err("Backup station and settings disagree".into()); }
+    let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+    state.maintenance.store(true, Ordering::SeqCst);
+    state.archive_generation.fetch_add(1, Ordering::SeqCst);
+    let result = (|| {
+        let old_config = read_config(&state.cfg_path);
+        let _current_path = store::station_db_path(&state.data_dir, &state.cfg_path);
+        let target_path = store::station_db_path_for(&state.data_dir, &identity);
+        let target = store::open(&target_path).map_err(|_|"Target archive unavailable")?;
+        let target_recovery = recovery.with_extension("target.wdbak");
+        // Keep the active station and the overwritten target independently recoverable.
+        let ok = state.with_db(|current| {
+            store::bundle_to(current,recovery,&old_config)?;
+            store::bundle_to(&target,&target_recovery,&config)?;
+            store::replace_from_bundle(&target,path)?;
+            if write_atomic(&state.cfg_path,&config).is_err() {
+                store::replace_from_bundle(&target,&target_recovery)?;
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+            Ok::<(),rusqlite::Error>(())
+        }).ok_or("Archive unavailable")?;
+        ok.map_err(|_|"Restore failed; recovery backups were retained")?;
+        let kept_target = state.data_dir.join("pre-restore-target.wdbak");
+        let _ = std::fs::remove_file(&kept_target);
+        let _ = std::fs::rename(&target_recovery, kept_target);
+        state.packets.lock().unwrap_or_else(|e|e.into_inner()).clear();
+        *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = "off";
+        Ok(())
+    })();
+    state.maintenance.store(false, Ordering::SeqCst);
+    result
+}
+
 fn staged_restore(state: &State, id: &str) -> Option<PathBuf> {
     if id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
         return None;
@@ -759,7 +824,7 @@ fn health_json(state: &State) -> String {
     let db = state.db();
     let archive = db
         .as_ref()
-        .map(|c| store::health(c, &store::db_path(&state.data_dir)))
+        .map(|c| store::health(c, &store::station_db_path(&state.data_dir, &state.cfg_path)))
         .unwrap_or_else(|| serde_json::json!({ "ok": false, "check": "unavailable" }));
     let diag = serde_json::from_str::<serde_json::Value>(&ingest::diag_json()).unwrap_or_default();
     let cfg = serde_json::from_str::<serde_json::Value>(&read_config(&state.cfg_path))
@@ -966,6 +1031,47 @@ fn handle(state: &Arc<State>, mut req: Request) {
         // The US Drought Monitor, via the FCC's county lookup. Neither serves CORS headers, and
         // the coordinates in both URLs are the house — see api::drought.
         "/proxy/drought" => json(crate::api::drought(&state.cfg_path)),
+        "/history/review" | "/history/channels" => {
+            let (from,to) = window(&url,now());
+            let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+            let context = token_hash(&station_fingerprint(&state.cfg_path));
+            let Some(conn) = state.db() else { return drop(req.respond(Response::empty(503))); };
+            let result = if path.ends_with("channels") {
+                if query(&url,"latest").as_deref()==Some("1") { crate::archive::latest_channels(&conn, now() as i64) }
+                else { crate::archive::channels(&conn,from,to) }
+            } else { crate::archive::read(&conn,from,to).map(|mut value| { value["context"]=context.into(); value }) };
+            match result { Ok(v) => json(v.to_string()), Err(e) => json(serde_json::json!({"error":e}).to_string()).with_status_code(400).boxed() }
+        }
+        "/environment/air" => match air_snapshot(state) {
+            Ok(value)=>json(value.to_string()),
+            Err(error)=>json(serde_json::json!({"error":error}).to_string()).with_status_code(502).boxed()
+        },
+        "/archive/recover" => {
+            if *req.method()!=tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
+            let mut body=String::new();let _=req.as_reader().take(4096).read_to_string(&mut body);
+            let input=serde_json::from_str::<serde_json::Value>(&body).unwrap_or_default();
+            let result = recover_archive(state, &input, crate::environment::fetch_recovery);
+            match result {
+                Ok(v) => json(v.to_string()),
+                Err(e) => {
+                    let status = if e.starts_with("Station") {409} else {400};
+                    json(serde_json::json!({"error":e}).to_string()).with_status_code(status).boxed()
+                }
+            }
+        }
+        "/archive/edit" => {
+            if *req.method()!=tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
+            let mut body=String::new();
+            let _=req.as_reader().take(4*1024*1024+1).read_to_string(&mut body);
+            let input=serde_json::from_str::<serde_json::Value>(&body).ok().filter(|_|body.len()<=4*1024*1024);
+            let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+            let context=token_hash(&station_fingerprint(&state.cfg_path));
+            if input.as_ref().and_then(|v|v["context"].as_str())!=Some(context.as_str()) {
+                return drop(req.respond(json(serde_json::json!({"error":"Station changed; reload the archive before editing"}).to_string()).with_status_code(409)));
+            }
+            let result=input.ok_or_else(||"Invalid archive request".to_string()).and_then(|v|state.with_db(|c|crate::archive::edit(c,&v,now() as i64)).unwrap_or_else(||Err("Archive unavailable".into())));
+            match result { Ok(v)=>json(v.to_string()), Err(e)=>json(serde_json::json!({"error":e}).to_string()).with_status_code(400).boxed() }
+        }
         "/history/daily" => {
             // Clamped: a hostile `tz` must not overflow the day arithmetic and panic a worker,
             // and a panicked worker is never replaced. ±14 h is the widest real offset.
@@ -976,32 +1082,8 @@ fn handle(state: &Arc<State>, mut req: Request) {
             let Some(conn) = state.db() else {
                 return drop(req.respond(Response::empty(503)));
             };
-            let (min, _max) = store::stamp(&conn);
             let ds = store::day_start(now() as i64, tz);
-            // The lock is not held across the query: a slow aggregate would otherwise block
-            // every other screen asking the same question.
-            // Backfill writes past days while it runs, which nothing in the key can see: no cache
-            // until it is done.
-            let filling = *state.backfill.lock().unwrap() != "complete";
-            let hit = {
-                let cache = state.daily.lock().unwrap();
-                match cache.as_ref() {
-                    Some((t, c, d, head)) if !filling && (*t, *c, *d) == (tz, min, ds) => {
-                        Some(head.clone())
-                    }
-                    _ => None,
-                }
-            };
-            // The head is every day but today: a full-table aggregate, and one that cannot change
-            // until midnight or a prune. Today's row is a primary-key range scan, cheap enough to
-            // redo per request — which is what keeps the archive's growth off this endpoint.
-            let head = hit.unwrap_or_else(|| {
-                let fresh = store::daily_head_json(&conn, tz, ds);
-                if !filling {
-                    *state.daily.lock().unwrap() = Some((tz, min, ds, fresh.clone()));
-                }
-                fresh
-            });
+            let head = store::daily_head_json(&conn, tz, ds);
             let body = store::daily_join(&head, store::daily_today_row(&conn, tz, ds).as_deref());
             json(body)
         }
@@ -1122,6 +1204,9 @@ fn handle(state: &Arc<State>, mut req: Request) {
             return;
         }
         "/archive/replace" => {
+            if *req.method()!=tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
+            let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+            if station_fingerprint(&state.cfg_path) == "none" { return drop(req.respond(Response::empty(409))); }
             let mut body = String::new();
             let _ = req.as_reader().take(1024).read_to_string(&mut body);
             let confirmed = serde_json::from_str::<serde_json::Value>(&body).ok()
@@ -1133,7 +1218,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 let ok = state.with_db(|conn| {
                     if store::bundle_to(conn, &backup, &config).is_err() { return false; }
                     conn.transaction().ok().map(|tx| {
-                        let cleared = tx.execute("DELETE FROM obs", []).is_ok() && tx.execute("DELETE FROM meta", []).is_ok();
+                        let cleared = tx.execute_batch("DELETE FROM notes; DELETE FROM channels; DELETE FROM obs; DELETE FROM meta;").is_ok();
                         if cleared { store::meta_set(&tx, "station_fingerprint", &fingerprint); }
                         cleared && tx.commit().is_ok()
                     }).unwrap_or(false)
@@ -1184,48 +1269,16 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 let Some(path) = staged_restore(state, &id).filter(|p| p.is_file()) else {
                     return drop(req.respond(Response::empty(404)));
                 };
-                let valid = store::inspect_bundle(&path).is_ok();
-                let config = store::bundle_config(&path).ok();
-                let old_config = read_config(&state.cfg_path);
-                // VACUUM INTO refuses to overwrite. Use a private working name, then promote the
-                // successful snapshot to the stable recovery filename after the restore commits.
-                let recovery = state.data_dir.join(format!(
-                    "pre-restore-{}.wdbak",
-                    TEMP_N.fetch_add(1, Ordering::Relaxed)
-                ));
+                let recovery = state.data_dir.join(format!("pre-restore-{}.wdbak", TEMP_N.fetch_add(1, Ordering::Relaxed)));
                 let kept_recovery = state.data_dir.join("pre-restore.wdbak");
-                state.maintenance.store(true, Ordering::Relaxed);
-                let applied = valid
-                    && config
-                        .as_ref()
-                        .map(|new_config| {
-                            state
-                                .with_db(|conn| {
-                                    if store::bundle_to(conn, &recovery, &old_config).is_err() {
-                                        return false;
-                                    }
-                                    if store::replace_from_bundle(conn, &path).is_err() {
-                                        return false;
-                                    }
-                                    if write_atomic(&state.cfg_path, new_config).is_err() {
-                                        let _ = store::replace_from_bundle(conn, &recovery);
-                                        return false;
-                                    }
-                                    true
-                                })
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(false);
-                state.maintenance.store(false, Ordering::Relaxed);
+                let applied = restore_bundle(state, &path, &recovery).is_ok();
                 if applied {
                     let _ = std::fs::remove_file(&kept_recovery);
                     let _ = std::fs::rename(&recovery, &kept_recovery);
-                    *state.daily.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     state.broadcast("config", "{\"restore\":true}");
                     let _ = std::fs::remove_file(path);
                     json("{\"ok\":true}".into())
                 } else {
-                    let _ = std::fs::remove_file(recovery);
                     json(
                         "{\"ok\":false,\"error\":\"Restore failed; current data was kept\"}".into(),
                     )
@@ -1242,7 +1295,13 @@ fn handle(state: &Arc<State>, mut req: Request) {
                     .read_to_string(&mut body)
                     .is_ok();
                 let _write = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
-                match read.then(|| write_config(&state.cfg_path, &body)).flatten() {
+                let previous_station = station_fingerprint(&state.cfg_path);
+                let written = read.then(|| write_config(&state.cfg_path, &body)).flatten();
+                if station_fingerprint(&state.cfg_path) != previous_station {
+                    state.packets.lock().unwrap_or_else(|e|e.into_inner()).clear();
+                    *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = "off";
+                }
+                match written {
                     Some((200, merged, rev)) => {
                         state.broadcast("config", &format!("{{\"rev\":{rev}}}"));
                         json(merged)
@@ -1358,7 +1417,7 @@ pub fn lan_ip() -> String {
 /// This thread owns the only long-lived write connection: it takes the JSONL import on the way
 /// in, then writes one row a minute forever.
 pub fn listen_udp(state: Arc<State>) {
-    let mut conn = store::open(&store::db_path(&state.data_dir)).ok();
+    let mut conn = state.db();
     if let Some(c) = conn.as_mut() {
         store::migrate_jsonl(c, &state.data_dir.join("log"));
     }
@@ -1382,12 +1441,13 @@ pub fn listen_udp(state: Arc<State>) {
         let Some(kind) = v.get("type").and_then(|t| t.as_str()).map(String::from) else {
             continue;
         };
+        let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+        let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+        if !accepts_udp(&cfg, &v) || state.maintenance.load(Ordering::SeqCst) { continue; }
         if kind == "obs_st" {
-            let configured = crate::setting(&state.cfg_path, "deviceId")
-                .unwrap_or_default().trim_matches('"').to_string();
-            let packet_device = v.get("device_id").and_then(|x| x.as_i64()).map(|x| x.to_string());
-            if !configured.is_empty() && packet_device.as_deref().is_some_and(|id| id != configured) {
-                continue;
+            let path = store::station_db_path(&state.data_dir, &state.cfg_path);
+            if conn.as_ref().and_then(|c| c.path()).map(Path::new) != Some(path.as_path()) {
+                conn = store::open(&path).ok();
             }
             if !state.maintenance.load(Ordering::Relaxed) {
                 if let (Some(c), Some(obs)) = (
@@ -1416,38 +1476,122 @@ pub fn listen_udp(state: Arc<State>) {
     }
 }
 
-/// Backfill the station's history from WeatherFlow, once, in the background.
+fn recover_archive(
+    state: &Arc<State>,
+    input: &serde_json::Value,
+    fetch: impl FnOnce(&serde_json::Value, i64, i64) -> Result<crate::environment::Recovery, String>,
+) -> Result<serde_json::Value, String> {
+    let (Some(from), Some(to)) = (input["from"].as_i64(), input["to"].as_i64()) else {
+        return Err("Choose a valid recovery period".into());
+    };
+    let (identity, config, generation) = {
+        let _guard = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+        let cfg = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+        let identity = station_fingerprint_value(&cfg);
+        if input["context"].as_str() != Some(token_hash(&identity).as_str()) {
+            return Err("Station changed; reload before recovery".into());
+        }
+        (identity, crate::environment::recovery_config(&cfg), state.archive_generation.load(Ordering::SeqCst))
+    };
+    let recovered = fetch(&config, from, to)?;
+    let _guard = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+    let cfg = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+    if station_fingerprint_value(&cfg) != identity
+        || crate::environment::recovery_config(&cfg) != config
+        || state.archive_generation.load(Ordering::SeqCst) != generation
+        || state.maintenance.load(Ordering::SeqCst)
+    {
+        return Err("Station or archive changed during recovery; no recovered readings were saved".into());
+    }
+    state.with_db(|conn| crate::environment::commit_recovery(conn, recovered))
+        .unwrap_or_else(|| Err("Archive unavailable".into()))
+}
+
+pub fn air_snapshot(state: &Arc<State>) -> Result<serde_json::Value,String> {
+    air_snapshot_with(state, crate::environment::local_air_host)
+}
+
+fn air_snapshot_with(
+    state: &Arc<State>,
+    fetch: impl FnOnce(&str) -> Result<serde_json::Value, String>,
+) -> Result<serde_json::Value,String> {
+    let (identity, host, generation) = {
+        let _guard=state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+        let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+        let identity=station_fingerprint_value(&cfg);
+        let host=cfg["settings"]["purpleAirHost"].as_str().unwrap_or("").to_owned();
+        if host.is_empty(){return Err("Configure a local PurpleAir sensor".into());}
+        if let Some(conn)=state.db() {
+            let at=store::meta_get(&conn,"air_received").and_then(|v|v.parse::<u64>().ok()).unwrap_or(0);
+            if now().saturating_sub(at)<120 && store::meta_get(&conn,"air_host").as_deref()==Some(&host) {
+                if let Some(j)=store::meta_get(&conn,"air_latest").and_then(|v|serde_json::from_str(&v).ok()){return Ok(j);}
+            }
+        }
+        (identity, host, state.archive_generation.load(Ordering::SeqCst))
+    };
+    let value=fetch(&host)?;
+    let _guard=state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+    let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+    if station_fingerprint_value(&cfg)!=identity || cfg["settings"]["purpleAirHost"].as_str()!=Some(&host)
+        || state.archive_generation.load(Ordering::SeqCst)!=generation || state.maintenance.load(Ordering::SeqCst) {
+        return Err("Station changed while reading the sensor".into());
+    }
+    state.with_db(|conn|{
+        crate::archive::archive_air(conn,&value,now() as i64);
+        store::meta_set(conn,"air_host",&host);
+        store::meta_set(conn,"air_received",&now().to_string());
+        store::meta_set(conn,"air_latest",&value.to_string());
+    });
+    Ok(value)
+}
+
+pub fn start_air(state: Arc<State>) {
+    std::thread::spawn(move||loop{
+        if !crate::setting(&state.cfg_path,"purpleAirHost").unwrap_or_default().is_empty(){let _=air_snapshot(&state);}
+        std::thread::sleep(Duration::from_secs(120));
+    });
+}
+
 pub fn start_backfill(state: Arc<State>) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(30));
-        let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path))
-            .unwrap_or_else(|_| serde_json::json!({}));
-        let s = |k: &str| {
-            cfg.pointer(&format!("/settings/{k}"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        };
-        let Some(conn) = state.db() else { return };
-        if store::meta_get(&conn, "backfill_done").is_some() {
-            *state.backfill.lock().unwrap() = "complete";
-            return;
+        let mut previous = String::new();
+        let mut next_attempt = 0;
+        loop {
+            std::thread::sleep(Duration::from_secs(5));
+            let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+            let identity = station_fingerprint_value(&cfg);
+            if identity != previous {
+                previous = identity.clone(); next_attempt = 0;
+                *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = "off";
+            }
+            if !identity.starts_with("tempest:") || now() < next_attempt { continue; }
+            let token = cfg.pointer("/settings/token").and_then(|v|v.as_str()).unwrap_or("");
+            let device = cfg.pointer("/settings/deviceId").and_then(|v|v.as_str()).unwrap_or("");
+            if token.is_empty() || device.is_empty() { continue; }
+            let generation = state.archive_generation.load(Ordering::SeqCst);
+            let gate = || {
+                let guard = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+                if state.maintenance.load(Ordering::SeqCst) || state.archive_generation.load(Ordering::SeqCst) != generation || station_fingerprint(&state.cfg_path) != identity { None } else { Some(guard) }
+            };
+            let conn = {
+                let Some(_guard) = gate() else { continue; };
+                let path = store::station_db_path_for(&state.data_dir, &identity);
+                let Ok(conn) = store::open(&path) else { continue; };
+                if !state.archive_accepts(&conn) { continue; }
+                conn
+            };
+            if store::meta_get(&conn,"backfill_done").is_some() {
+                *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = "complete";
+                next_attempt = now()+60; continue;
+            }
+            *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = "running";
+            let complete = store::backfill_checked(&conn,token,device,gate);
+            if station_fingerprint(&state.cfg_path) == identity {
+                *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = if complete { "complete" } else { "partial" };
+            }
+            next_attempt = now()+300;
         }
-        let (token, device) = (s("token"), s("deviceId"));
-        if token.is_empty() || device.is_empty() {
-            return;
-        }
-        let mut complete = false;
-        for delay in [0, 60, 300, 900] {
-            if delay > 0 { std::thread::sleep(Duration::from_secs(delay)); }
-            *state.backfill.lock().unwrap() = if delay == 0 { "running" } else { "retrying" };
-            complete = store::backfill(&conn, &token, &device);
-            if complete { break; }
-            if store::meta_get(&conn, "backfill_error").as_deref() == Some("authorization") { break; }
-        }
-        *state.backfill.lock().unwrap() = if complete { "complete" } else { "partial" };
-        // The cloud just wrote days that are all before today: the cached head is wrong now.
-        *state.daily.lock().unwrap() = None;
     });
 }
 
@@ -1759,6 +1903,142 @@ mod tests {
         let cfg: serde_json::Value = serde_json::from_str(&read_config(&old)).unwrap();
         assert_eq!(cfg.pointer("/settings/legacyLanAccess").and_then(|v| v.as_bool()), Some(true));
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn recovery_fetch_does_not_hold_writers_and_rechecks_its_source() {
+        use serde_json::json;
+        let dir = std::env::temp_dir().join(format!("wd-recovery-race-{}-{}", std::process::id(), TEMP_N.fetch_add(1, Ordering::Relaxed)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        let cfg = json!({"settings":{"deviceId":"7","token":"initial"}});
+        std::fs::write(&path, cfg.to_string()).unwrap();
+        let state = State::new(dir.clone(), path.clone());
+        let input = json!({"context":token_hash("tempest:7"),"from":1700000000,"to":1700000300});
+        let result = recover_archive(&state, &input, |config, from, to| {
+            assert_eq!(config["token"], "initial");
+            assert!(state.config_write.try_lock().is_ok());
+            assert!(state.writer.try_lock().is_ok());
+            let mut row = vec![None;19]; row[0] = Some(from as f64); row[7] = Some(20.0);
+            Ok(crate::environment::Recovery {rows:vec![row],src:1,from,to})
+        }).unwrap();
+        assert_eq!(result["inserted"],1);
+        for change in ["station","credential","restore"] {
+            std::fs::write(&path,cfg.to_string()).unwrap();
+            let result = recover_archive(&state, &input, |_, from, to| {
+                assert!(state.writer.try_lock().is_ok());
+                let _guard=state.config_write.lock().unwrap();
+                let mut changed=cfg.clone();
+                match change {
+                    "station" => changed["settings"]["deviceId"]="8".into(),
+                    "credential" => changed["settings"]["token"]="changed".into(),
+                    _ => {state.archive_generation.fetch_add(1,Ordering::SeqCst);}
+                }
+                std::fs::write(&path,changed.to_string()).unwrap();
+                let mut row=vec![None;19];row[0]=Some(to as f64);row[7]=Some(99.0);
+                Ok(crate::environment::Recovery{rows:vec![row],src:1,from,to})
+            });
+            assert!(result.unwrap_err().contains("changed"));
+            let conn=store::open(&store::station_db_path_for(&dir,"tempest:7")).unwrap();
+            assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        }
+        drop(state);
+        let _=std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn air_fetch_rechecks_station_sensor_and_restore_generation() {
+        use serde_json::json;
+        let dir=std::env::temp_dir().join(format!("wd-air-race-{}-{}",std::process::id(),TEMP_N.fetch_add(1,Ordering::Relaxed)));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path=dir.join("config.json");
+        let cfg=json!({"settings":{"deviceId":"7","purpleAirHost":"192.168.1.2"}});
+        std::fs::write(&path,cfg.to_string()).unwrap();
+        let state=State::new(dir.clone(),path.clone());
+        for change in ["station","sensor","restore"] {
+            std::fs::write(&path,cfg.to_string()).unwrap();
+            let result=air_snapshot_with(&state,|host|{
+                assert_eq!(host,"192.168.1.2");
+                assert!(state.writer.try_lock().is_ok());
+                let _guard=state.config_write.lock().unwrap();
+                let mut changed=cfg.clone();
+                match change {
+                    "station"=>changed["settings"]["deviceId"]="8".into(),
+                    "sensor"=>changed["settings"]["purpleAirHost"]="192.168.1.3".into(),
+                    _=>{state.archive_generation.fetch_add(1,Ordering::SeqCst);}
+                }
+                std::fs::write(&path,changed.to_string()).unwrap();
+                Ok(json!({"DateTime":"2026/10/31T12:00:00z","pm2_5_atm":20}))
+            });
+            assert!(result.unwrap_err().contains("changed"));
+            assert!(store::meta_get(&state.db().unwrap(),"air_latest").is_none());
+        }
+        drop(state);
+        let _=std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn station_keys_skip_empty_fields_and_udp_is_device_scoped() {
+        use serde_json::json;
+        assert_eq!(station_fingerprint_value(&json!({"settings":{"deviceId":"","stationId":"7"}})), "tempest:7");
+        assert_eq!(station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","stationId":"","ingestKey":"key"}})), "ecowitt:key");
+        let mac = station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","stationId":"","ingestKey":"","ecowittMac":"aa:bb:cc:dd:ee:01"}}));
+        assert_eq!(mac,"ecowitt:mac:AABBCCDDEE01");
+        for spelling in ["AABBCCDDEE01", "aa-bb-cc-dd-ee-01", "AA:BB:CC:DD:EE:01"] {
+            assert_eq!(mac,station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","ecowittMac":spelling}})));
+        }
+        assert_ne!(mac,station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","ecowittMac":"AA:BB:CC:DD:EE:02"}})));
+        assert_eq!(station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","stationId":"station","ingestKey":"key","ecowittMac":"AA:BB"}})),"ecowitt:station");
+        assert_eq!(station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","ingestKey":"key","ecowittMac":"AA:BB"}})),"ecowitt:key");
+        let awn=station_fingerprint_value(&json!({"settings":{"stationSource":"awn","awnApiKey":"secret"}}));
+        assert!(awn.starts_with("awn:") && !awn.contains("secret"));
+        let cfg=json!({"settings":{"deviceId":"7"}});
+        for kind in ["obs_st","rapid_wind","device_status","evt_strike"] {
+            assert!(accepts_udp(&cfg,&json!({"type":kind,"device_id":7})));
+            assert!(!accepts_udp(&cfg,&json!({"type":kind,"device_id":8})));
+            assert!(!accepts_udp(&cfg,&json!({"type":kind})));
+        }
+        assert!(!accepts_udp(&json!({"settings":{"stationSource":"ecowitt"}}),&json!({"type":"obs_st","device_id":7})));
+    }
+
+    #[test]
+    fn restore_selects_bundle_station_and_preserves_other_archives() {
+        use serde_json::json;
+        let dir=std::env::temp_dir().join(format!("wd-multi-restore-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg=dir.join("config.json");
+        let config=|id:&str| json!({"settings":{"deviceId":id,"stationName":id}}).to_string();
+        let row=|ts:f64| { let mut row=vec![None;19];row[0]=Some(ts);row[7]=Some(ts);row };
+        std::fs::write(&cfg,config("A")).unwrap();
+        let state=State::new(dir.clone(),cfg.clone());
+        let a=state.db().unwrap(); store::insert(&a,&row(1.0),0);
+        std::fs::write(&cfg,config("B")).unwrap();
+        let b=state.db().unwrap(); assert!(state.archive_accepts(&b)); store::insert(&b,&row(2.0),0);
+        std::fs::write(&cfg,config("C")).unwrap();
+        let c=state.db().unwrap(); assert!(state.archive_accepts(&c)); store::insert(&c,&row(3.0),0);
+        let source=store::open(&dir.join("source.db")).unwrap();
+        store::meta_set(&source,"station_fingerprint","tempest:B");
+        store::insert(&source,&row(9.0),0);
+        source.execute("INSERT INTO notes(ts,until,kind,text) VALUES (9,9,'note','cleaned')",[]).unwrap();
+        source.execute("INSERT INTO channels(ts,name,value,unit) VALUES (9,'soil',12,'percent')",[]).unwrap();
+        let bundle=dir.join("bundle.wdbak");store::bundle_to(&source,&bundle,&config("B")).unwrap();
+        state.packets.lock().unwrap().insert("obs_st".into(),"old".into());
+        let recovery=dir.join("recovery.wdbak");
+        restore_bundle(&state,&bundle,&recovery).unwrap();
+        assert_eq!(station_fingerprint(&cfg),"tempest:B");
+        assert_eq!(store::stamp(&state.db().unwrap()),(9,9));
+        assert_eq!(store::stamp(&a),(1,1));
+        assert_eq!(store::stamp(&c),(3,3));
+        assert_eq!(store::stamp(&store::open(&recovery).unwrap()),(3,3));
+        assert_eq!(store::stamp(&store::open(&dir.join("pre-restore-target.wdbak")).unwrap()),(2,2));
+        assert_eq!(b.query_row("SELECT COUNT(*) FROM notes",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        assert_eq!(b.query_row("SELECT COUNT(*) FROM channels",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        assert!(state.packets.lock().unwrap().is_empty());
+        // The original legacy binding stays stable across arbitrary station changes.
+        assert_eq!(store::station_db_path_for(&dir,"tempest:A"),store::db_path(&dir));
+        assert_ne!(store::station_db_path_for(&dir,"tempest:B"),store::db_path(&dir));
+        drop((a,b,c,source,state));
+        let _=std::fs::remove_dir_all(dir);
     }
 
     #[test]

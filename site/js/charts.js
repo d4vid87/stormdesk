@@ -13,6 +13,8 @@ const readCss = () => {
     PANEL2: v('--panel2', '#111820'), TEXT: v('--text', '#e8eef6') };
 };
 
+let chartReadoutId = 0;
+
 export function chart(canvas, series, opts = {}) {
   const { MUTED, LINE, PANEL2, TEXT } = readCss();
   const dpr = window.devicePixelRatio || 1;
@@ -26,10 +28,14 @@ export function chart(canvas, series, opts = {}) {
   c.clearRect(0, 0, w, h);
 
   bindHover(canvas, series, opts);
+  accessibleChart(canvas, series, opts);
   const pts = series
     .flatMap((s) => (s.type === 'band' ? s.data.flatMap((p) => [{ x: p.x, y: p.lo }, { x: p.x, y: p.hi }]) : s.data))
     .filter((p) => p.y != null && !Number.isNaN(p.y));
   if (!pts.length) {
+    canvas._wdNearest = () => [];
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', `${opts.label || 'Chart'}: no data`);
     c.fillStyle = MUTED; c.font = '12px system-ui';
     c.fillText('no data', 8, h / 2);
     return;
@@ -100,30 +106,51 @@ export function chart(canvas, series, opts = {}) {
   if (canvas._wdHover != null) crosshair(c, canvas._wdHover);
   // A time the caller wants marked whatever the pointer is doing — the detail panel opens on the
   // point that was clicked and has to show which one that was.
+  else if (canvas._wdKeyX != null) {
+    c.strokeStyle = TEXT; c.beginPath();
+    c.moveTo(px(canvas._wdKeyX), padT); c.lineTo(px(canvas._wdKeyX), h - padB); c.stroke();
+  }
   else if (opts.markX != null) crosshair(c, px(opts.markX));
 
   // The nearest real sample on each line to a pixel x, or [] when the pointer is nowhere near
   // one. Shared by the crosshair and the click handler so both agree on what was picked.
-  function nearest(hx) {
+  function nearest(hx, hy) {
+    if (Number.isFinite(hy) && (hx < padL || hx > w - padR || hy < padT || hy > h - padB)) return [];
     const marks = [];
     for (const s of series) {
       if (s.type === 'band') continue;
-      let best = null;
-      for (const p of s.data) {
-        if (p.y == null || Number.isNaN(p.y)) continue;
-        const d = Math.abs(px(p.x) - hx);
+      let best = null, previous = null, distance = Infinity;
+      const data = s.data.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+      for (const p of data) {
+        const x = px(p.x), y = py(p.y), d = Math.abs(x - hx);
         if (!best || d < best.d) best = { d, p };
+        if (Number.isFinite(hy)) {
+          if (s.type === 'bar') {
+            const half = Math.max(2, (w - padL - padR) / data.length - 2) / 2;
+            const bottom = py(Math.min(y0, 0));
+            distance = Math.min(distance, Math.hypot(Math.max(0, d - half), Math.max(y - hy, hy - bottom, 0)));
+          } else {
+            distance = Math.min(distance, Math.hypot(x - hx, y - hy));
+            if (previous) {
+              const dx = x - previous.x, dy = y - previous.y;
+              const along = Math.max(0, Math.min(1, ((hx - previous.x) * dx + (hy - previous.y) * dy) / (dx * dx + dy * dy || 1)));
+              distance = Math.min(distance, Math.hypot(hx - previous.x - along * dx, hy - previous.y - along * dy));
+            }
+          }
+        }
+        previous = { x, y };
       }
-      if (best && best.d < (w - padL - padR) / 4) marks.push({ p: best.p, color: s.color, name: s.name });
+      if (best && (best.d < (w - padL - padR) / 4 || distance <= 12)) marks.push({ p: best.p, color: s.color, name: s.name, distance });
     }
-    return marks;
+    // Hit-test the drawn line, but always return a real observation for details.
+    return Number.isFinite(hy) ? marks.sort((a, b) => a.distance - b.distance) : marks;
   }
   canvas._wdNearest = nearest;
 
   // The readout under the pointer: nearest real sample on each line, not an interpolation —
   // a chart that invents a value between two readings is a chart that lies.
   function crosshair(c, hx) {
-    const marks = nearest(hx);
+    const marks = nearest(hx, canvas._wdHover == null ? undefined : canvas._wdHoverY);
     if (!marks.length) return;
     const gx = px(marks[0].p.x);
     c.strokeStyle = MUTED; c.lineWidth = 1;
@@ -160,13 +187,16 @@ function bindHover(canvas, series, opts) {
   // One redraw per frame however fast the pointer reports.
   let raf = 0;
   const move = (e) => {
-    canvas._wdHover = e.clientX - canvas.getBoundingClientRect().left;
+    const rect = canvas.getBoundingClientRect();
+    canvas._wdHover = e.clientX - rect.left;
+    canvas._wdHoverY = e.clientY - rect.top;
     if (raf) return;
     raf = requestAnimationFrame(() => { raf = 0; canvas._wdDraw(); });
   };
   const clear = () => {
     if (canvas._wdHover == null) return;
     canvas._wdHover = null;
+    canvas._wdHoverY = null;
     canvas._wdDraw();
   };
   // A click is a hover that stopped: `move` has already run, so the pick is whatever the readout
@@ -174,8 +204,8 @@ function bindHover(canvas, series, opts) {
   canvas.addEventListener('click', (e) => {
     const onPick = canvas._wdOpts?.onPick;
     if (!onPick) return;
-    const hx = e.clientX - canvas.getBoundingClientRect().left;
-    const m = canvas._wdNearest?.(hx)?.[0];
+    const rect = canvas.getBoundingClientRect();
+    const m = canvas._wdNearest?.(e.clientX - rect.left, e.clientY - rect.top)?.[0];
     if (m) onPick(m.p, m.name);
   });
   canvas.addEventListener('pointermove', move);
@@ -191,6 +221,119 @@ function bindHover(canvas, series, opts) {
       canvas._wdDraw();
     }).observe(canvas);
   }
+}
+
+function accessibleChart(canvas, series, opts) {
+  let state = canvas._wdAccessible;
+  if (!state) {
+    const root = document.createElement('div');
+    root.className = 'chart-accessibility';
+    const live = document.createElement('p');
+    live.id = 'wd-chart-readout-' + ++chartReadoutId;
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    live.style.fontSize = '13px';
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = 'Chart data and keyboard help';
+    const help = document.createElement('p');
+    help.textContent = 'Focus the chart: Left/Right move through readings; Up/Down change series; Home/End select first/last. Enter opens reading details when available.';
+    const table = document.createElement('table');
+    table.style.width = '100%';
+    const scroll = document.createElement('div');
+    scroll.style.overflowX = 'auto';
+    scroll.append(table);
+    const previous = document.createElement('button'), next = document.createElement('button');
+    previous.type = next.type = 'button';
+    previous.textContent = 'Previous 100 readings'; next.textContent = 'Next 100 readings';
+    const page = document.createElement('p');
+    page.setAttribute('role', 'status');
+    details.append(summary, help, scroll, previous, next, page);
+    root.append(live, details);
+    state = canvas._wdAccessible = { root, live, details, summary, table, previous, next, page, groups: [], rows: [], offset: 0, group: 0, point: -1 };
+    canvas.tabIndex = 0;
+    canvas.setAttribute('aria-describedby', live.id);
+    details.addEventListener('toggle', () => { if (details.open) renderChartTable(canvas); });
+    previous.onclick = () => { state.offset = Math.max(0, state.offset - 100); renderChartTable(canvas); };
+    next.onclick = () => { state.offset += 100; renderChartTable(canvas); };
+    canvas.addEventListener('focus', () => {
+      if (state.point < 0) state.live.textContent = state.rows.length
+        ? 'Use arrow keys to explore readings. Chart data and keyboard help follows this chart.'
+        : 'No chart data available.';
+    });
+    canvas.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter'].includes(event.key) || !state.groups.length) return;
+      event.preventDefault();
+      if (event.key === 'Enter') {
+        const group = state.groups[state.group], point = group.data[state.point];
+        if (point) canvas._wdOpts?.onPick?.(point, group.series.name);
+        return;
+      }
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        state.group = (state.group + (event.key === 'ArrowUp' ? -1 : 1) + state.groups.length) % state.groups.length;
+      }
+      const group = state.groups[state.group];
+      if (event.key === 'Home') state.point = 0;
+      else if (event.key === 'End') state.point = group.data.length - 1;
+      else if (event.key === 'ArrowRight') state.point++;
+      else if (event.key === 'ArrowLeft') state.point--;
+      state.point = Math.max(0, Math.min(group.data.length - 1, state.point));
+      const point = group.data[state.point];
+      canvas._wdKeyX = point.x;
+      canvas._wdHover = null;
+      state.live.textContent = chartReading(group.series, point, canvas._wdOpts);
+      canvas._wdDraw();
+    });
+    canvas.addEventListener('blur', () => { canvas._wdKeyX = null; canvas._wdDraw(); });
+  }
+  if (canvas.parentNode && state.root.parentNode !== canvas.parentNode) canvas.after(state.root);
+  // Pointer frames keep the same series: never rebuild the table or its row index on hover.
+  if (state.series === series && state.label === opts.label && state.unit === opts.unit && state.digits === opts.digits) return;
+  state.series = series; state.label = opts.label; state.unit = opts.unit; state.digits = opts.digits;
+  state.groups = series.map(s => ({ series: s, data: s.data.filter(p => Number.isFinite(p.x)
+    && (s.type === 'band' ? Number.isFinite(p.lo) && Number.isFinite(p.hi) : Number.isFinite(p.y))) })).filter(s => s.data.length);
+  state.rows = state.groups.flatMap(group => group.data.map(point => ({ series: group.series, point })));
+  state.offset = 0; state.group = 0; state.point = -1;
+  canvas._wdKeyX = null;
+  state.live.textContent = state.rows.length ? '' : 'No chart data available.';
+  state.summary.textContent = (opts.label || 'Chart') + ': data and keyboard help';
+  if (state.details.open) renderChartTable(canvas);
+  else { state.table.replaceChildren(); state.page.textContent = ''; }
+}
+
+function chartReading(series, point, opts = {}) {
+  const time = point.sourceX ?? point.x;
+  const stamp = (opts.hoverFormat || opts.xFormat || (x => new Date(x).toLocaleString()))(time);
+  const value = series.type === 'band'
+    ? point.lo.toFixed(opts.digits ?? 1) + ' to ' + point.hi.toFixed(opts.digits ?? 1)
+    : point.y.toFixed(opts.digits ?? 1);
+  return [series.name || opts.label || 'Reading', stamp, value + (opts.unit ? ' ' + opts.unit : '')].join(' · ');
+}
+
+function renderChartTable(canvas) {
+  const state = canvas._wdAccessible;
+  const opts = canvas._wdOpts || {};
+  state.table.replaceChildren();
+  const caption = document.createElement('caption');
+  caption.textContent = (opts.label || 'Chart') + ' readings (original observation times)';
+  const head = state.table.createTHead().insertRow();
+  for (const label of ['Series', 'Time', 'Value', 'Lower bound', 'Upper bound']) {
+    const cell = document.createElement('th'); cell.scope = 'col'; cell.textContent = label; head.append(cell);
+  }
+  state.table.prepend(caption);
+  const body = state.table.createTBody();
+  for (const { series, point } of state.rows.slice(state.offset, state.offset + 100)) {
+    const row = body.insertRow(), time = point.sourceX ?? point.x;
+    const format = value => Number.isFinite(value) ? value.toFixed(opts.digits ?? 1) + (opts.unit ? ' ' + opts.unit : '') : '—';
+    const stamp = (opts.hoverFormat || opts.xFormat || (x => new Date(x).toLocaleString()))(time);
+    [series.name || opts.label || 'Reading', stamp, format(point.y), format(point.lo), format(point.hi)]
+      .forEach(value => { const cell = row.insertCell(); cell.textContent = value; });
+  }
+  state.previous.disabled = state.offset === 0;
+  state.next.disabled = state.offset + 100 >= state.rows.length;
+  state.page.textContent = state.rows.length
+    ? 'Readings ' + (state.offset + 1) + '–' + Math.min(state.offset + 100, state.rows.length) + ' of ' + state.rows.length
+    : 'No chart data available.';
 }
 
 if (typeof window !== 'undefined' && location.search.includes('selftest')) {

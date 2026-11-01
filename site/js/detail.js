@@ -93,7 +93,8 @@ export async function openDetail(metric, at = null) {
   $('detail-title').textContent = at
     ? `${m.label} · ${new Date(at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric' })}`
     : m.label;
-  $('detail-blurb').textContent = m.blurb;
+  const source = at ? '' : document.querySelector(`[data-metric="${metric}"]`)?.dataset.source;
+  $('detail-blurb').textContent = [source, m.blurb].filter(Boolean).join('\n\n');
   $('detail-now').textContent = 'loading…';
   $('detail-stats').innerHTML = '';
   el.classList.add('open');
