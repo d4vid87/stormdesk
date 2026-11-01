@@ -19,6 +19,9 @@
   #desk.outlook-view #forecast-sidebar > :last-child { flex:1; }
   #desk.outlook-view #weather-extras { margin:0; }
 }
+/* SVG animation already repaints its pixels; keep the glow outside the animated image. */
+#desk #hero-icon :is(img,svg) { filter:none; }
+#desk #hero-icon, #desk.outlook-view #daycards .dc-icon { background:radial-gradient(ellipse,#8bd4f318,transparent 70%); }
 .fd-gauge-title { display:none; }
 #desk:not(.outlook-view) :is(#forecast-sidebar,#forecast-hourly,.dc-wind) { display:none; }
 .forecast-conditions { display:flex; align-items:center; gap:16px; min-width:0; }
@@ -56,7 +59,7 @@ html #desk.outlook-view #daycards > .daycard:first-child { border-color:color-mi
 #desk.outlook-view #daycards .dc-head { flex-direction:column; gap:3px; }
 #desk.outlook-view #daycards .dc-name { font-size:calc(12 * var(--fd-text)); }
 #desk.outlook-view #daycards .dc-date { font-size:calc(9 * var(--fd-text)); }
-html #desk.outlook-view #daycards > .daycard .dc-icon,html #desk.outlook-view #daycards > .daycard:first-child .dc-icon,html #desk.outlook-view #daycards > .daycard .dc-icon :is(img,svg),html #desk.outlook-view #daycards > .daycard:first-child .dc-icon :is(img,svg) { width:calc(58 * var(--fd-reading)); height:calc(58 * var(--fd-reading)); margin:0 auto; align-self:center; filter:drop-shadow(0 4px 8px #8bd4f320); }
+html #desk.outlook-view #daycards > .daycard .dc-icon,html #desk.outlook-view #daycards > .daycard:first-child .dc-icon,html #desk.outlook-view #daycards > .daycard .dc-icon :is(img,svg),html #desk.outlook-view #daycards > .daycard:first-child .dc-icon :is(img,svg) { width:calc(58 * var(--fd-reading)); height:calc(58 * var(--fd-reading)); margin:0 auto; align-self:center; filter:none; }
 html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-temp { justify-content:center; gap:5px; }
 html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-temp b { font-size:calc(25 * var(--fd-reading)); font-weight:500; }
 html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-temp span { font-size:calc(16 * var(--fd-text)); }

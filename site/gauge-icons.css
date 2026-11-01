@@ -23,7 +23,7 @@
 .wx-orbit{border-radius:50%;padding:8px;background:radial-gradient(circle at 28% 22%,#e3f7ff45,transparent 27%),radial-gradient(circle at 50% 85%,color-mix(in srgb,var(--wx) 25%,transparent),#18232c 70%);box-shadow:inset 0 0 0 1px #c3e5f63b,inset 0 -4px 10px #0006,0 4px 10px #0005}
 .wx-orbit::after{content:"";position:absolute;inset:-3px;border:1px solid #bedbe526;border-top-color:var(--wx);border-right-color:transparent;border-radius:50%;animation:wx-spin 9s linear infinite}
 .wx-orbit::before{content:"";position:absolute;inset:3px;border-radius:50%;border-top:1px solid #ecfaff7a;pointer-events:none}
-.wx-orbit svg{stroke-width:2;filter:drop-shadow(0 1px 3px #0008)}
+.wx-orbit svg{stroke-width:2}
 .wx-pixel{background:radial-gradient(#829ba129 .6px,transparent .8px);background-size:5px 5px;border-radius:4px;overflow:hidden}
 .wx-pixel svg{fill:var(--wx);stroke:none;shape-rendering:crispEdges;animation:wx-pixel 3.6s steps(2,end) infinite}
 .wx-pixel::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 42%,#d9ffff38 49%,transparent 56%);background-size:100% 300%;animation:wx-scan 4s linear infinite}

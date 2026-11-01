@@ -6,6 +6,13 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.8.1] - 2026-11-01
+
+### Fixed
+- Remove repeated blur passes around animated forecast and Orbit Glass icons; retain their animations and use a static forecast glow.
+- Scale Forecast desk readings and columns to the browser window, including ultrawide displays.
+- Keep capable browsers on the full dashboard after a refresh or interrupted load; retain the explicit Lite view and appliance compatibility routing.
+
 ## [4.8.0] - 2026-11-01
 
 ### Changed
