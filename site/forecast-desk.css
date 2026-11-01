@@ -1,0 +1,130 @@
+/* Forecast desk reuses the radar's readings and the existing sky/day detail controls. */
+.fd-gauge-title { display:none; }
+#desk:not(.outlook-view) :is(#forecast-sidebar,#forecast-hourly,.dc-wind) { display:none; }
+.forecast-conditions { display:flex; align-items:center; gap:16px; min-width:0; }
+#desk.outlook-view #observatory-heading { display:grid; grid-template-columns:1fr auto 1fr; gap:10px 18px; padding:6px 0; }
+#desk.outlook-view .forecast-conditions { grid-column:1; }
+#desk.outlook-view #observatory-heading .observatory-clock { display:flex; flex-direction:column-reverse; align-items:center; grid-column:2; grid-row:1; margin:0; padding:0; border:0; gap:4px; }
+#desk.outlook-view .observatory-clock > span { display:block; color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+#desk.outlook-view #clock-time { font-size:42px; font-weight:750; font-variant-numeric:tabular-nums; letter-spacing:-1px; white-space:nowrap; }
+#desk.outlook-view #hero-clock { margin:0; }
+#desk.outlook-view .weather-view { grid-column:3; grid-row:1; justify-self:end; }
+#desk.outlook-view #hero-alerts { grid-column:1/-1; grid-row:2; margin:0; }
+#desk.outlook-view #observatory-heading #hero { padding:0; border:0; }
+#desk.outlook-view #observatory-heading #hero-temp { font-size:36px; }
+#desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,2.45fr) minmax(310px,1fr); gap:12px; }
+#desk.outlook-view #observatory-radar { background:none; border:0; border-radius:0; overflow:visible; }
+#desk.outlook-view #radar-shelf { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px; border:0; background:none; }
+#desk.outlook-view .fd-gauge-title { display:block; margin:0; font:600 13px var(--font); }
+#desk.outlook-view .gauge-style-control { grid-column:2; grid-row:1; flex-direction:row; align-items:center; border:0; padding:0; gap:8px; }
+#desk.outlook-view #gauges { grid-column:1/-1; grid-row:2; display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:8px; padding:0; overflow:visible; }
+#desk.outlook-view #gauges > .gauge { display:flex; flex-direction:column; justify-content:center; min-height:116px; padding:13px 10px; border:1px solid color-mix(in srgb,var(--line),#a7b9c7 22%); border-radius:12px; background:linear-gradient(140deg,color-mix(in srgb,var(--panel2),#a7b9c7 6%),var(--panel)); box-shadow:inset 0 1px #ffffff08,0 4px 15px #0002; }
+#desk.outlook-view #gauges h3 { min-height:32px; display:flex; align-items:center; padding-left:42px; font-size:11px; margin:0 0 10px; }
+#desk.outlook-view #gauges .gwrap > span[aria-hidden] { top:12px; left:10px; }
+#desk.outlook-view #gauges .wx-icon { width:36px; height:36px; }
+#desk.outlook-view #gauges .ginner { flex-wrap:wrap; gap:4px; }
+#desk.outlook-view #gauges .ginner b { font-size:30px; line-height:1.1; font-weight:500; }
+#desk.outlook-view #gauges .ginner small { font-size:11px; }
+#desk.outlook-view #gauges .ginner > span { display:block; flex-basis:100%; font-size:10px; color:var(--muted); margin-top:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#desk.outlook-view #observatory-left { display:flex; flex-direction:column; gap:12px; min-width:0; }
+#desk.outlook-view #observatory-forecast, .fd-panel { padding:14px; border:1px solid var(--line); border-radius:12px; background:linear-gradient(140deg,var(--panel2),var(--panel)); min-width:0; }
+#desk.outlook-view .forecast-heading h2,.fd-panel h2 { font-size:16px; font-weight:600; letter-spacing:0; margin:0; }
+#desk.outlook-view #forecast-coverage { margin:7px 0 12px; font-size:10px; }
+#desk.outlook-view #daycards { grid-template-columns:repeat(10,minmax(0,1fr)); gap:6px; }
+html #desk.outlook-view #daycards > .daycard,html #desk.outlook-view #daycards > .daycard:first-child { display:flex; grid-column:auto!important; min-width:0; min-height:186px; padding:9px 5px; gap:5px; background:linear-gradient(145deg,color-mix(in srgb,var(--panel2),#a7b9c7 10%),var(--panel)); border-radius:9px; }
+html #desk.outlook-view #daycards > .daycard:first-child { border-color:color-mix(in srgb,var(--accent),var(--line) 35%); }
+#desk.outlook-view #daycards .dc-head { flex-direction:column; gap:3px; }
+#desk.outlook-view #daycards .dc-name { font-size:12px; }
+#desk.outlook-view #daycards .dc-date { font-size:9px; }
+html #desk.outlook-view #daycards > .daycard .dc-icon,html #desk.outlook-view #daycards > .daycard:first-child .dc-icon,html #desk.outlook-view #daycards > .daycard .dc-icon :is(img,svg),html #desk.outlook-view #daycards > .daycard:first-child .dc-icon :is(img,svg) { width:58px; height:58px; margin:0 auto; align-self:center; filter:drop-shadow(0 4px 8px #8bd4f320); }
+html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-temp { justify-content:center; gap:5px; }
+html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-temp b { font-size:25px; font-weight:500; }
+html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-temp span { font-size:16px; }
+html #desk.outlook-view #daycards .dc-mid .dc-cond { display:none; }
+html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-pop { font-size:10px; text-align:center; }
+.dc-wind { color:var(--muted); font-size:10px; text-align:center; white-space:nowrap; }
+#forecast-sidebar { grid-column:2; grid-row:2; display:flex; flex-direction:column; gap:12px; min-width:0; }
+#desk.outlook-view #outlook-astronomy { padding:14px; border-radius:12px; margin:0; }
+#desk.outlook-view .sky-heading h2 { font-size:16px; font-weight:600; margin:0; letter-spacing:0; }
+#desk.outlook-view .sky-eyebrow { display:none; }
+#desk.outlook-view .solar-scene { padding:0; margin:12px 0 0; min-height:75px; }
+#desk.outlook-view .solar-orbit { width:100px; height:50px; left:50%; transform:translateX(-50%); top:0; }
+#desk.outlook-view .solar-duration { top:35px; }
+#desk.outlook-view .solar-duration > strong { font:14px var(--num); margin:0; }
+#desk.outlook-view .solar-duration > span,#desk.outlook-view .solar-duration small { display:none; }
+#desk.outlook-view .sun-events { padding:12px 0; }
+#desk.outlook-view .sun-events strong { font-size:21px; }
+#desk.outlook-view .sun-events span,#desk.outlook-view .moon-events span { font-size:9px; letter-spacing:.5px; }
+#desk.outlook-view .lunar-scene { min-height:0; padding:12px 0; gap:14px; margin:0; border:0; border-top:1px solid var(--line); border-radius:0; background:none; }
+#desk.outlook-view #outlook-moon-orb,#desk.outlook-view #outlook-moon-orb svg { width:48px; height:48px; }
+#desk.outlook-view .lunar-copy h3 { font-size:15px; margin:0 0 4px; }
+#desk.outlook-view .lunar-copy > p { font-size:10px; margin:3px 0; }
+#desk.outlook-view .moon-events { padding:8px 0 12px; gap:6px; }
+#desk.outlook-view .moon-events strong { font-size:14px; margin-top:5px; }
+#desk.outlook-view :is(.twilight-heading,.twilight-cards) { display:none; }
+#desk.outlook-view .sky-details { margin:0; border:0; }
+#desk.outlook-view .sky-details summary { padding:10px 0 5px; }
+#desk.outlook-view .sky-footnote { font-size:9px; line-height:1.4; margin:5px 0 0; }
+.fd-panel { position:relative; }
+.fd-note { color:var(--muted); font-size:11px; line-height:1.5; }
+.fd-periods { position:absolute; right:12px; top:10px; display:flex; padding:3px; background:var(--panel); border-radius:8px; }
+.fd-periods button { border:0; border-radius:5px; padding:7px 9px; background:none; color:var(--muted); font:inherit; font-size:11px; cursor:pointer; }
+.fd-periods button[aria-pressed=true] { color:var(--text); background:var(--panel2); box-shadow:0 1px 4px #0003; }
+.fd-hour-grid { display:grid; grid-template-columns:90px repeat(var(--hours,8),minmax(0,1fr)); align-items:stretch; }
+.fd-hour-grid > p { grid-column:1/-1; }
+.fd-hour { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; min-width:0; padding:8px 2px; border:0; border-top:2px solid transparent; border-radius:6px 6px 0 0; background:none; color:var(--text); font:inherit; cursor:pointer; }
+.fd-hour[aria-pressed=true] { background:color-mix(in srgb,var(--accent) 16%,var(--panel)); border-color:var(--accent); }
+.fd-hour > span:first-child { font-size:11px; }
+.fd-hour strong { font:500 29px var(--num); }
+.fd-icon,.fd-icon :is(img,svg) { display:block; width:58px; height:58px; }
+.fd-hour-label { align-self:center; color:var(--muted); font-size:11px; }
+.fd-hour-cell { position:relative; padding:11px 3px; border-bottom:1px solid var(--line); text-align:center; font-size:13px; font-variant-numeric:tabular-nums; }
+.fd-hour-cell.selected { background:color-mix(in srgb,var(--accent) 7%,var(--panel)); }
+.fd-hour-cell i { position:absolute; bottom:4px; left:0; max-width:100%; height:3px; background:#8bcde1; border-radius:4px; }
+.fd-hour-detail { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.fd-hour-summary { grid-column:1/-1; margin:10px 0 0; color:var(--muted); font-size:12px; }
+.fd-hour-detail strong { font-size:18px; font-weight:500; }
+.fd-hour-detail span,.fd-air-grid span,.fd-air-grid strong,.fd-air-grid small,.fd-precip-lead span,.fd-precip-lead strong,.fd-precip-lead small,.fd-rain-days span,.fd-rain-days strong,.fd-rain-days small { display:block; }
+.fd-precip-lead { display:flex; align-items:center; gap:10px; margin:14px 0; }
+.fd-precip-lead strong { font-size:19px; font-weight:500; margin:3px 0; }
+.fd-air-grid,.fd-rain-days { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+.fd-air-grid > div,.fd-rain-days > div { padding-top:9px; border-top:1px solid var(--line); }
+.fd-air-grid strong,.fd-rain-days strong { font:500 23px var(--num); margin:5px 0; }
+.fd-panel button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+@media(max-width:1350px) {
+  #desk.outlook-view #daycards { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  html #desk.outlook-view #daycards > .daycard { min-height:160px; padding:7px; }
+  #desk.outlook-view #daycards .dc-head { flex-direction:row; }
+  #desk.outlook-view #gauges h3 { font-size:10px; padding-left:33px; }
+  #desk.outlook-view #gauges .wx-icon { width:29px; height:29px; }
+}
+@media(max-width:1100px) {
+  #desk.outlook-view #gauges { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  #desk.outlook-view #gauges > .gauge { min-height:95px; padding:8px 10px; }
+  #desk.outlook-view #gauges h3 { margin-bottom:4px; }
+  #desk.outlook-view #gauges .ginner b { font-size:26px; }
+  #desk.outlook-view #clock-time { font-size:32px; }
+  #desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,1.8fr) minmax(290px,1fr); }
+  .forecast-conditions { gap:8px; }
+  #desk.outlook-view #observatory-heading #hero-temp { font-size:28px; }
+}
+@media(max-width:760px) {
+  #desk.outlook-view #observatory-heading { grid-template-columns:1fr auto; }
+  #desk.outlook-view .forecast-conditions { flex-direction:column; align-items:flex-start; gap:4px; }
+  #desk.outlook-view #observatory-heading .observatory-clock { grid-column:2; }
+  #desk.outlook-view .weather-view { grid-column:1/-1; grid-row:2; justify-self:stretch; margin:0; }
+  #desk.outlook-view .weather-view button { flex:1; }
+  #desk.outlook-view #hero-alerts { grid-row:3; }
+  #desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,1fr); }
+  #desk.outlook-view #observatory-left { grid-column:1; grid-row:2!important; }
+  #forecast-sidebar { grid-column:1; grid-row:3; }
+  #desk.outlook-view #gauges { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #desk.outlook-view .gauge-style-control label { display:none; }
+  #desk.outlook-view #daycards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .fd-hour-grid { grid-template-columns:65px repeat(var(--hours,4),minmax(0,1fr)); }
+  .fd-hour > span:first-child { font-size:10px; }
+  .fd-hour .fd-icon,.fd-hour .fd-icon :is(img,svg) { width:45px; height:45px; }
+  .fd-hour strong { font-size:25px; }
+  .fd-periods { position:static; width:max-content; margin-top:8px; }
+  .fd-hour-detail { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}

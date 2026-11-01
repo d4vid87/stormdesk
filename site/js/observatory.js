@@ -1,5 +1,6 @@
 // Reuse the live cards and their listeners; only their placement changes.
 import { initStatusCards } from './status-cards.js';
+import { initForecastDesk } from './forecast-desk.js';
 import { styles, gaugeStyle } from './gauge-icons.js';
 import { settings, saveSettings, num, U, deg2compass, msToWind } from './app.js';
 import { forecast as deskForecast } from './desk.js';
@@ -85,6 +86,7 @@ export function initObservatory() {
   document.addEventListener('visibilitychange', pauseIcons);
   window.addEventListener('wd:section', pauseIcons);
   pauseIcons();
+  initForecastDesk();
   const label = document.createElement('span');
   label.className = 'observatory-current-label';
   label.textContent = 'CURRENT CONDITIONS';

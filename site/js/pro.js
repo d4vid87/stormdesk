@@ -343,6 +343,7 @@ function renderDays(fc) {
           <div class="dc-temp"><b></b><span></span></div>
           <div class="dc-cond"></div>
           <div class="dc-pop"></div>
+          <div class="dc-wind"></div>
         </div>
       </div>
     </button>`).join('');
@@ -351,7 +352,7 @@ function renderDays(fc) {
     const card = wrap.children[i];
     if (!card) return;
     const date = new Date(d.day_start_local * 1000);
-    const amount = qpf?.[i];
+    const amount = d.precip_accum ?? qpf?.[i];
     setText(card.querySelector('.dc-name'), labels[i] || date.toLocaleDateString([], { weekday: 'short' }));
     setText(card.querySelector('.dc-date'), date.toLocaleDateString([], { month: 'short', day: 'numeric' }));
     setArc(card.querySelector('[data-arc]'), d.air_temp_low, d.air_temp_high);
@@ -360,6 +361,10 @@ function renderDays(fc) {
     tweenNumber(card.querySelector('.dc-temp span'), d.air_temp_low, (v) => `${num(v)}°`);
     setText(card.querySelector('.dc-cond'), d.conditions || '');
     setText(card.querySelector('.dc-pop'), Number.isFinite(d.precip_probability) ? `${num(d.precip_probability)}%` : '—');
+    const dayHours = (fc.forecast.hourly || []).filter(h => h.time >= d.day_start_local && h.time < (days[i + 1]?.day_start_local || d.day_start_local + 86400));
+    const winds = dayHours.map(h => h.wind_avg).filter(Number.isFinite);
+    const wind = d.wind_avg ?? (winds.length ? Math.max(...winds) : null);
+    setText(card.querySelector('.dc-wind'), `Wind ${num(wind)} ${U.wind()}`);
     card.dataset.agreement = modelAgreement(agreement, d.day_start_local, days[i + 1]?.day_start_local || d.day_start_local + 86400, settings().units === 'metric');
     let modelNote = card.querySelector('.dc-agreement');
     if (!modelNote) { modelNote = document.createElement('small'); modelNote.className = 'dc-agreement'; card.append(modelNote); }
@@ -774,7 +779,9 @@ export function registerClock() {
   every('clock', 1, () => {
     const d = new Date();
     const h12 = settings().clock24 === 'auto' || !settings().clock24 ? {} : { hour12: settings().clock24 === '12' };
-    $('clock-time').textContent = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', ...h12 });
+    $('clock-time').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', ...h12 });
+    const zone = document.getElementById('clock-zone');
+    if (zone) zone.textContent = `Device local · ${new Intl.DateTimeFormat([], { timeZoneName: 'short' }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value || ''}`;
     $('clock-date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   });
 }

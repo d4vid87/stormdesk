@@ -11,6 +11,8 @@ const daily = Array.from({ length: 10 }, (_, i) => ({
   conditions: 'Partly Cloudy',
   icon: i % 3 === 0 ? 'partly-cloudy-day' : i % 3 === 1 ? 'rainy' : 'clear-day',
   precip_probability: (i * 10) % 70,
+  precip_accum: i % 3 === 1 ? 0.28 : 0,
+  wind_avg: 6 + i % 5,
   sunrise: day + i * 86400 + 6 * 3600 + 40 * 60,
   sunset: day + i * 86400 + 19 * 3600 + 50 * 60,
 }));
@@ -20,6 +22,7 @@ const hourly = Array.from({ length: 72 }, (_, i) => ({
   air_temperature: 70 + 8 * Math.sin(i / 4),
   feels_like: 70 + 8 * Math.sin(i / 4),
   relative_humidity: 55 + (i % 20),
+  cloud_cover: 40 + i % 50,
   precip_probability: (i * 7) % 90,
   precip: (i % 9 === 0) ? 0.02 : 0,
   wind_avg: 6 + (i % 5),
@@ -39,6 +42,7 @@ const fc = {
     sea_level_pressure: 1014.2, station_pressure: 993.1, pressure_trend: 'steady',
     wind_avg: 7.2, wind_gust: 14.6, wind_direction: 190, uv: 4, brightness: 42000,
     solar_radiation: 520, precip_accum_local_day: 0.12, visibility: 16093,
+    cloud_cover: 64, cloud_base_estimate: 780, freezing_level: 3780,
     air_density: 1.18, wet_bulb_temperature: 65.8, lightning_strike_count_last_3hr: 0,
   },
   forecast: { daily, hourly },
@@ -82,7 +86,10 @@ addEventListener('load', () => {
   console.assert(!document.getElementById('desk-radar-frame').getAttribute('src'), 'Outlook unloads radar document');
   console.assert(!document.getElementById('outlook-astronomy').hidden && outlookButton.getAttribute('aria-pressed') === 'true', 'Outlook exposes astronomy and selected view');
   console.assert(JSON.parse(localStorage.getItem('wd.settings')).deskRadar === false && !document.getElementById('set-desk-radar').checked, 'View choice persists and syncs Settings');
-  console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height < 200, 'Radar off leaves no empty map area');
+  console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height <= document.getElementById('radar-shelf').getBoundingClientRect().height + 2, 'Radar off leaves only the gauges, without an empty map area');
+  console.assert(document.querySelectorAll('#forecast-hourly .fd-hour').length > 0, 'Forecast desk shows live hourly data');
+  console.assert(document.querySelector('#forecast-sidebar #outlook-astronomy'), 'Astronomy sits directly below the gauges on the right');
+  console.assert(/\d+:\d{2}:\d{2}/.test(document.getElementById('clock-time').textContent), 'Clock includes seconds');
   radarButton.click();
   console.assert(!document.getElementById('desk-radar').hidden && document.getElementById('outlook-astronomy').hidden && radarButton.getAttribute('aria-pressed') === 'true', 'Radar view restores map');
   const rainBeforeStyle = document.querySelector('#g-rain .ginner b').textContent;

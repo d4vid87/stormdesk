@@ -358,6 +358,9 @@ export function shapeOm(j, ownTuple = null) {
       air_temp_high: D.temperature_2m_max?.[i],
       air_temp_low: D.temperature_2m_min?.[i],
       precip_probability: D.precipitation_probability_max?.[i],
+      precip_accum: D.precipitation_sum?.[i],
+      wind_avg: D.wind_speed_10m_max?.[i],
+      wind_gust: D.wind_gusts_10m_max?.[i],
     };
   });
 
@@ -365,11 +368,15 @@ export function shapeOm(j, ownTuple = null) {
     time: t,
     air_temperature: H.temperature_2m?.[i],
     relative_humidity: H.relative_humidity_2m?.[i],
+    feels_like: H.apparent_temperature?.[i],
+    cloud_cover: H.cloud_cover?.[i],
+    freezing_level: H.freezing_level_height?.[i],
+    precip: H.precipitation?.[i],
     precip_probability: H.precipitation_probability?.[i],
     wind_avg: H.wind_speed_10m?.[i],
     wind_gust: H.wind_gusts_10m?.[i],
     wind_direction: H.wind_direction_10m?.[i],
-    icon: omIcon(H.weather_code?.[i], true),
+    icon: omIcon(H.weather_code?.[i], H.is_day?.[i] !== 0),
     conditions: omWords(H.weather_code?.[i]),
     // The solar card reads the whole day out of these two, so they travel with the hour.
     uv: H.uv_index?.[i],
@@ -396,6 +403,11 @@ export function shapeOm(j, ownTuple = null) {
     wet_bulb_temperature: at('wet_bulb_temperature_2m'),
     // metres, whatever the unit params say — open-meteo doesn't convert this one. Hero converts.
     visibility: at('visibility'),
+    cloud_cover: at('cloud_cover'),
+    freezing_level: at('freezing_level_height'),
+    // FAA convective cloud-base approximation; model estimate in metres AGL, not a measured ceiling.
+    cloud_base_estimate: Number.isFinite(cur.temperature_2m) && Number.isFinite(cur.dew_point_2m)
+      ? Math.max(0, (cur.temperature_2m - cur.dew_point_2m) / (metric ? 1 : 1.8) * 125) : null,
     icon: omIcon(cur.weather_code, day),
     conditions: omWords(cur.weather_code),
   };
@@ -447,9 +459,10 @@ export async function omForecast(lat = coords().lat, lon = coords().lon, model =
     current: 'temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,is_day,'
       + 'weather_code,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     hourly: 'temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,'
-      + 'wind_direction_10m,uv_index,shortwave_radiation,wet_bulb_temperature_2m,visibility',
+      + 'wind_direction_10m,uv_index,shortwave_radiation,wet_bulb_temperature_2m,visibility,'
+      + 'apparent_temperature,cloud_cover,freezing_level_height,precipitation,is_day',
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,'
-      + 'precipitation_probability_max,precipitation_sum',
+      + 'precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max',
     forecast_days: 10, timezone: 'auto', timeformat: 'unixtime',
     ...(model ? { models: model } : {}),
     wind_speed_unit: WIND_UNITS[windUnit()].om,

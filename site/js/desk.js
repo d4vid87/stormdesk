@@ -6,7 +6,7 @@ import { syncSpokenAlerts } from './app.js';
 
 // Last-good copies of the two payloads the Desk can't render without. An outage that spans a
 // reload would otherwise leave the whole page at `--`; in-session failures already keep the DOM.
-function cacheContext(kind) {
+export function cacheContext(kind) {
   const s = settings(), c = coords();
   return `${kind}:${s.stationSource || 'tempest'}:${s.stationId || ''}:${c.lat ?? ''}:${c.lon ?? ''}:${s.units}:${s.windUnit || ''}:${s.places.find(p => p.id === s.activePlace)?.forecastProvider || s.forecastProvider || 'auto'}:${JSON.stringify([s.deviceId||'',s.activeStationProfile||'',s.wllHost||'',s.lacrosseEmail||'',s.ecowittMac||''])}`;
 }
