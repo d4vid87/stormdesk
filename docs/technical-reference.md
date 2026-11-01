@@ -10,23 +10,23 @@ embedded here and centered on the station.
 
 If StormDesk is useful to you, please [give the project a star](https://github.com/d4vid87/stormdesk/stargazers).
 
-![StormDesk 4.6.1 with Orbit Glass gauges integrated above HookEcho radar](stormdesk-461-weather.jpg)
+![StormDesk 4.7.0 forecast and sky opening view with Orbit Glass gauges](stormdesk-470-weather.jpg)
 
 ![StormDesk 4.6.1 History using sample station observations](stormdesk-461-history.jpg)
 
-These captures show the shipped 4.6.1 interface with demo station readings; the HookEcho map was captured October 31, 2026.
+The Weather capture shows the 4.7.0 opening view with demo readings. The History capture remains from 4.6.1; both were captured October 31, 2026.
 
 ## The three destinations
 
 On Samsung Smart Hub/Family Hub, ChromeOS, and small-memory browsers, the hosted dashboard opens **StormDesk Lite** before loading the full dashboard modules. Lite has Today, Forecast, still Radar, and basic History. A full dashboard boot that fails once also opens Lite on the next visit. Use `?full=1` to retry the full dashboard. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
 
-- **Weather** places eight compact gauges above the full HookEcho radar, with current conditions, a local clock, and supported nearby warnings in the header. Orbit Glass is the default icon style; four alternatives are selectable on the radar shelf. Scroll below the map for up to ten forecast days, local signals, astronomy, and device health. Provider coverage determines which readings are available.
+- **Weather** opens each new session with animated glass forecast cards and a sun, moon and twilight scene beneath eight compact gauges. Orbit Glass is the default icon style, with four alternatives. The view switch enables HookEcho radar for the current session; reopening returns to Forecast & sky. Provider coverage determines which readings are available.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 
 The top metric order is **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity**. Layout editing is retired. Existing installations retain their saved settings and layout data; the visible arrangement adapts to the screen width. Additional measurements remain available in weather details and History.
 
-The right column presents local signals and official alert information alongside sunrise, sunset, and moon details. Device health uses the station and hub information actually available from the connected source; missing telemetry is not presented as a healthy device. Alert coverage follows the official source for the saved location.
+The right column shows sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and three twilight stages. Full times expand on demand. The Local signals, 48-hour model and Outdoor activity sections no longer appear on Weather. Header notifications and the dedicated Radar warning banner remain available.
 
 The welcome screen offers three setup cards: **Find my weather** (town or postcode), **Bring my station** (brand-specific connection), and **Join my home** (connect to an existing Stormdesk host). Choose a location first to open Weather; a station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
 
@@ -34,7 +34,7 @@ Settings now opens to a searchable home with six category cards: Everyday, Appea
 
 Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [current interface and gauge styles](../README.md#see-the-current-app).
 
-The latest packaged release is **4.6.1**, including the radar-first layout and all five gauge icon styles. The screenshots above show that release; existing installations receive the interface when updated.
+The latest packaged release is **4.7.0**, including the forecast-first opening view, animated astronomy and all five gauge icon styles. Existing installations receive the interface when updated.
 
 The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Radar → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 

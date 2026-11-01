@@ -2,21 +2,22 @@
 
 # StormDesk
 
-**More radar. Your weather.** StormDesk brings eight compact gauges, the full [HookEcho](https://hookecho.io/) radar viewer, forecasts, and station history into one app. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
+**Your forecast. Your sky.** StormDesk opens with animated glass forecast cards, sunrise, sunset, moon and twilight, plus eight compact gauges. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.6.1](https://github.com/d4vid87/stormdesk/releases/tag/v4.6.1) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.7.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.7.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-![StormDesk 4.6.1: compact Orbit Glass gauges above the actual HookEcho radar](docs/stormdesk-461-weather.jpg)
+![StormDesk 4.7.0: animated forecast cards and sun, moon and twilight with Orbit Glass gauges](docs/stormdesk-470-weather.jpg)
 
-*Current 4.6.1 interface, captured October 31, 2026. Station readings use labeled demo data. Radar is a capture of the real HookEcho viewer; screenshots are not current weather.*
+*The 4.7.0 opening view, captured October 31, 2026 with labeled demo readings. Screenshots are not current weather.*
 
-### What’s new in 4.6.1
+### What’s new in 4.7.0
 
-- **More room for radar:** Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity, and Dew point sit directly above the map.
-- **Orbit Glass by default:** choose Liquid Chrome, Neon Trace, Precision Dial, or Pixel Pulse from the radar shelf. Each screen remembers its style; reduced motion is supported.
-- **Weather beyond the map:** up to ten forecast days, provider/model selection, saved places, and local context where data is available.
-- **A useful station archive:** import previews, maintenance notes, reversible exclusions, supported cloud recovery, extra sensor channels, and printable reports on your installed host.
-- **More reliable refreshes:** bounded request caches, retry handling, and clearly labeled saved readings during outages. TLS and updater dependencies are refreshed.
+- **Forecast first:** every new session opens Forecast & sky, including upgrades. Toggle radar on when needed, or open the dedicated Radar tab.
+- **Animated glass forecast cards:** a larger Today card, up to ten days, and selectable day details.
+- **A living sky:** sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and civil, nautical and astronomical twilight. Times depend on available data; twilight and moon phase are estimates.
+- **A simpler dashboard:** Local signals, the 48-hour model section and Outdoor activity windows have been removed from Weather.
+- **Orbit Glass stays the default:** all five gauge styles remain included. Motion respects accessibility preferences and pauses when the Weather screen is hidden.
+- **Radar off means off:** the embedded viewer unloads when you switch back to Forecast & sky.
 
 ### Choose your setup
 
@@ -171,9 +172,9 @@ Under **Settings → More tools → Weather sources, sensors & camera**, choose 
 | --- | --- |
 | ![Full HookEcho radar view in StormDesk 4.6.1](docs/stormdesk-461-radar.jpg) | ![History cards and charts with sample archive readings](docs/stormdesk-461-history.jpg) |
 
-| Forecast & local signals | Searchable Settings |
+| Forecast & sky | Searchable Settings |
 | --- | --- |
-| ![Ten forecast days, air quality, daylight and station health with demo data](docs/stormdesk-461-forecast.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
+| ![Animated forecast cards with sun, moon and twilight using demo data](docs/stormdesk-470-weather.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
 
 ### Five gauge styles
 
