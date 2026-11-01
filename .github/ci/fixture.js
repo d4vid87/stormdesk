@@ -128,7 +128,8 @@ addEventListener('load', () => {
     o[OBS.uv] = 4; o[OBS.solar] = 520; o[OBS.dayRain] = 3; o[OBS.battery] = 2.71;
     dispatchEvent(new CustomEvent('wd:ws-obs', { detail: o }));
     console.assert(document.getElementById('observatory-local').textContent.includes('gusts'), 'Local signals refresh with station observations');
-    const settle = () => new Promise(resolve => requestAnimationFrame(resolve));
+    // These checks await MutationObserver updates, not animation frames, which headless virtual time can starve.
+    const settle = () => new Promise(resolve => setTimeout(resolve, 0));
     await settle();
     console.assert(['observatory-signals','advanced-outlook','activity-planner'].every(id => getComputedStyle(document.getElementById(id)).display === 'none'), 'Removed sections no longer appear on Weather');
     console.assert(getComputedStyle(document.getElementById('daycards')).display === 'grid', 'Forecast uses glass tile layout');
