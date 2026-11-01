@@ -4,11 +4,17 @@
 
 **Your forecast. Your sky.** StormDesk opens with Forecast desk: ten animated forecast cards, a readable hourly outlook, compact astronomy, eight larger Orbit Glass gauges, and a bold seconds clock. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.8.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.8.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.8.1](https://github.com/d4vid87/stormdesk/releases/tag/v4.8.1) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
 ![StormDesk 4.8.0: animated forecast cards and sun, moon and twilight with Orbit Glass gauges](docs/stormdesk-480-weather.jpg)
 
 *The 4.8.0 opening view, captured November 1, 2026 with labeled demo readings. Screenshots are not current weather.*
+
+### What’s new in 4.8.1
+
+- Fix duplicate startup and conflicting settings saves that repeatedly rebuilt the dashboard.
+- Adapt Auto motion to Linux software rendering while keeping Full motion selectable.
+- Reduce forecast animation work and fill wider and taller browser windows.
 
 ### What’s new in 4.8.0
 
