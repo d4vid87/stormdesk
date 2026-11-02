@@ -26,6 +26,7 @@ assert.equal(c.forecastHours(fc, false, 4, now).length, 4);
 assert.equal(c.forecastHours(fc, true, 8, now)[0].time, 90000, 'Tomorrow uses provider midnight across a 25-hour day');
 fc.forecast.daily[2].day_start_local = 172800;
 assert.ok(c.forecastHours(fc, true, 8, now).every(h => h.time < 172800), '23-hour day stops at the next provider boundary');
+
 assert.equal(c.forecastHours(fc, true, 8, 9999999).length, 0, 'Expired forecast does not recycle a previous day');
 assert.equal(c.forecastHours({}, false, 8, now).length, 0);
 assert.equal(c.precipitationOutlook(fc, now).low, true);
@@ -58,6 +59,7 @@ assert.ok(Math.abs(converted.forecast.hourly[0].freezing_level - 3000) < 0.01);
 units='metric'; payload.current.temperature_2m=20; payload.current.dew_point_2m=10;
 assert.equal(provider.shapeOm(payload).current_conditions.cloud_base_estimate,1250);
 const pro = readFileSync(new URL('../site/js/pro.js', import.meta.url), 'utf8');
+assert.ok(pro.includes("if ($('hero-normal')?.getClientRects().length) renderNormal(d)"), 'Hidden legacy climate text cannot trigger a 30-year archive fetch');
 let identity = 'A', finish;
 const events = [];
 const qpfContext = vm.createContext({coords:()=>({lat:32.75}),cacheContext:()=>identity,
@@ -68,4 +70,40 @@ const old = qpfContext.loadQpf(); identity='B'; finish({daily:{precipitation_sum
 assert.equal(events.length,0,'An old-place model request cannot update the new forecast');
 const fresh = qpfContext.loadQpf(); finish({daily:{precipitation_sum:[0.2]}}); await fresh;
 assert.equal(events[0].detail.context,'B');
-console.log('Forecast desk: provider day boundaries, missing values, forecast windows and normalized atmosphere passed.');
+const timelineForecast = {forecast:{daily:[0,86400,172800].map(day_start_local=>({day_start_local})),
+  hourly:Array.from({length:48},(_,i)=>({time:(i+1)*3600,precip:0.1,precip_period:'preceding-hour',visibility:10000}))}};
+const timeline = c.hourlyWeather(timelineForecast, false, 0);
+assert.equal(timeline.rows.length,24);
+assert.ok(Math.abs(timeline.total-2.4)<0.0001,'Total uses all hours, never only the 3-hour samples');
+assert.equal(timeline.rows[0].time,3600,'Preceding-hour amounts start after the forecast window boundary');
+assert.equal(timeline.rows[23].time,86400,'Includes the hour ending at the final boundary');
+timelineForecast.forecast.hourly[3].visibility = 500;
+timelineForecast.forecast.hourly[4].visibility = 800;
+assert.equal(c.hourlyWeather(timelineForecast,false,0).recovery.time,21600);
+timelineForecast.forecast.hourly[4].visibility = null;
+assert.equal(c.hourlyWeather(timelineForecast,false,0).recovery,null,'Missing visibility cannot imply clearance');
+timelineForecast.forecast.hourly[2].precip = null;
+const partial = c.hourlyWeather(timelineForecast,false,0);
+assert.equal(partial.total,null,'Unknown rainfall is never zero');
+assert.equal(partial.rows[3].accumulated,null,'Running totals stop after missing data');
+timelineForecast.forecast.hourly[2].precip = 0;
+timelineForecast.forecast.hourly[5].precip_period = undefined;
+assert.equal(c.hourlyWeather(timelineForecast,false,0).total,null,'Unknown provider intervals cannot be summed');
+timelineForecast.forecast.hourly[5].precip_period = 'preceding-hour';
+timelineForecast.forecast.hourly.splice(7,1);
+assert.equal(c.hourlyWeather(timelineForecast,false,0).total,null,'A missing hour cannot produce a complete total');
+assert.equal(c.hourlyWeather({},true,0).rows.length,0);
+const dstForecast = {forecast:{daily:[0,90000,172800].map(day_start_local=>({day_start_local})),
+  hourly:Array.from({length:48},(_,i)=>({time:(i+1)*3600,precip:0,precip_period:'preceding-hour'}))}};
+assert.equal(c.hourlyWeather(dstForecast,true,3600).rows.length,23,'Amounts follow a 23-hour provider day');
+assert.equal(c.hourlyWeather(dstForecast,true,3600).total,0,'A complete dry day is a valid zero');
+const extraRain = {forecast:{hourly:[{time:3600,precip:0.4,precip_period:'preceding-hour',precip_source:'Open-Meteo',visibility:1000}]}};
+const primaryRain = {forecast:{hourly:[{time:3600,precip:0,precip_period:'preceding-hour',visibility:0}]}};
+const merged = c.withForecastContext(primaryRain,extraRain).forecast.hourly[0];
+assert.equal(merged.precip,0,'A known primary zero amount is preserved');
+assert.equal(merged.visibility,0,'Observed zero visibility is preserved');
+delete primaryRain.forecast.hourly[0].precip_period;
+assert.equal(c.withForecastContext(primaryRain,extraRain).forecast.hourly[0].precip_source,'Open-Meteo','Supplemental amount provenance follows its interval');
+const offsetModel = {forecast:{hourly:[{time:5400,precip:0.5,precip_period:'preceding-hour',precip_source:'Open-Meteo'}]}};
+assert.equal(c.withForecastContext({forecast:{hourly:[{time:3600}]}},offsetModel).forecast.hourly[0].precip,undefined,'Half-hour timezone offsets cannot shift accumulation intervals');
+console.log('Forecast desk: hourly accumulation, visibility gaps, provider day boundaries, missing values and normalized atmosphere passed.');

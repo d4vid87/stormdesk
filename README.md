@@ -10,6 +10,14 @@
 
 *The 4.8.0 opening view, captured November 1, 2026 with labeled demo readings. Screenshots are not current weather.*
 
+### What’s new in 4.9.0
+
+- **Hourly precipitation and visibility:** water-equivalent amounts, running totals, heaviest-hour timing, and visibility changes, with every hour available in an expandable table.
+- **Official hazard outlooks:** WPC excessive rainfall, experimental NOAA HeatRisk, and separate SPC tornado, hail, and wind probabilities with source and validity times. Coverage is the contiguous United States.
+- **Ground and nearby sky:** soil temperature/moisture model estimates and nearby observed ceiling/visibility, loaded when opened.
+- **Forecast context:** model ranges in day details, changes since the previous saved forecast, and temperature/monthly precipitation comparisons with a modeled 1991–2020 baseline. Incomplete periods and unavailable data remain explicit.
+- **Performance retained:** cached feeds, lazy specialist panels, and location-safe comparisons preserve the startup and rendering fixes from 4.8.1.
+
 ### What’s new in 4.8.1
 
 - Fix duplicate startup and conflicting settings saves that repeatedly rebuilt the dashboard.

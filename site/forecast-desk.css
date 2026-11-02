@@ -118,6 +118,29 @@ html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-
 .fd-air-grid > div,.fd-rain-days > div { padding-top:9px; border-top:1px solid var(--line); }
 .fd-air-grid strong,.fd-rain-days strong { font:500 calc(23 * var(--fd-text)) var(--num); margin:5px 0; }
 .fd-panel button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#forecast-insights { order:4; margin-top:12px; border-top:1px solid var(--line); padding-top:9px; }
+.fd-context-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:10px 0; }
+.fd-context-item { padding:10px; border:1px solid var(--line); border-radius:8px; min-width:0; background:var(--panel); }
+.fd-context-item :is(strong,small,span) { display:block; }
+.fd-context-item strong { margin:5px 0; font-size:calc(16 * var(--fd-text)); font-weight:600; }
+.fd-tag { display:inline-block; padding:3px 7px; border:1px solid var(--line); border-radius:5px; font-size:11px; color:var(--accent); }
+:is(#forecast-insights,#forecast-hazards,#forecast-environment,.fd-hour-timeline) summary { cursor:pointer; padding:10px 0; font-size:calc(12 * var(--fd-text)); line-height:1.5; font-weight:600; }
+:is(#forecast-insights,#forecast-hazards,#forecast-environment,.fd-hour-timeline) summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+:is(#forecast-hazards,#forecast-environment) details + details { border-top:1px solid var(--line); }
+.fd-hazard-list { display:grid; gap:8px; padding:0; list-style:none; }
+.fd-hazard-list > * { padding:8px 0; border-bottom:1px solid var(--line); }
+.fd-hour-timeline { margin-top:10px; border-top:1px solid var(--line); }
+.fd-table-scroll { max-height:340px; overflow:auto; }
+.fd-weather-table { width:100%; border-collapse:collapse; font-size:calc(12 * var(--fd-text)); font-variant-numeric:tabular-nums; }
+.fd-weather-table caption { text-align:left; margin-bottom:8px; }
+.fd-weather-table :is(th,td) { text-align:right; padding:9px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+.fd-weather-table th:first-child { text-align:left; }
+.fd-weather-table thead th { position:sticky; top:0; background:var(--panel); color:var(--muted); }
+.fd-low-visibility { background:color-mix(in srgb,#e9bb64 10%,var(--panel)); }
+.forecast-range { padding:10px 0; border-top:1px solid var(--line); }
+#forecast-dialog { max-width:min(600px,calc(100vw - 32px)); max-height:calc(100dvh - 40px); overflow:auto; }
+#desk:not(.outlook-view) #forecast-insights { display:none; }
+
 @media(max-width:1350px) {
   #desk.outlook-view #daycards { grid-template-columns:repeat(5,minmax(0,1fr)); }
   html #desk.outlook-view #daycards > .daycard,html #desk.outlook-view #daycards > .daycard:first-child { min-height:160px; padding:7px; }

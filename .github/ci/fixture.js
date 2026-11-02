@@ -25,6 +25,8 @@ const hourly = Array.from({ length: 72 }, (_, i) => ({
   cloud_cover: 40 + i % 50,
   precip_probability: (i * 7) % 90,
   precip: (i % 9 === 0) ? 0.02 : 0,
+  precip_period: 'preceding-hour', precip_source: 'Synthetic CI fixture',
+  visibility: i > 3 && i < 7 ? 800 : 10000,
   wind_avg: 6 + (i % 5),
   wind_gust: 12 + (i % 9),
   wind_direction: (i * 17) % 360,
@@ -89,6 +91,13 @@ addEventListener('load', () => {
   console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height <= document.getElementById('radar-shelf').getBoundingClientRect().height + 2, 'Radar off leaves only the gauges, without an empty map area');
   console.assert(document.querySelectorAll('#forecast-hourly .fd-hour').length > 0, 'Forecast desk shows live hourly data');
   console.assert(document.querySelector('#forecast-sidebar #outlook-astronomy'), 'Astronomy sits directly below the gauges on the right');
+  console.assert(['forecast-insights','forecast-hazards','forecast-environment'].every(id => document.getElementById(id)), 'Forecast context, hazards and environment mount once');
+  console.assert(document.querySelector('#forecast-hourly .fd-hour-grid').textContent.includes('Visibility'), 'Hourly overview includes visibility');
+  const hourlyDetails = document.querySelector('.fd-hour-timeline');
+  hourlyDetails.open = true; hourlyDetails.dispatchEvent(new Event('toggle'));
+  console.assert(document.querySelectorAll('.fd-weather-table tbody tr').length > 20, 'Every hour is available beyond the three-hour overview');
+  console.assert(document.querySelector('.fd-weather-table').textContent.includes('Running total'), 'Precipitation timeline identifies its accumulation period');
+  hourlyDetails.open = false;
   console.assert(/\d+:\d{2}:\d{2}/.test(document.getElementById('clock-time').textContent), 'Clock includes seconds');
   radarButton.click();
   console.assert(!document.getElementById('desk-radar').hidden && document.getElementById('outlook-astronomy').hidden && radarButton.getAttribute('aria-pressed') === 'true', 'Radar view restores map');

@@ -75,6 +75,9 @@ export function cacheSeconds(url, headers) {
   const u = new URL(url, location.href);
   let seconds = 30;
   if (u.hostname === 'api.weather.gov' && u.pathname.startsWith('/points/')) seconds = 86400;
+  else if (u.hostname === 'api.weather.gov' && u.pathname.endsWith('/stations')) seconds = 86400;
+  else if (u.hostname === 'api.weather.gov' && u.pathname.includes('/observations/')) seconds = 300;
+  else if (['mapservices.weather.noaa.gov', 'www.spc.noaa.gov'].includes(u.hostname)) seconds = 1800;
   else if (u.hostname === 'air-quality-api.open-meteo.com') seconds = 1800;
   else if (u.hostname === 'ensemble-api.open-meteo.com') seconds = 1800;
   else if (u.hostname === 'api.open-meteo.com') seconds = u.searchParams.has('models') ? 900 : 300;
@@ -171,23 +174,53 @@ export async function stationObs(id = settings().stationId) {
 
 // --- METAR via NWS, shaped like a Tempest station obs so the comparison rows need no branches ---
 
-export async function metarObs(id) {
-  const j = await getJSON(`https://api.weather.gov/stations/${id}/observations/latest`);
+// NWS quantitative cloud bases and visibility are metres; raw METAR layers are hundreds of feet.
+export function shapeMetarObs(j, metric = settings().units === 'metric', now = Date.now() / 1000) {
   const p = j.properties || {};
-  const metric = settings().units === 'metric';
-  const c = p.temperature?.value;       // degC
-  const w = p.windSpeed?.value;         // km_h-1
+  const raw = String(p.rawMessage || '').split(/\sRMK\s/)[0];
+  const layers = Array.isArray(p.cloudLayers) ? p.cloudLayers : [];
+  const metres = q => {
+    if (!Number.isFinite(q?.value) || q.value < 0) return null;
+    const factor = { 'wmoUnit:m': 1, 'wmoUnit:ft': 0.3048, 'wmoUnit:km': 1000, 'wmoUnit:mi': 1609.344 }[q.unitCode];
+    return factor == null ? null : q.value * factor;
+  };
+  const bases = layers.filter(l => ['BKN', 'OVC', 'VV'].includes(l.amount))
+    .map(l => metres(l.base)).filter(Number.isFinite);
+  for (const match of raw.matchAll(/\b(?:BKN|OVC|VV)(\d{3})(?:CB|TCU)?\b/g)) bases.push(Number(match[1]) * 30.48);
+  const unknownCeiling = layers.some(l => ['BKN', 'OVC', 'VV'].includes(l.amount) && metres(l.base) == null)
+    || /\b(?:BKN|OVC|VV)\/{3}/.test(raw);
+  const clear = layers.some(l => ['CLR', 'SKC'].includes(l.amount)) || /\b(?:CLR|SKC)\b/.test(raw);
+  const noCeiling = layers.some(l => ['FEW', 'SCT', 'NSC', 'NCD'].includes(l.amount))
+    || /\b(?:(?:FEW|SCT)\d{3}|NSC|NCD|CAVOK)\b/.test(raw);
+  const parsed = p.timestamp ? Date.parse(p.timestamp) / 1000 : NaN;
+  const timestamp = Number.isFinite(parsed) ? parsed : null;
+  const valid = timestamp != null && timestamp <= now + 300;
+  const ceiling = bases.length ? Math.min(...bases) : null;
+  const c = p.temperature?.value, w = p.windSpeed?.value;
   return {
     latitude: j.geometry?.coordinates?.[1],
     longitude: j.geometry?.coordinates?.[0],
+    station_id: p.stationId || null, station_name: p.stationName || null,
+    source: 'NWS airport observation',
     obs: [{
-      timestamp: p.timestamp ? Date.parse(p.timestamp) / 1000 : null,
+      timestamp,
+      observation_valid: valid,
+      stale: !valid || now - timestamp > 7200,
       air_temperature: c == null ? null : (metric ? c : c * 9 / 5 + 32),
-      wind_avg: msToWind(w == null ? null : w / 3.6),   // NWS reports km/h
+      wind_avg: msToWind(w == null ? null : w / 3.6),
       wind_direction: p.windDirection?.value,
-      precip_accum_local_day: null, // airports report precip on their own schedule; not comparable
+      precip_accum_local_day: null,
+      visibility: metres(p.visibility),
+      ceiling,
+      ceiling_status: unknownCeiling ? 'unavailable' : ceiling != null ? 'measured' : clear ? 'clear' : noCeiling ? 'no-ceiling' : 'unavailable',
     }],
   };
+}
+
+export async function metarObs(id) {
+  if (!/^[A-Z0-9]{3,6}$/.test(String(id))) throw new Error('Invalid observation station');
+  const metric = settings().units === 'metric';
+  return shapeMetarObs(await getJSON(`https://api.weather.gov/stations/${id}/observations/latest`), metric);
 }
 
 // obs_st tuple layout, per the Tempest UDP/REST reference. One copy: two drifting
@@ -373,6 +406,10 @@ export function shapeOm(j, ownTuple = null) {
     cloud_cover: H.cloud_cover?.[i],
     freezing_level: metres('freezing_level_height', H.freezing_level_height?.[i]),
     precip: H.precipitation?.[i],
+    precip_period: 'preceding-hour',
+    precip_source: 'Open-Meteo',
+    visibility: metres('visibility', H.visibility?.[i]),
+    wet_bulb_temperature: H.wet_bulb_temperature_2m?.[i] ?? null,
     precip_probability: H.precipitation_probability?.[i],
     wind_avg: H.wind_speed_10m?.[i],
     wind_gust: H.wind_gusts_10m?.[i],
@@ -418,7 +455,9 @@ export function shapeOm(j, ownTuple = null) {
   if (ownTuple && !settings().activePlace) overlayStation(c, ownTuple, j.elevation);
 
   // Kept so a later observation can be overlaid on this same payload without refetching.
-  return { current_conditions: c, forecast: { daily, hourly }, elevation: j.elevation };
+  return { current_conditions: c, forecast: { daily, hourly }, elevation: j.elevation,
+    source: 'Open-Meteo', timezone: j.timezone || null,
+    utc_offset_seconds: Number.isFinite(j.utc_offset_seconds) ? j.utc_offset_seconds : null };
 }
 
 // The station's reading painted over the model's guess. Exported because observations arrive
@@ -472,6 +511,15 @@ export async function omForecast(lat = coords().lat, lon = coords().lon, model =
   return shapeOm(j, lastTuple);
 }
 
+export function soilForecast(lat = coords().lat, lon = coords().lon, units = settings().units) {
+  return getJSON(`https://api.open-meteo.com/v1/forecast?${qs({
+    latitude: lat, longitude: lon,
+    hourly: 'soil_temperature_6cm,soil_temperature_18cm,soil_moisture_3_to_9cm,soil_moisture_9_to_27cm',
+    forecast_hours: 1, timezone: 'auto', timeformat: 'unixtime',
+    temperature_unit: units === 'metric' ? 'celsius' : 'fahrenheit',
+  })}`);
+}
+
 // --- NWS ---
 
 export async function alerts(lat = coords().lat, lon = coords().lon) {
@@ -521,7 +569,7 @@ export function dailyPrecip(lat = coords().lat, lon = coords().lon) {
   return getJSON(`https://api.open-meteo.com/v1/forecast?${qs({
     latitude: lat, longitude: lon, daily: 'precipitation_sum', forecast_days: 10, timezone: 'auto', timeformat: 'unixtime',
     current: 'temperature_2m,dew_point_2m',
-    hourly: 'visibility,cloud_cover,freezing_level_height,apparent_temperature',
+    hourly: 'visibility,cloud_cover,freezing_level_height,apparent_temperature,precipitation,wet_bulb_temperature_2m',
     ...(imperial ? { temperature_unit: 'fahrenheit', precipitation_unit: 'inch' } : {}),
   })}`);
 }
@@ -659,30 +707,42 @@ export async function normals(lat = coords().lat, lon = coords().lon) {
   const place = `${(+lat).toFixed(2)},${(+lon).toFixed(2)},${settings().units}`;
   try {
     const cached = JSON.parse(localStorage.getItem(NORMALS_KEY) || 'null');
-    if (cached?.place === place) return cached.days;
+    if (cached?.version === 2 && cached.place === place) return cached.days;
   } catch { /* cache is a nicety */ }
   const imperial = settings().units !== 'metric';
   const j = await getJSON(`https://archive-api.open-meteo.com/v1/archive?${qs({
     latitude: lat, longitude: lon, start_date: '1991-01-01', end_date: '2020-12-31',
-    daily: 'temperature_2m_max,temperature_2m_min', timezone: 'auto',
-    ...(imperial ? { temperature_unit: 'fahrenheit' } : {}),
+    daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum', timezone: 'auto', models: 'era5',
+    ...(imperial ? { temperature_unit: 'fahrenheit', precipitation_unit: 'inch' } : {}),
   })}`);
-  const acc = {};
-  const d = j.daily || {};
+  const acc = {}, d = j.daily || {};
+  const precipUnitsMatch = j.daily_units?.precipitation_sum === (imperial ? 'inch' : 'mm');
+  const tempUnitsMatch = ['temperature_2m_max', 'temperature_2m_min'].every(k => j.daily_units?.[k] === (imperial ? '°F' : '°C'));
   (d.time || []).forEach((t, i) => {
-    const key = t.slice(5); // MM-DD
-    const a = (acc[key] ||= { hi: 0, lo: 0, n: 0 });
-    if (d.temperature_2m_max[i] == null || d.temperature_2m_min[i] == null) return;
-    a.hi += d.temperature_2m_max[i];
-    a.lo += d.temperature_2m_min[i];
-    a.n++;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return;
+    const key = t.slice(5);
+    const a = (acc[key] ||= { hi: 0, lo: 0, n: 0, precip: 0, precipYears: 0 });
+    if (tempUnitsMatch && Number.isFinite(d.temperature_2m_max?.[i]) && Number.isFinite(d.temperature_2m_min?.[i])) {
+      a.hi += d.temperature_2m_max[i]; a.lo += d.temperature_2m_min[i]; a.n++;
+    }
+    const amount = d.precipitation_sum?.[i];
+    if (precipUnitsMatch && Number.isFinite(amount) && amount >= 0) { a.precip += amount; a.precipYears++; }
   });
   const days = {};
   for (const [k, a] of Object.entries(acc)) {
-    if (a.n) days[k] = { hi: a.hi / a.n, lo: a.lo / a.n };
+    days[k] = { hi: a.n ? a.hi / a.n : null, lo: a.n ? a.lo / a.n : null,
+      precip: a.precipYears ? a.precip / a.precipYears : null, precipYears: a.precipYears };
   }
-  try { localStorage.setItem(NORMALS_KEY, JSON.stringify({ place, days })); } catch { /* full; recompute next time */ }
+  try { localStorage.setItem(NORMALS_KEY, JSON.stringify({ version: 2, place, days })); } catch { /* full; recompute next time */ }
   return days;
+}
+
+export function monthlyPrecipArchive(start, end, lat = coords().lat, lon = coords().lon) {
+  return getJSON(`https://archive-api.open-meteo.com/v1/archive?${qs({
+    latitude: lat, longitude: lon, start_date: start, end_date: end,
+    daily: 'precipitation_sum', timezone: 'auto', models: 'era5',
+    ...(settings().units !== 'metric' ? { precipitation_unit: 'inch' } : {}),
+  })}`);
 }
 
 export const normalFor = (days, date = new Date()) =>

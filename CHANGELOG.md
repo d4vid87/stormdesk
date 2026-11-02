@@ -6,6 +6,20 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.9.0] - 2026-11-01
+
+### Added
+- Hourly precipitation amounts, running forecast totals, peak timing, and a complete hourly precipitation/visibility table. Amounts include snow water equivalent; missing hours and unknown accumulation intervals never count as zero precipitation.
+- Forecast visibility and low-visibility timing alongside the hourly outlook, with gaps kept explicit instead of inventing a clearance time.
+- Official WPC excessive-rainfall outlooks for days 1–3, experimental NOAA HeatRisk for up to seven days, and separate SPC tornado, hail, and damaging-wind probabilities for days 1–2. Validity periods, coverage, missing data, and conditional intensity are clearly labelled.
+- Expandable soil temperature and moisture estimates plus nearby observed cloud ceiling and visibility, including station distance, observation time, and outdated-report labels.
+- Daily high, low, and precipitation model ranges in forecast-day details where at least two complete model forecasts are available. Model differences are not presented as calibrated probabilities.
+- Expandable temperature and precipitation comparisons with a modeled 1991–2020 baseline and a compact summary of changes since a previous saved forecast. Precipitation comparisons require complete calendar periods and clearly identify archive lag.
+
+### Fixed
+- Isolate forecast snapshots and normal-temperature caches by weather location and units so switching places cannot compare unrelated forecasts.
+- Keep specialist data cached and load soil, observations, and climatology on demand; retain the 4.8.1 renderer and startup performance fixes.
+
 ## [4.8.1] - 2026-11-01
 
 ### Fixed

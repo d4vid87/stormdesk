@@ -977,7 +977,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-forecast-desk-20261101`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-forecast-context-490`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about

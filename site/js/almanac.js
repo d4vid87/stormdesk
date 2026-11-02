@@ -4,10 +4,10 @@
 // the REST history is capped and paged, and the point of the log is to keep going once it ends.
 // Nothing here backfills — the archive starts the day the app was first run, and the panel says
 // so rather than pretending the record is older than it is.
-import { settings, U, num, every, expires, msToWind } from './app.js';
+import { settings, coords, U, num, every, expires, msToWind } from './app.js';
 import { chart } from './charts.js';
 import { openDetail } from './detail.js';
-import { normals, normalFor, getJSON } from './api.js';
+import { normals, normalFor, monthlyPrecipArchive, getJSON } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 const SRV = window.__WD_SRV || '';
@@ -179,13 +179,80 @@ function drawExplore() {
 
 // --- normals: what the date usually looks like, from 30 years of ERA5 ---
 
-let normalDays = null;
+let normalDays = null, normalContext = '';
 
-export async function normalToday() {
-  const c = settings();
-  if (c.lat == null) return null;
-  normalDays ||= await normals().catch(() => null);
-  return normalFor(normalDays);
+async function normalDaysForPlace() {
+  const c = coords();
+  if (!Number.isFinite(c.lat) || !Number.isFinite(c.lon)) return null;
+  const key = JSON.stringify([c.lat, c.lon, settings().units]);
+  if (key !== normalContext || !normalDays) {
+    normalContext = key;
+    const request = normals(c.lat, c.lon).catch(() => {
+      if (normalDays === request) normalDays = null;
+      return null;
+    });
+    normalDays = request;
+  }
+  const days = await normalDays;
+  if (key !== JSON.stringify([coords().lat, coords().lon, settings().units])) return null;
+  return days;
+}
+
+export async function normalToday(date = new Date()) {
+  return normalFor(await normalDaysForPlace(), date);
+}
+
+const calendarKey = date => date.toISOString().slice(0, 10);
+
+export function monthlyPrecipComparison(archive, baseline, date, metric = false) {
+  if (archive?.daily_units?.precipitation_sum !== (metric ? 'mm' : 'inch'))
+    return null;
+  const daily = archive.daily || {}, rows = new Map(), duplicates = new Set();
+  (daily.time || []).forEach((day, i) => {
+    if (rows.has(day)) duplicates.add(day);
+    rows.set(day, daily.precipitation_sum?.[i]);
+  });
+  const year = date.getFullYear(), month = date.getMonth();
+  // ERA5 arrives several days late; only use a period with every completed day represented.
+  for (let back = 0; back <= 2; back++) {
+    const first = new Date(Date.UTC(year, month - back, 1));
+    const last = back ? new Date(Date.UTC(year, month - back + 1, 0))
+      : new Date(Date.UTC(year, month, date.getDate() - 1));
+    if (last < first) continue;
+    let total = 0, normal = 0, count = 0, complete = true;
+    for (const day = new Date(first); day <= last; day.setUTCDate(day.getUTCDate() + 1)) {
+      const key = calendarKey(day), amount = rows.get(key), avg = baseline?.[key.slice(5)];
+      const years = key.endsWith('-02-29') ? 8 : 30;
+      if (duplicates.has(key) || !Number.isFinite(amount) || amount < 0
+          || !Number.isFinite(avg?.precip) || avg.precip < 0 || avg.precipYears !== years) {
+        complete = false; break;
+      }
+      total += amount; normal += avg.precip; count++;
+    }
+    if (complete) return { start: calendarKey(first), end: calendarKey(last), total, normal, days: count, currentMonth: back === 0 };
+  }
+  return null;
+}
+
+let monthlyNormalContext = '', monthlyNormalRequest = null;
+export async function monthlyPrecipNormal(date) {
+  const c = coords();
+  if (!Number.isFinite(c.lat) || !Number.isFinite(c.lon) || !(date instanceof Date) || !Number.isFinite(date.getTime())) return null;
+  const today = calendarKey(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
+  const key = JSON.stringify([c.lat, c.lon, settings().units, today]);
+  if (monthlyNormalContext !== key || !monthlyNormalRequest) {
+    monthlyNormalContext = key;
+    const start = calendarKey(new Date(Date.UTC(date.getFullYear(), date.getMonth() - 2, 1)));
+    const end = calendarKey(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate() - 1)));
+    const metric = settings().units === 'metric';
+    const request = Promise.all([monthlyPrecipArchive(start, end, c.lat, c.lon), normalDaysForPlace()])
+      .then(([archive, baseline]) => monthlyPrecipComparison(archive, baseline, date, metric))
+      .catch(() => { if (monthlyNormalRequest === request) monthlyNormalRequest = null; return null; });
+    monthlyNormalRequest = request;
+  }
+  const result = await monthlyNormalRequest;
+  if (key !== JSON.stringify([coords().lat, coords().lon, settings().units, today])) return null;
+  return result;
 }
 
 window.addEventListener('wd:section', (e) => { if (e.detail === 'data') refreshAlmanac(); });

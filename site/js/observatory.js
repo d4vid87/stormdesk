@@ -1,6 +1,7 @@
 // Reuse the live cards and their listeners; only their placement changes.
 import { initStatusCards } from './status-cards.js';
 import { initForecastDesk } from './forecast-desk.js';
+import { renderDayForecastRange } from './forecast-insights.js';
 import { styles, gaugeStyle } from './gauge-icons.js';
 import { settings, saveSettings, num, U, deg2compass, msToWind } from './app.js';
 import { forecast as deskForecast } from './desk.js';
@@ -95,7 +96,12 @@ export function initObservatory() {
   dialog.id = 'forecast-dialog';
   dialog.setAttribute('aria-labelledby', 'forecast-dialog-title');
   dialog.innerHTML = '<h2 id="forecast-dialog-title"></h2><p></p><form method="dialog"><button>Close</button></form>';
+  const range = document.createElement('div'); range.className = 'forecast-range';
+  dialog.querySelector('form').before(range);
   document.body.append(dialog);
+  const updateRange = () => renderDayForecastRange(range, Number(dialog.dataset.dayStart), Number(dialog.dataset.dayEnd));
+  window.addEventListener('wd:models', () => { if (dialog.open) updateRange(); });
+  window.addEventListener('wd:settings', () => { if (dialog.open) dialog.close(); });
   $('daycards').addEventListener('click', e => {
     const card = e.target.closest('.daycard');
     if (!card) return;
@@ -106,6 +112,9 @@ export function initObservatory() {
     agreement.textContent = `${card.dataset.agreement || 'Model agreement unavailable'}. Agreement describes model differences, not accuracy or the chance of rain.`;
     dialog.querySelector('.forecast-model-note')?.remove();
     dialog.querySelector('form').before(agreement);
+    dialog.dataset.dayStart = card.dataset.dayStart;
+    dialog.dataset.dayEnd = card.dataset.dayEnd;
+    updateRange();
     dialog.showModal();
   });
   const render = e => {

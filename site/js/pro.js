@@ -54,7 +54,7 @@ function renderHero(fc) {
   setText($('hero-moonset'), `${m.nextName} ${m.nextDate.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric' })}`);
   setWx($('hero-icon'), c.icon, 150);
   setScene(c.icon);
-  renderNormal(d);
+  if ($('hero-normal')?.getClientRects().length) renderNormal(d);
   if (fc._provenance) {
     const source = c._sources?.air_temperature;
     $('hero-live').className = source && Date.now() / 1000 - source.at < 600 ? 'live on' : 'live';
@@ -352,6 +352,8 @@ function renderDays(fc) {
     const card = wrap.children[i];
     if (!card) return;
     const date = new Date(d.day_start_local * 1000);
+    card.dataset.dayStart = String(d.day_start_local);
+    card.dataset.dayEnd = String(days[i + 1]?.day_start_local || d.day_start_local + 86400);
     const amount = d.precip_accum ?? qpf?.[i];
     setText(card.querySelector('.dc-name'), labels[i] || date.toLocaleDateString([], { weekday: 'short' }));
     setText(card.querySelector('.dc-date'), date.toLocaleDateString([], { month: 'short', day: 'numeric' }));
