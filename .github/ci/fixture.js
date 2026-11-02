@@ -197,6 +197,13 @@ addEventListener('load', () => {
     await document.fonts.ready;
     await settle();
     const desk = document.getElementById('desk');
+    const temperatureType = getComputedStyle(document.getElementById('hero-temp'));
+    const clockType = getComputedStyle(document.getElementById('clock-time'));
+    console.assert(temperatureType.fontSize === clockType.fontSize && temperatureType.fontWeight === clockType.fontWeight && Number(temperatureType.fontWeight) >= 700, 'Temperature matches the bold clock at every screen size');
+    console.assert([...document.querySelectorAll('body > header nav .tab, body > header #btn-settings, .weather-view button')].every(button => {
+      const box = button.getBoundingClientRect();
+      return box.width > 0 && box.left >= 0 && box.right <= innerWidth + 1 && button.querySelector('svg[aria-hidden="true"]');
+    }), 'Navigation, Settings and view buttons stay visible with decorative vector icons');
     const thumbnails = [...document.querySelectorAll('#daycards .dc-icon img, #forecast-hourly .fd-icon img, #forecast-precip .fd-icon img')];
     console.assert(thumbnails.length >= 10 && thumbnails.every(img => img.getAttribute('src').includes('icons/static/')), 'Forecast thumbnails do not run separate SVG animation timelines');
     console.assert((getComputedStyle(document.querySelector('#daycards .dc-icon')).animationName !== 'none') === animatedSky, 'Forecast cards retain motion without animated SVG documents');

@@ -19,7 +19,7 @@ export function initObservatory() {
   view.className = 'weather-view';
   view.setAttribute('role', 'group');
   view.setAttribute('aria-label', 'Weather view');
-  view.innerHTML = '<button type="button" data-weather-view="radar" aria-pressed="true">Radar</button><button type="button" data-weather-view="outlook" aria-pressed="false">Forecast &amp; sky</button>';
+  view.innerHTML = '<button type="button" data-weather-view="radar" aria-pressed="true"><span class="view-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v9l6.4-6.4M12 21v-2M3 12h2m14 0h2"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span><span>Radar</span></button><button type="button" data-weather-view="outlook" aria-pressed="false"><span class="view-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="7" r="3"/><path d="M8 1v1M2 7H1m2.1-4.9.7.7M13 2l-.7.7M18.5 20H8a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.4-1.5 4.8 4.8 0 0 1 .6 9.5Z"/></svg></span><span>Forecast &amp; sky</span></button>';
   view.addEventListener('click', e => {
     const button = e.target.closest('[data-weather-view]');
     if (button) saveSettings({deskRadar: button.dataset.weatherView === 'radar'});

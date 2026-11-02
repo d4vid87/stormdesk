@@ -30,12 +30,11 @@
 #desk.outlook-view .forecast-conditions { grid-column:1; }
 #desk.outlook-view #observatory-heading .observatory-clock { display:flex; flex-direction:column-reverse; align-items:center; grid-column:2; grid-row:1; margin:0; padding:0; border:0; gap:4px; }
 #desk.outlook-view .observatory-clock > span { display:block; color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; }
-#desk.outlook-view #clock-time { font-size:calc(42 * var(--fd-reading)); font-weight:750; font-variant-numeric:tabular-nums; letter-spacing:-1px; white-space:nowrap; }
+#desk.outlook-view #clock-time,#desk.outlook-view #observatory-heading #hero-temp { font-size:calc(42 * var(--fd-reading)); font-weight:750; line-height:1.15; font-variant-numeric:tabular-nums; letter-spacing:-1px; white-space:nowrap; }
 #desk.outlook-view #hero-clock { margin:0; }
 #desk.outlook-view .weather-view { grid-column:3; grid-row:1; justify-self:end; }
 #desk.outlook-view #hero-alerts { grid-column:1/-1; grid-row:2; margin:0; }
 #desk.outlook-view #observatory-heading #hero { padding:0; border:0; }
-#desk.outlook-view #observatory-heading #hero-temp { font-size:calc(36 * var(--fd-reading)); }
 #desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,2.45fr) minmax(310px,1fr); gap:12px; }
 #desk.outlook-view #observatory-radar { background:none; border:0; border-radius:0; overflow:visible; }
 #desk.outlook-view #radar-shelf { display:grid; grid-template-columns:1fr auto; align-items:center; gap:8px; border:0; background:none; }
@@ -154,10 +153,9 @@ html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-
   #desk.outlook-view #gauges > .gauge { min-height:95px; padding:8px 10px; }
   #desk.outlook-view #gauges h3 { margin-bottom:4px; }
   #desk.outlook-view #gauges .ginner b { font-size:26px; }
-  #desk.outlook-view #clock-time { font-size:32px; }
+  #desk.outlook-view #clock-time,#desk.outlook-view #observatory-heading #hero-temp { font-size:32px; }
   #desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,1.8fr) minmax(290px,1fr); }
   .forecast-conditions { gap:8px; }
-  #desk.outlook-view #observatory-heading #hero-temp { font-size:28px; }
 }
 @media(max-width:760px) {
   #desk.outlook-view #observatory-heading { grid-template-columns:1fr auto; }

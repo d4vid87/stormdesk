@@ -116,9 +116,13 @@ html[data-gauges-paused] :is(#daycards .dc-icon,.solar-haze,.solar-trace,.solar-
   .twilight-card strong { font-size:15px; }
 }
 
-.weather-view { display:flex; gap:3px; padding:3px; border:1px solid var(--line); border-radius:9px; background:var(--panel); order:4; }
-.weather-view button { min-height:36px; padding:6px 12px; border:1px solid transparent; border-radius:6px; background:none; color:var(--muted); font:inherit; font-size:12px; cursor:pointer; white-space:nowrap; }
-.weather-view button[aria-pressed="true"] { color:var(--text); background:var(--panel2); border-color:var(--line); }
+.weather-view { display:flex; gap:5px; padding:5px; border:1px solid color-mix(in srgb,var(--accent),var(--line) 75%); border-radius:16px; background:linear-gradient(145deg,var(--panel),var(--bg)); box-shadow:inset 0 1px #ffffff08,0 4px 16px #0002; order:4; }
+.weather-view button { display:flex; align-items:center; justify-content:center; gap:9px; min-height:42px; padding:7px 13px; border:1px solid transparent; border-radius:11px; background:none; color:var(--muted); font:inherit; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.weather-view button[aria-pressed="true"] { color:var(--text); background:linear-gradient(135deg,color-mix(in srgb,var(--accent),var(--panel2) 78%),var(--panel2)); border-color:color-mix(in srgb,var(--accent),var(--line) 55%); box-shadow:inset 0 1px #ffffff16,0 2px 7px #0003; }
+.view-glyph { display:grid; place-items:center; width:24px; height:24px; flex:none; color:var(--accent); }
+.view-glyph svg { width:22px; height:22px; }
+.weather-view button:hover { color:var(--text); border-color:color-mix(in srgb,var(--accent),transparent 65%); }
+.weather-view button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 #desk.outlook-view #observatory-radar { height:auto; min-height:0; }
 #desk.outlook-view #observatory-left { grid-row:2 / span 2; }
 #desk #outlook-astronomy { grid-column:2; grid-row:2; padding:20px; }
@@ -182,7 +186,33 @@ html header h1 { font-size:23px; }
   #desk #hero-alerts { flex-basis:100%; }
 }
 
-html body > header .tab { padding:8px 12px; min-height:34px; }
+/* Framed icons and a lit active edge keep the three main destinations easy to scan. */
+html body > header nav { gap:5px; padding:4px; border:1px solid var(--line); border-radius:17px; background:linear-gradient(145deg,var(--panel),var(--bg)); box-shadow:inset 0 1px #ffffff08; }
+html body > header .tab { position:relative; display:flex; align-items:center; justify-content:center; gap:9px; min-height:44px; padding:6px 13px; border:1px solid transparent; border-radius:12px; font-size:13px; font-weight:600; color:var(--muted); }
+html body > header .tab::before { display:none; }
+html body > header .tab::after { content:""; position:absolute; height:2px; bottom:-1px; left:32%; right:32%; border-radius:2px; background:transparent; }
+html body > header .tab.active { color:var(--text); border-color:color-mix(in srgb,var(--accent),var(--line) 60%); background:linear-gradient(140deg,color-mix(in srgb,var(--accent),var(--panel2) 83%),var(--panel)); box-shadow:inset 0 1px #ffffff12,0 3px 10px #0003; }
+html body > header .tab.active::after { background:var(--accent); box-shadow:0 0 8px color-mix(in srgb,var(--accent),transparent 65%); }
+html body > header .nav-glyph { display:grid; place-items:center; width:29px; height:29px; flex:none; color:var(--accent); border:1px solid color-mix(in srgb,var(--accent),transparent 84%); border-radius:9px; background:color-mix(in srgb,var(--accent),transparent 94%); }
+html body > header .nav-glyph svg { width:20px; height:20px; }
+html body > header .tab.active .nav-glyph { background:color-mix(in srgb,var(--accent),transparent 85%); border-color:color-mix(in srgb,var(--accent),transparent 65%); }
+html body > header #btn-settings { display:flex; align-items:center; justify-content:center; gap:9px; min-height:44px; padding:7px 12px; border:1px solid color-mix(in srgb,var(--accent),var(--line) 70%); border-radius:14px; background:linear-gradient(145deg,var(--panel2),var(--panel)); color:var(--text); box-shadow:inset 0 1px #ffffff10,0 3px 12px #0002; }
+html body > header #btn-settings .nav-glyph { border-radius:50%; }
+html body > header #btn-settings .settings-label { display:inline; font-size:12px; font-weight:600; }
+html body > header :is(.tab,#btn-settings):hover { border-color:var(--accent); color:var(--text); }
+html body > header :is(.tab,#btn-settings):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+@media(prefers-reduced-motion:no-preference) {
+  html[data-motion="full"] body > header :is(.tab,#btn-settings),html[data-motion="full"] .weather-view button { transition:background .16s,border-color .16s,box-shadow .16s; }
+  html[data-motion="full"] #btn-settings svg { transition:transform .25s; }
+  html[data-motion="full"] #btn-settings:hover svg { transform:rotate(45deg); }
+}
+@media(max-width:700px) {
+  html body > header nav { gap:3px; box-sizing:border-box; }
+  html body > header .tab { flex:1; gap:7px; min-width:0; padding:6px 8px; font-size:12px; }
+  html body > header .nav-glyph { width:24px; height:24px; border-radius:7px; }
+  html body > header .nav-glyph svg { width:18px; height:18px; }
+  .weather-view button { padding:6px 10px; }
+}
 #desk #observatory-heading #hero { flex:none; padding:0 12px; border:0; border-left:1px solid var(--line); border-radius:0; background:none; gap:0; }
 #desk #observatory-heading #hero :is(.observatory-current-label,#hero-feels,#hero-hilo,#hero-fx) { display:none; }
 #desk #observatory-heading #hero-temp { font-size:28px; }

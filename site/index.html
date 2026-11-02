@@ -923,10 +923,10 @@
 <header>
   <img id="brand" src="stormdesk-icon-512.png?v=20260907" alt="StormDesk">
   <h1>Stormdesk</h1>
-  <nav>
-    <button class="tab" data-section="desk">Weather</button>
-    <button class="tab" data-section="lab">Radar</button>
-    <button class="tab" data-section="data">History</button>
+  <nav aria-label="Main navigation">
+    <button class="tab" data-section="desk"><span class="nav-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="7" r="3"/><path d="M8 1v1M2 7H1m2.1-4.9.7.7M13 2l-.7.7M18.5 20H8a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.4-1.5 4.8 4.8 0 0 1 .6 9.5Z"/></svg></span><span>Weather</span></button>
+    <button class="tab" data-section="lab"><span class="nav-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 3v9l6.4-6.4M12 21v-2M3 12h2m14 0h2"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span><span>Radar</span></button>
+    <button class="tab" data-section="data"><span class="nav-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16M8 15l4-5 4 2 4-6"/><path d="M8 19v-1m4 1v-4m4 4v-3m4 3v-7"/></svg></span><span>History</span></button>
   </nav>
   <span id="station-name" class="muted"></span>
   <select id="station-switch" class="iconbtn" hidden title="Switch station"></select>
@@ -939,7 +939,7 @@
       <button class="iconbtn" id="btn-kiosk" title="Kiosk mode">🖥</button>
     </div>
   </details>
-  <button class="iconbtn" id="btn-settings" aria-label="Settings">⚙<span class="settings-label">Settings</span></button>
+  <button class="iconbtn" id="btn-settings" aria-label="Settings"><span class="nav-glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9.2 3-.6 2.2-1.7 1.1-2.2-.5L2.9 9l1.6 1.7v2.6L2.9 15l1.8 3.2 2.2-.5 1.7 1.1.6 2.2h3.6l.6-2.2 1.7-1.1 2.2.5 1.8-3.2-1.6-1.7v-2.6L19.1 9l-1.8-3.2-2.2.5-1.7-1.1-.6-2.2Z"/><circle cx="11" cy="12" r="3"/></svg></span><span class="settings-label">Settings</span></button>
 </header>
 <section id="pair-viewer" hidden class="card" style="margin:10px" aria-label="Pair this device">
   <b>Viewer mode</b><p class="muted">Weather is available. Pair this device to change household settings.</p>
