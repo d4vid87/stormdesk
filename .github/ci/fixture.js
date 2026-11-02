@@ -197,10 +197,13 @@ addEventListener('load', () => {
     if (innerWidth > 1100) {
       const forecastPanel = document.getElementById('observatory-forecast');
       const height = forecastPanel.getBoundingClientRect().height;
-      const expanded = document.createElement('div');
-      expanded.style.height = '800px'; expanded.style.flexShrink = '0';
+      const hourCell = document.querySelector('.fd-hour-cell');
+      const hourHeight = hourCell.getBoundingClientRect().height;
+      const expanded = document.createElement('details');
+      expanded.open = true; expanded.style.height = '800px'; expanded.style.flexShrink = '0';
       document.getElementById('forecast-sidebar').append(expanded);
       console.assert(Math.abs(forecastPanel.getBoundingClientRect().height - height) < 2, 'Expanded sidebar details do not stretch the ten-day cards');
+      console.assert(hourCell.getBoundingClientRect().height <= hourHeight + 2, 'Expanded sidebar details do not inflate hourly rows');
       expanded.remove();
     }
     if (innerWidth >= 2400 && innerHeight >= 1200) {

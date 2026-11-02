@@ -18,6 +18,7 @@
   #desk.outlook-view .fd-hour-grid { flex:1; }
   #desk.outlook-view #forecast-sidebar > :last-child { flex:1; }
   #desk.outlook-view #weather-extras { margin:0; }
+  #desk.outlook-view:has(#forecast-sidebar details[open]) #observatory-left { align-self:start; }
 }
 /* SVG animation already repaints its pixels; keep the glow outside the animated image. */
 #desk #hero-icon :is(img,svg) { filter:none; }
