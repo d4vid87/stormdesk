@@ -10,23 +10,25 @@ embedded here and centered on the station.
 
 If StormDesk is useful to you, please [give the project a star](https://github.com/d4vid87/stormdesk/stargazers).
 
-![StormDesk 4.7.0 forecast and sky opening view with Orbit Glass gauges](stormdesk-470-weather.jpg)
+![StormDesk 4.10.0 Balanced Desk with Orbit Glass gauges](stormdesk-4100-balanced.jpg)
 
 ![StormDesk 4.6.1 History using sample station observations](stormdesk-461-history.jpg)
 
-The Weather capture shows the 4.7.0 opening view with demo readings. The History capture remains from 4.6.1; both were captured October 31, 2026.
+Balanced Desk · demo station readings; forecast and regional data shown for illustration. Captured November 1, 2026. Not current weather. The History capture remains from 4.6.1, captured October 31, 2026.
 
 ## The three destinations
 
-The hosted dashboard opens the full Forecast desk by default, including on ChromeOS and small-memory browsers. Refreshing or interrupting a load does not switch the next visit to Lite. Samsung Smart Hub/Family Hub and other appliance browsers still open **StormDesk Lite** before loading the full dashboard modules; use `?full=1` to open the full dashboard there. Lite remains available at `/lite/` with Today, Forecast, still Radar, and basic History. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
+The hosted dashboard opens Balanced Desk by default, including on ChromeOS and small-memory browsers. Refreshing or interrupting a load does not switch the next visit to Lite. Samsung Smart Hub/Family Hub and other appliance browsers still open **StormDesk Lite** before loading the full dashboard modules; use `?full=1` to open the full dashboard there. Lite remains available at `/lite/` with Today, Forecast, still Radar, and basic History. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
 
-- **Weather** opens each new session with animated glass forecast cards and a sun, moon and twilight scene beneath eight compact gauges. Orbit Glass is the default icon style, with four alternatives. The view switch enables HookEcho radar for the current session; reopening returns to Forecast & sky. Provider coverage determines which readings are available.
+- **Weather** opens each new session with Balanced Desk: ten aligned forecast cards across the page, larger live gauges, hourly weather, and compact astronomy. The main desktop view fits without page scrolling at normal desktop sizes; smaller screens reflow. Detailed weather information opens in dialogs. The view switch enables HookEcho radar for the current session; reopening returns to Forecast & sky. Provider coverage determines which readings are available.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 
-The top metric order is **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity**. Layout editing is retired. Existing installations retain their saved settings and layout data; the visible arrangement adapts to the screen width. Additional measurements remain available in weather details and History.
+The top metric order is **Rain, Lightning, Wind, WBGT, UV Index, Pressure, Humidity, Dew point**. Layout editing is retired. Existing installations retain their saved settings and layout data; the visible arrangement adapts to the screen width. Additional measurements remain available in weather details and History.
 
-The right column shows sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and three twilight stages. Full times expand on demand. The Local signals, 48-hour model and Outdoor activity sections no longer appear on Weather. Header notifications and the dedicated Radar warning banner remain available.
+The astronomy summary opens sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and three twilight stages in a details dialog. Other dialogs hold precipitation and visibility timelines, forecast hazards, atmosphere, air quality, and ground context. Header notifications and the dedicated Radar warning banner remain available.
+
+NOAA WPC Winter Storm Severity Index (WSSI) reports mapped overall impacts for Days 1–3 at the selected location in the contiguous United States, with issue and validity times. Missing coverage is unavailable, not an all-clear. NOAA NWPS river forecasts use only the gauge configured under **Settings → More tools → Weather sources, sensors & camera**. The maximum within the supplied forecast includes its time and source units; no nearby gauge is silently substituted. A gauge forecast does not establish flood risk at a property.
 
 The welcome screen offers three setup cards: **Find my weather** (town or postcode), **Bring my station** (brand-specific connection), and **Join my home** (connect to an existing Stormdesk host). Choose a location first to open Weather; a station connection is optional. The dashboard distinguishes station readings from forecast and other sources; an unavailable or stale measurement is labeled instead of shown as zero.
 
@@ -34,7 +36,7 @@ Settings now opens to a searchable home with six category cards: Everyday, Appea
 
 Settings → Appearance → Theme opens new installs in **Graphite Silver** and offers ten dark palettes: Graphite Silver, Midnight Violet, Carbon Lime, Ocean Abyss, Night Spruce, Oxblood Rose, Burnished Copper, Electric Indigo, Petrol Citron, and Espresso Gold. Classic themes remain available, including OLED black, blue, light, high contrast, orange & red, solarized, and e-ink. Each screen keeps its own appearance choice, and saved choices are preserved. See the [current interface and gauge styles](../README.md#see-the-current-app).
 
-The latest packaged release is **4.7.0**, including the forecast-first opening view, animated astronomy and all five gauge icon styles. Existing installations receive the interface when updated.
+Versioned downloads are listed on the [release page](https://github.com/d4vid87/stormdesk/releases/latest). Existing installations receive interface changes when updated.
 
 The Radar viewer remembers its selected site, product, tilt, basemap, and zoom. Settings → Radar → Radar site selects a radar explicitly; *Nearest to my station* follows the saved place.
 

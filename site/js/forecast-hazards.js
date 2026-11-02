@@ -100,7 +100,7 @@ export function overnightCooling(fc, now = Date.now() / 1000) {
   return null;
 }
 
-export function initForecastHazards(host) {
+export function initForecastHazards(host, onSummary = () => {}, visibilityTarget = host) {
   if (!host || host.dataset.hazardsReady) return;
   host.dataset.hazardsReady = 'true';
   const intro = node('p', 'fd-note', 'Official outlooks · contiguous United States · outlooks are planning guidance, not warnings.');
@@ -115,6 +115,7 @@ export function initForecastHazards(host) {
   const rain = makeGroup('Flash-flood outlook', 'https://www.wpc.ncep.noaa.gov/qpf/excess_rain.shtml');
   const heat = makeGroup('HeatRisk · experimental', 'https://www.wpc.ncep.noaa.gov/heatrisk/');
   const severe = makeGroup('Tornado, hail & wind', 'https://www.spc.noaa.gov/products/outlook/');
+  const publishSummary = () => onSummary({ rain: rain.tag.textContent, heat: heat.tag.textContent, severe: severe.tag.textContent });
   let generation = 0, activeContext = contextKey(), state = null, pendingContext = null;
   const row = (parent, label, reading, hint) => {
     const el = node('div', 'fd-context-item');
@@ -129,6 +130,7 @@ export function initForecastHazards(host) {
     if (!state || state.status) {
       const message = state?.status === 'outside' ? 'Available for locations in the contiguous United States.' : state?.status === 'coverage' ? 'Unable to verify US coverage. Official outlooks are unavailable for this location.' : 'Loading official outlooks…';
       for (const group of [rain, heat, severe]) { group.tag.textContent = state ? 'Unavailable' : 'Loading'; group.body.append(node('p', 'fd-note', message)); }
+      publishSummary();
       return;
     }
     const expire = p => p.status === 'available' && !fresh(p, Date.now()) ? {...p, status:'expired'} : p;
@@ -163,6 +165,7 @@ export function initForecastHazards(host) {
       });
     });
     severe.body.append(node('p', 'fd-note', 'SPC probabilities apply within 25 miles during each valid period. Hail: at least 1 inch; thunderstorm wind: at least 58 mph. CIG indicates conditional intensity if a storm occurs, not its probability.'));
+    publishSummary();
   }
 
   async function refresh() {
@@ -191,7 +194,7 @@ export function initForecastHazards(host) {
       state = {rain:settled[0], heat:settled[1], severe:settled[2]}; render();
     } finally { if (ticket === generation) pendingContext = null; }
   }
-  const schedule = () => everyVisible('forecast-hazards', 1800, host, refresh);
+  const schedule = () => everyVisible('forecast-hazards', 1800, visibilityTarget, refresh);
   window.addEventListener('wd:settings', () => {
     if (activeContext !== contextKey()) { activeContext = contextKey(); generation++; pendingContext = null; state = null; render(); schedule(); }
     else render();

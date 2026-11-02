@@ -6,6 +6,17 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.10.0] - 2026-11-01
+
+### Changed
+- Open Weather with Balanced Desk: a full-width row of ten aligned forecast cards, larger live gauges, a compact hourly outlook, and astronomy. Keep the main view within normal desktop windows without page scrolling; reflow for smaller screens.
+- Open detailed precipitation, visibility, astronomy, hazard, atmosphere, air-quality, and ground information in dialogs instead of extending the dashboard. Retain the existing forecast-day and gauge detail views.
+- Use existing live station and forecast data, preserve units, themes, selectable gauge styles and reduced-motion preferences, and keep HookEcho radar and station history available.
+
+### Added
+- NOAA WPC Winter Storm Severity Index (WSSI) overall Days 1–3 impacts for the selected location in the contiguous United States, with issue and validity times. Missing coverage stays unavailable rather than implying an all-clear.
+- NOAA NWPS forecast maximum, forecast time and source units for the configured river gauge, with flood stage where comparable. No nearby gauge is silently substituted; the gauge forecast is distinct from observations and does not establish property flood risk.
+
 ## [4.9.0] - 2026-11-01
 
 ### Added

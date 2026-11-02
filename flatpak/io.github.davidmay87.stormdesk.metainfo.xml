@@ -27,6 +27,7 @@
   <url type="bugtracker">https://github.com/d4vid87/stormdesk/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="4.10.0" date="2026-11-01"><description><p>Introduces Balanced Desk with aligned ten-day forecasts, larger live gauges, a compact desktop layout, details dialogs and responsive smaller screens. Adds mapped NOAA winter impacts and forecast maxima for configured river gauges where available.</p></description></release>
     <release version="4.7.0" date="2026-11-01"><description><p>Opens with animated forecast cards, sunrise, sunset, moon and twilight. HookEcho radar remains available on demand.</p></description></release>
     <release version="4.6.1" date="2026-10-31"><description><p>Integrates Orbit Glass gauges and five selectable icon styles above the full HookEcho radar. Adds weather reliability improvements, forecast models, saved places, sensor channels and archive tools.</p></description></release>
     <release version="4.5.1" date="2026-09-27"><description><p>Allows Omarchy and Hyprland to tile StormDesk beside another app.</p></description></release>

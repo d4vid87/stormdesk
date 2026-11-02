@@ -107,3 +107,9 @@ assert.equal(c.withForecastContext(primaryRain,extraRain).forecast.hourly[0].pre
 const offsetModel = {forecast:{hourly:[{time:5400,precip:0.5,precip_period:'preceding-hour',precip_source:'Open-Meteo'}]}};
 assert.equal(c.withForecastContext({forecast:{hourly:[{time:3600}]}},offsetModel).forecast.hourly[0].precip,undefined,'Half-hour timezone offsets cannot shift accumulation intervals');
 console.log('Forecast desk: hourly accumulation, visibility gaps, provider day boundaries, missing values and normalized atmosphere passed.');
+assert.equal(c.hourlyTrend([{air_temperature:null}]),null,'Missing temperatures do not create a zero line');
+const trend = c.hourlyTrend([{air_temperature:0,feels_like:-2},{air_temperature:null},{air_temperature:10}]);
+assert.equal((trend.temperature.match(/M/g)||[]).length,2,'Unknown intervals break the trend');
+assert.ok(!trend.temperature.includes('L'),'Unknown readings are not interpolated');
+assert.ok(trend.low < -2 && trend.high > 10,'Both series share a padded scale');
+assert.ok(!c.hourlyTrend([{air_temperature:0}]).temperature.includes('NaN'),'A single reading has a finite position');

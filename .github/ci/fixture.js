@@ -98,14 +98,8 @@ addEventListener('load', () => {
   console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height <= document.getElementById('radar-shelf').getBoundingClientRect().height + 2, 'Radar off leaves only the gauges, without an empty map area');
   console.assert(document.querySelectorAll('#forecast-hourly .fd-hour').length > 0, 'Forecast desk shows live hourly data');
   const sidebarOrder = [...document.getElementById('forecast-sidebar').children].map(el => el.id);
-  console.assert(sidebarOrder.join(',') === 'forecast-precip,outlook-astronomy,forecast-hazards,forecast-atmosphere,forecast-environment', 'Precipitation leads astronomy, hazards precede atmosphere');
+  console.assert(sidebarOrder.join(',') === 'forecast-precip,outlook-astronomy', 'Precipitation and astronomy share the hourly sidebar');
   console.assert(['forecast-insights','forecast-hazards','forecast-environment'].every(id => document.getElementById(id)), 'Forecast context, hazards and environment mount once');
-  console.assert(document.querySelector('#forecast-hourly .fd-hour-grid').textContent.includes('Visibility'), 'Hourly overview includes visibility');
-  const hourlyDetails = document.querySelector('.fd-hour-timeline');
-  hourlyDetails.open = true; hourlyDetails.dispatchEvent(new Event('toggle'));
-  console.assert(document.querySelectorAll('.fd-weather-table tbody tr').length > 20, 'Every hour is available beyond the three-hour overview');
-  console.assert(document.querySelector('.fd-weather-table').textContent.includes('Running total'), 'Precipitation timeline identifies its accumulation period');
-  hourlyDetails.open = false;
   console.assert(/\d+:\d{2}:\d{2}/.test(document.getElementById('clock-time').textContent), 'Clock includes seconds');
   radarButton.click();
   console.assert(!document.getElementById('desk-radar').hidden && document.getElementById('outlook-astronomy').hidden && radarButton.getAttribute('aria-pressed') === 'true', 'Radar view restores map');
@@ -130,9 +124,13 @@ addEventListener('load', () => {
   console.assert(firstDay.querySelector('.dc-pop').textContent === '0%', 'Clear list keeps rain chance uncluttered and preserves zero');
   console.assert(getComputedStyle(firstDay.querySelector('.dc-date')).display !== 'none' && document.querySelectorAll('.forecast-columns > span').length === 5, 'Clear list shows dates and labeled columns');
   console.assert(firstDay.getAttribute('aria-label').includes('high 78') || firstDay.getAttribute('aria-label').includes('High 78'), 'Forecast row describes its readings for screen readers');
-  document.querySelector('#daycards > .daycard').click();
-  console.assert(document.getElementById('forecast-dialog').open, 'Forecast day opens accessible details');
-  document.getElementById('forecast-dialog').close();
+  console.assert(firstDay.tagName === 'BUTTON' && firstDay.tabIndex === 0, 'Forecast days are native keyboard controls');
+  firstDay.focus({preventScroll:true}); firstDay.click();
+  const forecastDialog = document.getElementById('forecast-dialog');
+  console.assert(forecastDialog.open && forecastDialog.contains(document.activeElement), 'Forecast day opens modal details with focus inside');
+  console.assert(document.getElementById(forecastDialog.getAttribute('aria-labelledby'))?.textContent, 'Forecast details have an accessible title');
+  forecastDialog.close();
+  console.assert(document.activeElement === firstDay, 'Closing forecast details returns focus to the selected day');
   console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety cards stay outside collapsed analysis');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
   console.assert(document.querySelector('#daycards .dc-pop').textContent === '—', 'Unavailable rain chance is not zero');
@@ -161,7 +159,6 @@ addEventListener('load', () => {
     console.assert(['observatory-signals','advanced-outlook','activity-planner'].every(id => getComputedStyle(document.getElementById(id)).display === 'none'), 'Removed sections no longer appear on Weather');
     console.assert(getComputedStyle(document.getElementById('daycards')).display === 'grid', 'Forecast uses glass tile layout');
     console.assert(getComputedStyle(document.querySelector('#daycards .dc-cond')).display !== 'none', 'Forecast tiles show condition labels');
-    console.assert(getComputedStyle(document.querySelector('#daycards > .daycard')).gridColumnEnd === '-1', 'Today card spans the tile grid on small screens too');
     console.assert(document.querySelector('#outlook-moon-orb svg') && document.querySelectorAll('.twilight-card').length === 3, 'Astronomy renders a moon phase and three twilight cards');
     const animatedSky = document.documentElement.dataset.motion === 'full' && matchMedia('(prefers-reduced-motion: no-preference)').matches;
     console.assert((getComputedStyle(document.querySelector('.solar-trace')).animationName !== 'none') === animatedSky, 'Sky animation respects motion preference');
@@ -176,15 +173,43 @@ addEventListener('load', () => {
     console.assert([...document.querySelectorAll('[data-sky-value]')].every(el => el.textContent === '—'), 'Missing astronomy clears every visual reading');
     skySource.innerHTML = savedSky;
     await settle();
-    console.assert(document.querySelectorAll('.status-tile').length === 3, 'Status cards show air quality, moon and sunset');
-    for (const kind of ['aqi','sky','health']) {
-      document.querySelector(`[data-signal-detail="${kind}"]`).click();
-      console.assert(document.getElementById('signal-details').open && !document.querySelector(`#signal-details [data-panel="${kind}"]`).hidden, `Status detail opens original live source: ${kind}`);
-      document.getElementById('signal-details').close();
+    outlookButton.click(); await settle();
+    const contexts = [...document.querySelectorAll('#balanced-contexts > .balanced-card')];
+    console.assert(contexts.length === 4 && contexts.every(card => getComputedStyle(card).display !== 'none'), 'All four Balanced context cards remain visible');
+    const balancedDialog = document.getElementById('balanced-dialog');
+    for (const [label, selector] of [
+      ['Hazards & atmosphere details', '#forecast-hazards'],
+      ['Air & ground details', '#forecast-environment'],
+      ['River forecast details', null],
+      ['Winter impact details', null],
+      ['Forecast changes & normals', '#forecast-insights'],
+      ['Hourly detail', '.fd-hour-timeline'],
+      ['Sun & moon details', '.sky-details'],
+    ]) {
+      const button = [...document.querySelectorAll('#desk button')].find(el => el.getAttribute('aria-label') === label || el.textContent.trim() === label);
+      const source = selector && document.querySelector(selector), home = source?.parentElement;
+      console.assert(button?.tagName === 'BUTTON' && button.tabIndex === 0, label + ' is a named keyboard control');
+      button.focus({preventScroll:true}); button.click();
+      console.assert(balancedDialog.open && balancedDialog.contains(document.activeElement), label + ' opens a modal with focus inside');
+      console.assert(document.getElementById(balancedDialog.getAttribute('aria-labelledby'))?.textContent, label + ' has an accessible dialog title');
+      console.assert(balancedDialog.getBoundingClientRect().width <= innerWidth && balancedDialog.getBoundingClientRect().height <= innerHeight, label + ' fits the viewport');
+      if (source) console.assert(balancedDialog.contains(source), label + ' exposes the original live source');
+      if (selector === '.fd-hour-timeline') {
+        source.open = true; source.dispatchEvent(new Event('toggle'));
+        console.assert(source.querySelectorAll('.fd-weather-table tbody tr').length > 20, 'Every hour is available beyond the three-hour overview');
+        console.assert(source.textContent.includes('Running total'), 'Precipitation timeline identifies its accumulation period');
+        console.assert(source.querySelector('.fd-weather-table thead').textContent.includes('Visibility'), 'Hourly detail retains visibility for every hour');
+        source.open = false;
+      }
+      const nested = source?.querySelector('details'); if (nested) nested.open = true;
+      balancedDialog.close(); await settle();
+      if (nested) console.assert(!nested.open, label + ' collapses nested details so their next toggle refreshes data');
+      console.assert(!balancedDialog.open && document.activeElement === button, label + ' returns focus to its trigger');
+      if (source) console.assert(source.parentElement === home && source.closest('#balanced-details'), label + ' restores its live source after closing');
     }
     const aqi = document.getElementById('aqi-val'), oldAqi = aqi.textContent;
     aqi.textContent = '--'; await settle();
-    console.assert(document.getElementById('status-aqi-label').textContent === 'Reading unavailable', 'Missing AQI never shows Good');
+    console.assert(document.getElementById('status-aqi-label').textContent === 'Reading unavailable' && document.querySelector('#balanced-air .balanced-reading').textContent === 'Air quality unavailable', 'Missing AQI never shows Good in the shared source or Balanced card');
     aqi.textContent = oldAqi;
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77}})); await settle();
     console.assert(document.querySelector('.status-device').dataset.state === 'unknown', 'Unknown sensor status is not reporting');
@@ -209,27 +234,25 @@ addEventListener('load', () => {
     console.assert((getComputedStyle(document.querySelector('#daycards .dc-icon')).animationName !== 'none') === animatedSky, 'Forecast cards retain motion without animated SVG documents');
     console.assert((getComputedStyle(document.querySelector('.fd-hour[aria-pressed="true"] .fd-icon')).animationName !== 'none') === animatedSky, 'Selected hour animation respects motion preference');
     console.assert(desk.scrollWidth <= desk.clientWidth + 1, 'Forecast desk stays within the browser width');
-    if (innerWidth >= 1350 && innerHeight >= 900) {
-      console.assert([...document.querySelectorAll('#daycards > .daycard')].every(card => card.getBoundingClientRect().bottom <= innerHeight), 'All ten forecast days remain above the fold on desktop');
-    }
-    if (innerWidth > 1100) {
-      const forecastPanel = document.getElementById('observatory-forecast');
-      const height = forecastPanel.getBoundingClientRect().height;
-      const hourCell = document.querySelector('.fd-hour-cell');
-      const hourHeight = hourCell.getBoundingClientRect().height;
-      const expanded = document.createElement('details');
-      expanded.open = true; expanded.style.height = '800px'; expanded.style.flexShrink = '0';
-      document.getElementById('forecast-sidebar').append(expanded);
-      console.assert(Math.abs(forecastPanel.getBoundingClientRect().height - height) < 2, 'Expanded sidebar details do not stretch the ten-day cards');
-      console.assert(hourCell.getBoundingClientRect().height <= hourHeight + 2, 'Expanded sidebar details do not inflate hourly rows');
-      expanded.remove();
-    }
-    if (innerWidth >= 2400 && innerHeight >= 1200) {
-      const left = document.getElementById('observatory-left').getBoundingClientRect();
-      const right = document.getElementById('forecast-sidebar').getBoundingClientRect();
-      console.assert(Math.abs(left.bottom - right.bottom) < 2 && left.bottom >= innerHeight - 32, 'Both forecast columns fill the available height');
-      console.assert(desk.scrollHeight <= desk.clientHeight + 2, 'Ultrawide forecast fits without vertical overflow');
-      console.assert(parseFloat(getComputedStyle(document.querySelector('#g-rain b')).fontSize) > 36, 'Ultrawide readings scale up for readability');
+    if (innerWidth >= 1200 && innerHeight >= 900) {
+      const bounds = id => document.getElementById(id).getBoundingClientRect();
+      const grid = bounds('observatory-grid'), forecast = bounds('observatory-forecast');
+      const hourly = bounds('forecast-hourly'), sidebar = bounds('forecast-sidebar'), context = bounds('balanced-contexts');
+      const days = [...document.querySelectorAll('#daycards > .daycard')].map(card => card.getBoundingClientRect());
+      const readings = gauges.map(gauge => gauge.getBoundingClientRect());
+      const cards = contexts.map(card => card.getBoundingClientRect());
+      console.assert(days.every(day => Math.abs(day.top - days[0].top) < 2), 'All ten forecast days share one desktop row');
+      console.assert([...document.querySelectorAll('#daycards .dc-pop')].every(label => label.getBoundingClientRect().height >= 10), 'Every forecast rain chance retains readable height');
+      console.assert(readings.every(reading => Math.abs(reading.top - readings[0].top) < 2), 'All eight readings share one desktop row');
+      console.assert([forecast, context].every(row => Math.abs(row.left - grid.left) < 2 && Math.abs(row.right - grid.right) < 2), 'Forecast and context rows span the desk');
+      console.assert(forecast.top >= Math.max(...readings.map(reading => reading.bottom)) - 1, 'Forecast follows the readings without overlap');
+      console.assert(hourly.top >= forecast.bottom - 1 && sidebar.top >= forecast.bottom - 1 && hourly.right <= sidebar.left + 1, 'Hourly sits left of precipitation and sky below the forecast');
+      console.assert(context.top >= Math.max(hourly.bottom, sidebar.bottom) - 1 && cards.every(card => Math.abs(card.top - cards[0].top) < 2), 'Four context cards share the bottom row without overlap');
+      console.assert(context.bottom <= innerHeight + 1, 'Every context card remains above the fold');
+      console.assert(desk.scrollHeight <= desk.clientHeight + 2 && document.documentElement.scrollHeight <= innerHeight + 2 && document.body.scrollHeight <= innerHeight + 2, 'Balanced desktop needs no page or desk scrolling');
+    } else if (innerWidth <= 1100 || innerHeight < 900) {
+      console.assert(document.documentElement.scrollWidth <= innerWidth + 1, 'Narrow and short screens reflow without horizontal page overflow');
+      console.assert(document.documentElement.scrollHeight > innerHeight || desk.scrollHeight > desk.clientHeight, 'Narrow and short screens allow vertical scrolling for all content');
     }
     document.documentElement.dataset.fixture = 'ok';
   });

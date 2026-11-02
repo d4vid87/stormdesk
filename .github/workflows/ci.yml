@@ -45,6 +45,7 @@ jobs:
       - run: node scripts/check-forecast-hazards.mjs
       - run: node scripts/check-forecast-environment.mjs
       - run: node scripts/check-forecast-insights.mjs
+      - run: node scripts/check-balanced-context.mjs
       - run: node scripts/check-station-switch.mjs
       - run: node scripts/check-weather-reliability.mjs
       - run: node scripts/check-weather-providers.mjs

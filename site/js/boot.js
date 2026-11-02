@@ -977,7 +977,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-navigation-polish-490`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-balanced-desk-4100`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about

@@ -2,36 +2,20 @@
 
 # StormDesk
 
-**Your forecast. Your sky.** StormDesk opens with Forecast desk: ten animated forecast cards, a readable hourly outlook, compact astronomy, eight larger Orbit Glass gauges, and a bold seconds clock. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
+**Your forecast. Your sky.** StormDesk opens with Balanced Desk: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
 [Open the app](https://app.mystormdesk.com/) · [Download 4.9.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.9.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-![StormDesk 4.8.0: animated forecast cards and sun, moon and twilight with Orbit Glass gauges](docs/stormdesk-480-weather.jpg)
+![StormDesk 4.10.0 Balanced Desk with aligned forecasts, Orbit Glass gauges, hourly weather and compact context](docs/stormdesk-4100-balanced.jpg)
 
-*The 4.8.0 opening view, captured November 1, 2026 with labeled demo readings. Screenshots are not current weather.*
+*Balanced Desk · demo station readings; forecast and regional data shown for illustration. Captured November 1, 2026. Not current weather.*
 
-### What’s new in 4.9.0
+### What’s new in 4.10.0
 
-- **Hourly precipitation and visibility:** water-equivalent amounts, running totals, heaviest-hour timing, and visibility changes, with every hour available in an expandable table.
-- **Official hazard outlooks:** WPC excessive rainfall, experimental NOAA HeatRisk, and separate SPC tornado, hail, and wind probabilities with source and validity times. Coverage is the contiguous United States.
-- **Ground and nearby sky:** soil temperature/moisture model estimates and nearby observed ceiling/visibility, loaded when opened.
-- **Forecast context:** model ranges in day details, changes since the previous saved forecast, and temperature/monthly precipitation comparisons with a modeled 1991–2020 baseline. Incomplete periods and unavailable data remain explicit.
-- **Performance retained:** cached feeds, lazy specialist panels, and location-safe comparisons preserve the startup and rendering fixes from 4.8.1.
-
-### What’s new in 4.8.1
-
-- Fix duplicate startup and conflicting settings saves that repeatedly rebuilt the dashboard.
-- Adapt Auto motion to Linux software rendering while keeping Full motion selectable.
-- Reduce forecast animation work and fill wider and taller browser windows.
-
-### What’s new in 4.8.0
-
-- **Forecast desk:** all ten forecast days near the top, larger live gauges, and a centered hours/minutes/seconds clock.
-- **Readable hourly weather:** select the next 24 hours or tomorrow; inspect temperature, precipitation chance, wind, gusts, feels-like temperature, humidity, cloud cover and UV.
-- **More useful context:** upcoming precipitation, daily totals, visibility, cloud cover, estimated convective cloud base and freezing-level altitude. Coverage depends on the provider; unavailable readings stay clearly marked.
-- **Compact astronomy:** sunrise, sunset, daylight, moon phase, moonrise/set, golden hour and expandable twilight times beside the forecast.
-- **Five gauge styles:** Orbit Glass remains the default. Existing units, themes and reduced-motion settings are preserved.
-- **Full HookEcho radar:** switch to the actual viewer whenever needed. It unloads when you return to Forecast & sky.
+- **Balanced Desk:** ten aligned forecast cards span the page beneath larger live readings, with a compact hourly outlook below. The main Weather view fits normal desktop windows without page scrolling; smaller screens reflow naturally.
+- **Details when you need them:** open forecast, precipitation, visibility, astronomy, hazards, atmosphere, air-quality, and ground information in dialogs without stretching the dashboard.
+- **More local context:** mapped NOAA winter impacts and the forecast maximum for a configured NOAA river gauge, where those sources provide data. Forecast estimates, observations, coverage, and unavailable readings remain labeled.
+- **Live data throughout:** use current station readings and existing forecast services, with on-demand specialist feeds. Your units, themes, gauge styles, reduced-motion settings, HookEcho radar, and local archive remain available.
 
 ### Choose your setup
 
@@ -157,7 +141,7 @@ Use the address ending in `/public` for a read-only screen that cannot change se
 
 ## What you get
 
-- **Weather** — Forecast desk opens first with eight larger gauges, up to ten forecast days, hourly weather, compact astronomy and atmospheric context. Toggle the full HookEcho radar on when needed.
+- **Weather** — Balanced Desk opens first with larger gauges, up to ten aligned forecast days, hourly weather, and compact astronomy. Open details dialogs for more context, or toggle the full HookEcho radar on when needed.
 - **Local context** — nearby official alerts, local signals, sunrise and sunset, moon details, and device health when the source provides it.
 - **Radar** — live HookEcho radar with warnings and playback.
 - **History** — keyboard-accessible charts and reading tables, records, comparisons, rainfall events, and your weather archive.
@@ -188,11 +172,11 @@ Under **Settings → More tools → Weather sources, sensors & camera**, choose 
 
 | Forecast & sky | Searchable Settings |
 | --- | --- |
-| ![Animated forecast cards with sun, moon and twilight using demo data](docs/stormdesk-480-weather.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
+| ![Balanced Desk 4.10.0 with demo station readings and illustrative forecast context](docs/stormdesk-4100-balanced.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
 
 ### Five gauge styles
 
-Use **Gauge style** above the radar. These static close-ups show the first four gauges; the app includes animations for all eight.
+Use **Gauge style** in the weather shelf. These static close-ups show the first four gauges; the app includes animations for all eight.
 
 | Style | Preview |
 | --- | --- |
@@ -206,11 +190,11 @@ Graphite Silver is the fresh-install palette. **Settings → Appearance → Them
 
 ### On your phone
 
-The compact gauge shelf scrolls horizontally, leaving room for the map. Weather, Radar, and History remain one tap away.
+The layout reflows for phones and smaller windows. Weather, Radar, and History remain one tap away; details open separately so the main dashboard stays readable.
 
 <img src="docs/stormdesk-461-mobile.jpg" alt="StormDesk 4.6.1 on a phone-sized screen with Orbit Glass and HookEcho radar" width="300">
 
-All interface captures above use sample station data. Forecast, sensor, and regional alert availability depend on the connected sources.
+The Balanced Desk captures use demo station readings with forecast and regional data shown for illustration. Other interface captures use sample station data and retain their version labels. Screenshots are not current weather. Forecast, sensor, and regional alert availability depend on the connected sources.
 
 ## Supported weather stations
 

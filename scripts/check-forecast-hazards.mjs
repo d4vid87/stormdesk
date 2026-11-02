@@ -71,14 +71,14 @@ class Element {
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = children; this._text = ''; }
 }
-const listeners = {}, scheduled = [];
+const listeners = {}, scheduled = [], targets = [], summaries = [];
 let location = {lat:31,lon:-99}, resolveOld, requests = 0;
 class Clock extends Date { static now() { return now; } }
 const ui = vm.createContext({Date:Clock,URLSearchParams,
   document:{createElement:tag=>new Element(tag)},
   window:{addEventListener:(type,fn)=>listeners[type]=fn},
   coords:()=>location,cacheContext:()=>JSON.stringify(location),forecast:()=>null,
-  everyVisible:(name,seconds,host,fn)=>scheduled.push(fn),num:Math.round,U:{temp:()=> '°F'},
+  everyVisible:(name,seconds,host,fn)=>{targets.push(host);scheduled.push(fn);},num:Math.round,U:{temp:()=> '°F'},
   api:{
     pointInRing:geometry.pointInRing,
     nwsPoint:lat=>lat===31 ? new Promise(resolve=>{resolveOld=resolve;}) : Promise.resolve({properties:{cwa:'TEST'}}),
@@ -92,21 +92,31 @@ const ui = vm.createContext({Date:Clock,URLSearchParams,
   },
 });
 vm.runInContext(source,ui);
-const host = new Element('div');
-ui.initForecastHazards(host); ui.initForecastHazards(host);
+const host = new Element('div'), summaryHost = new Element('section');
+ui.initForecastHazards(host, summary => summaries.push(summary), summaryHost); ui.initForecastHazards(host);
 assert.equal(scheduled.length,1,'Initialize one visible-only scheduler even if called twice');
+assert.equal(targets[0],summaryHost,'Hidden details can poll through their visible summary card');
+assert.deepEqual({...summaries.at(-1)},{rain:'Loading',heat:'Loading',severe:'Loading'});
 const oldRequest = scheduled[0]();
 location = {lat:45,lon:-80}; listeners['wd:settings']();
 await scheduled[1]();
 assert.equal(requests,10,'One refresh loads three WPC layers, one HeatRisk point and six probabilities');
 assert.match(host.textContent,/Below mapped contours/);
-const currentText = host.textContent;
+assert.equal(summaries.at(-1).severe,'Below mapped contours');
+assert.equal(summaries.at(-1).rain,'Below 5% contour');
+const currentText = host.textContent, currentSummary = summaries.at(-1);
 resolveOld({properties:{cwa:'OLD'}});
 await oldRequest;
 assert.equal(host.textContent,currentText,'An old location cannot overwrite the new location');
+assert.equal(summaries.at(-1),currentSummary,'An old location cannot publish obsolete summary labels');
 assert.equal(requests,10,'Obsolete coverage requests do not launch hazard fetches');
 location = {lat:51.5,lon:0}; listeners['wd:settings']();
 await scheduled[2]();
 assert.match(host.textContent,/contiguous United States/);
 assert.doesNotMatch(host.textContent,/Below mapped contours/,'Unsupported coverage never looks like a clear outlook');
-console.log('Forecast hazards: polygons, validity, CIG, HeatRisk, overnight coverage and location-safe scheduling passed');
+assert.deepEqual({...summaries.at(-1)},{rain:'Unavailable',heat:'Unavailable',severe:'Unavailable'});
+location = {lat:33,lon:-97}; listeners['wd:settings']();
+ui.api.getJSON = async () => { throw Error('offline'); };
+await scheduled[3]();
+assert.deepEqual({...summaries.at(-1)},{rain:'Incomplete',heat:'Unavailable',severe:'Incomplete'},'Partial-source failures retain existing detail labels');
+console.log('Forecast hazards: polygons, validity, CIG, HeatRisk, overnight coverage, summary labels and location-safe scheduling passed');

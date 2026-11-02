@@ -91,4 +91,45 @@ ui.queueRender({id:5}); listeners['wd:forecast']({detail:{id:6}});frame();
 assert.equal(rendered.at(-1),'full:6','new forecasts cancel older queued frames');
 document.hidden=true;ui.queueRender({localObs:[7]});assert.equal(frames.size,0);
 document.hidden=false;listeners.visibilitychange();frame();assert.equal(rendered.at(-1),'local:7');
-console.log('Weather context: mixed sources, model coverage, freshness, retry backoff, isolated caches and immediate saved weather passed.');
+{
+  const nodes = Object.fromEntries(['aqi-val','aqi-label','aqi-detail'].map(id => [id,{textContent:'',className:'',dataset:{}}]));
+  const aqiListeners = {};
+  let place = {lat:35,lon:-97}, resolveAqi, stamps = 0;
+  const payload = value => ({hourly:{time:[new Date(now - 3600000).toISOString(),new Date(now + 3600000).toISOString()],us_aqi:[value,99],pm2_5:[5,6]}});
+  const aqi = vm.createContext({
+    Date: class extends Date { constructor(value) { super(value === undefined ? now : value); } },
+    coords:()=>place, $:id=>nodes[id], num:String,
+    window:{addEventListener:(type,fn)=>{aqiListeners[type]=fn;}},
+    stamp:()=>{stamps++;nodes['aqi-val'].dataset.ts=String(now);},
+    api:{aqi:()=>new Promise(resolve=>{resolveAqi=resolve;})},
+  });
+  vm.runInContext(desk.slice(desk.indexOf('const aqiLocation ='),desk.indexOf('export async function refreshObs')).replace(/^export /gm,''),aqi);
+  let request = aqi.refreshAqi();
+  resolveAqi(payload(32)); await request;
+  assert.equal(nodes['aqi-val'].textContent,'32');
+  assert.equal(nodes['aqi-label'].textContent,'Good');
+  aqiListeners['wd:settings']();
+  assert.equal(nodes['aqi-val'].textContent,'32','unrelated settings retain current-location AQI');
+  request = aqi.refreshAqi();
+  place = {lat:40,lon:-80}; aqiListeners['wd:settings']();
+  assert.equal(nodes['aqi-val'].textContent,'--','location changes immediately clear the source value');
+  assert.equal(nodes['aqi-label'].textContent,'Unavailable');
+  assert.equal(nodes['aqi-val'].dataset.ts,undefined);
+  resolveAqi(payload(20)); await request;
+  assert.equal(nodes['aqi-val'].textContent,'--','old-location requests cannot publish into the new location');
+  assert.equal(stamps,1,'discarded data is not marked fresh');
+  request = aqi.refreshAqi(); resolveAqi(payload(null)); await request;
+  assert.equal(nodes['aqi-label'].textContent,'Unavailable','missing AQI never becomes Good');
+  assert.equal(nodes['aqi-val'].dataset.ts,undefined,'missing AQI has no freshness timestamp');
+  request = aqi.refreshAqi(); resolveAqi(payload(80)); await request;
+  assert.equal(nodes['aqi-val'].textContent,'80','new-location data resumes normally');
+  assert.equal(nodes['aqi-label'].textContent,'Moderate');
+
+  const balanced = readFileSync(new URL('../site/js/balanced-desk.js',import.meta.url),'utf8');
+  nodes['aqi-val'].classList = {contains:()=>true};
+  const air = {main:{},summary:{}}, summary = vm.createContext({$:id=>nodes[id],air,soil:null,num:String,U:{temp:()=> '°F'}});
+  vm.runInContext(balanced.slice(balanced.indexOf('  function renderAir()'),balanced.indexOf('  new MutationObserver(renderAir)'))+'renderAir();',summary);
+  assert.equal(air.main.textContent,'Air quality outdated','stale source values cannot appear current in the summary');
+  assert.match(balanced,/attributeFilter:\['class', 'data-ts'\]/,'summary observes source freshness changes');
+}
+console.log('Weather context: source freshness, location-safe AQI, model coverage, retry backoff, isolated caches and immediate saved weather passed.');

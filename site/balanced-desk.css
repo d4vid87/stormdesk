@@ -1,0 +1,135 @@
+/* The desktop overview has four aligned rows; detail dialogs retain the full data. */
+#desk.balanced-desk #observatory-left { display:none!important; }
+#desk.balanced-desk:not(.outlook-view) #balanced-contexts { display:none; }
+#desk.balanced-desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,2fr) minmax(310px,1fr); gap:10px; }
+#desk.balanced-desk.outlook-view #observatory-forecast { grid-column:1/-1; grid-row:2; }
+#desk.balanced-desk.outlook-view #forecast-hourly { grid-column:1; grid-row:3; }
+#desk.balanced-desk.outlook-view #forecast-sidebar { grid-column:2; grid-row:3; gap:10px; }
+#desk.balanced-desk #balanced-contexts { grid-column:1/-1; grid-row:4; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+#desk.balanced-desk.outlook-view #forecast-coverage { margin:4px 0 6px; }
+#desk.balanced-desk.outlook-view #observatory-forecast .forecast-heading { gap:12px; }
+#desk.balanced-desk.outlook-view #observatory-forecast .forecast-heading .balanced-detail-link { margin:0 0 0 auto; }
+.balanced-detail-link { display:block; width:max-content; max-width:100%; padding:5px 0; margin-top:auto; border:0; background:none; color:var(--accent); cursor:pointer; font:600 11px var(--font); text-align:left; }
+.balanced-detail-link::after { content:' ↗'; }
+.balanced-detail-link:hover { text-decoration:underline; }
+#desk .balanced-card { display:flex; flex-direction:column; gap:7px; min-height:130px; }
+#desk .balanced-card h2 { font-size:14px; }
+.balanced-reading { font:600 clamp(16px,1.25vw,24px) var(--num); line-height:1.15; }
+.balanced-summary { margin:0; font-size:11px; line-height:1.45; color:var(--muted); }
+#balanced-dialog { width:min(760px,calc(100vw - 36px)); max-width:none; max-height:calc(100dvh - 36px); overflow:auto; padding:24px; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:16px; box-shadow:0 24px 100px #0009; }
+#balanced-dialog::backdrop { background:#0009; }
+#balanced-dialog h2 { margin:0 80px 20px 0; font-size:20px; }
+#balanced-dialog .balanced-close { float:right; padding:8px 14px; border:1px solid var(--line); border-radius:8px; background:var(--panel2); color:var(--text); cursor:pointer; }
+#balanced-detail-body { display:grid; gap:16px; clear:both; }
+#balanced-detail-body > * { margin:0; }
+#balanced-detail-body .sky-details { width:100%; }
+#balanced-detail-body .sky-details summary { display:none; }
+#desk.balanced-desk.outlook-view #balanced-detail-body .sky-footnote { display:block; }
+#balanced-dialog :focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.balanced-source { color:var(--accent); display:block; margin:16px 0; }
+#desk.balanced-desk.outlook-view .sky-footnote { display:none; }
+#desk.balanced-desk .fd-hour-chart { width:100%; height:65px; flex:none; overflow:visible; }
+.fd-hour-chart .temperature { stroke:#e7bf74; }
+.fd-hour-chart .feels { stroke:var(--muted); stroke-dasharray:4 5; }
+.fd-hour-chart path { fill:none; stroke-width:2; vector-effect:non-scaling-stroke; }
+.fd-hour-chart text { fill:var(--muted); font:11px var(--font); }
+.fd-chart-key { display:flex; gap:14px; font-size:10px; color:var(--muted); }
+.fd-chart-key span:first-child { color:#e7bf74; }
+@media(min-width:1200px) {
+  #desk.balanced-desk.outlook-view { --fd-reading:clamp(1px,min(.065vw,.09dvh),1.5px); --fd-text:clamp(1px,min(.0625vw,.08dvh),1.25px); }
+  #desk.balanced-desk.outlook-view #daycards { grid-template-columns:repeat(10,minmax(0,1fr)); gap:7px; }
+  html #desk.balanced-desk.outlook-view #daycards > .daycard { min-height:0; padding:7px 5px; gap:3px; justify-content:center; }
+  html #desk.balanced-desk.outlook-view #daycards .dc-head { flex-direction:row; justify-content:space-between; padding:0 3px; }
+  html #desk.balanced-desk.outlook-view #daycards .dc-icon,html #desk.balanced-desk.outlook-view #daycards .dc-icon :is(img,svg) { width:calc(52 * var(--fd-reading)); height:calc(52 * var(--fd-reading)); }
+  #desk.balanced-desk.outlook-view #observatory-forecast,.balanced-desk .fd-panel { padding:11px 13px; }
+  #desk.balanced-desk.outlook-view #gauges > .gauge { min-height:98px; padding:9px 10px; }
+  #desk.balanced-desk.outlook-view #gauges h3 { margin-bottom:5px; }
+  #desk.balanced-desk.outlook-view #gauges .ginner > span { margin-top:3px; }
+  #desk.balanced-desk.outlook-view #gauges .ginner b { font-weight:600; }
+  #desk.balanced-desk.outlook-view #forecast-sidebar { display:grid; grid-template-rows:.85fr 1.15fr; }
+  #desk.balanced-desk.outlook-view #outlook-astronomy { padding:10px 13px; display:grid; grid-template-columns:1fr 1fr; column-gap:14px; align-content:center; }
+  #desk.balanced-desk.outlook-view .sky-heading { grid-column:1/-1; }
+  #desk.balanced-desk.outlook-view .sky-heading h2 { font-size:14px; }
+  #desk.balanced-desk.outlook-view .solar-scene { grid-column:1/-1; min-height:45px; margin:4px 0 0; }
+  #desk.balanced-desk.outlook-view .solar-orbit { width:76px; height:35px; }
+  #desk.balanced-desk.outlook-view .solar-duration { top:26px; }
+  #desk.balanced-desk.outlook-view .solar-duration > strong { font-size:12px; }
+  #desk.balanced-desk.outlook-view .sun-events { padding:4px 0; }
+  #desk.balanced-desk.outlook-view .sun-events strong { font-size:18px; }
+  #desk.balanced-desk.outlook-view .lunar-scene { padding:5px 0; gap:9px; }
+  #desk.balanced-desk.outlook-view #outlook-moon-orb,#desk.balanced-desk.outlook-view #outlook-moon-orb svg { width:32px; height:32px; }
+  #desk.balanced-desk.outlook-view .lunar-copy h3 { font-size:12px; margin:0; }
+  #desk.balanced-desk.outlook-view .lunar-copy > p { font-size:9px; }
+  #desk.balanced-desk.outlook-view #outlook-moon-next { display:none; }
+  #desk.balanced-desk.outlook-view .moon-events { grid-column:2; grid-row:3; padding:5px 0; gap:8px; border-top:1px solid var(--line); }
+  #desk.balanced-desk.outlook-view .moon-events strong { font-size:11px; margin-top:3px; }
+  #desk.balanced-desk.outlook-view .moon-events span { font-size:8px; }
+  #desk.balanced-desk.outlook-view #outlook-astronomy > .balanced-detail-link { grid-column:1/-1; font-size:10px; }
+  .balanced-desk .fd-precip-lead { margin:7px 0; gap:8px; }
+  .balanced-desk .fd-precip-lead .fd-icon,.balanced-desk .fd-precip-lead .fd-icon :is(img,svg) { width:42px; height:42px; }
+  .balanced-desk .fd-precip-lead strong { font-size:17px; }
+  .balanced-desk .fd-rain-days { margin-top:4px; gap:10px; }
+  .balanced-desk .fd-rain-days > div { padding-top:5px; }
+  .balanced-desk .fd-rain-days strong { font-size:20px; margin:3px 0; }
+  .balanced-desk .fd-rain-days .fd-note { font-size:10px; }
+  #desk.balanced-desk .fd-hour-grid { flex:none; grid-template-columns:85px repeat(var(--hours,8),minmax(0,1fr)); }
+  .balanced-desk .fd-hour { padding:4px 2px; gap:2px; }
+  .balanced-desk .fd-hour .fd-icon,.balanced-desk .fd-hour .fd-icon :is(img,svg) { width:32px; height:32px; }
+  .balanced-desk .fd-hour strong { font-size:calc(22 * var(--fd-reading)); }
+  .balanced-desk .fd-hour-cell { padding:7px 3px; font-size:12px; }
+  .balanced-desk .fd-hour-summary { margin:6px 0 0; font-size:11px; }
+  .balanced-desk .fd-hour-detail { gap:4px; }
+  .balanced-desk .fd-hour-detail strong { font-size:16px; }
+  .balanced-desk .fd-hour-detail .fd-note { font-size:10px; }
+  .balanced-desk #forecast-hourly > .fd-note { margin:4px 0; }
+  .balanced-desk #forecast-hourly > .balanced-detail-link { position:absolute; right:13px; bottom:7px; }
+  .balanced-desk #forecast-hourly { padding-bottom:26px; }
+  #desk.balanced-desk .balanced-card { min-height:0; gap:5px; }
+  #desk.balanced-desk .balanced-card .balanced-summary { font-size:10px; }
+}
+/* Short windows, small screens and enlarged text keep natural scrolling instead of clipping data. */
+@media(min-width:1200px) and (min-height:900px) {
+  #desk.balanced-desk.outlook-view.active { min-height:calc(100dvh - 64px); }
+  #desk.balanced-desk.outlook-view #desk-stack { flex:1; }
+  #desk.balanced-desk.outlook-view #observatory-grid { flex:1; grid-template-rows:auto minmax(175px,.7fr) minmax(340px,1.35fr) minmax(122px,.55fr); }
+  #desk.balanced-desk.outlook-view #forecast-hourly { justify-content:space-between; }
+}
+@media(max-width:1199px) {
+  #desk.balanced-desk #balanced-contexts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #desk.balanced-desk.outlook-view #forecast-sidebar { grid-column:2; grid-row:3; }
+  .balanced-desk .fd-hour-chart { height:75px; }
+}
+@media(max-width:760px) {
+  #desk.balanced-desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,1fr); }
+  #desk.balanced-desk.outlook-view #forecast-sidebar { grid-column:1; grid-row:4; }
+  #desk.balanced-desk #balanced-contexts { grid-row:5; }
+  #desk.balanced-desk.outlook-view .forecast-heading { flex-wrap:wrap; }
+  #desk.balanced-desk.outlook-view #observatory-forecast .forecast-heading .balanced-detail-link { margin:0; }
+}
+@media(max-width:450px) { #desk.balanced-desk #balanced-contexts { grid-template-columns:1fr; } }
+@media(min-width:1200px) {
+  #desk.balanced-desk.outlook-view #forecast-sidebar { grid-template-columns:minmax(0,1fr); }
+  #desk.balanced-desk.outlook-view #outlook-astronomy { grid-column:auto; grid-row:auto; }
+  #desk.balanced-desk.outlook-view #observatory-heading { padding:0; }
+  #desk.balanced-desk.outlook-view #gauge-style { min-height:30px; padding:4px 9px; }
+  #desk.balanced-desk.outlook-view #gauge-style .wx-icon { width:24px; height:24px; }
+}
+@media(min-width:1200px) and (min-height:900px) {
+  #desk.balanced-desk.outlook-view.active { min-height:0; height:100%; }
+  #desk.balanced-desk.outlook-view #desk-stack,#desk.balanced-desk.outlook-view #observatory-grid { min-height:0; }
+}
+@media(min-width:1200px) {
+  html #desk.balanced-desk.outlook-view #daycards > .daycard { min-height:148px; }
+  html #desk.balanced-desk.outlook-view #daycards :is(.dc-head,.dc-icon,.dc-temp,.dc-pop,.dc-wind) { flex-shrink:0; }
+  html #desk.balanced-desk.outlook-view #daycards .dc-pop { min-height:13px; margin:0; }
+  #desk.balanced-desk.outlook-view #observatory-forecast .forecast-heading { align-items:center; min-height:24px; }
+  #desk.balanced-desk.outlook-view #observatory-forecast .forecast-heading .balanced-detail-link { padding:2px 0; line-height:1.3; }
+  #desk.balanced-desk.outlook-view #observatory-forecast .forecast-heading h2 { margin:0; }
+}
+@media(min-width:1200px) and (min-height:900px) {
+  #desk.balanced-desk.outlook-view #observatory-grid { grid-template-rows:auto minmax(220px,.85fr) minmax(340px,1.3fr) minmax(122px,.45fr); }
+}
+@media(min-width:1200px) {
+  #desk.balanced-desk.outlook-view #forecast-hourly { padding-bottom:26px; }
+  #desk.balanced-desk .fd-hour-chart { height:55px; }
+}

@@ -1,7 +1,7 @@
 import { settings, num, U, deg2compass, timeStr } from './app.js';
 import { forecast, cacheContext } from './desk.js';
 import { wx } from './icons.js';
-import { initForecastHazards } from './forecast-hazards.js';
+import { initBalancedDesk } from './balanced-desk.js';
 import { initForecastEnvironment } from './forecast-environment.js';
 import { initForecastInsights } from './forecast-insights.js';
 
@@ -15,6 +15,22 @@ export function forecastHours(fc, tomorrow = false, count = 8, now = Date.now() 
   const hours = (fc?.forecast?.hourly || []).filter(h => Number.isFinite(h.time) && (tomorrow ? h.time >= start : h.time > start) && h.time < end);
   const step = 24 * 3600 / count;
   return hours.filter(h => (h.time - (hours[0]?.time || 0)) % step < 3600).slice(0, count);
+}
+
+// Break a line at missing readings instead of drawing through unknown weather.
+export function hourlyTrend(hours) {
+  const values = hours.flatMap(h => [h.air_temperature, h.feels_like]).filter(Number.isFinite);
+  if (!values.length) return null;
+  const low = Math.floor(Math.min(...values) - 2), high = Math.ceil(Math.max(...values) + 2);
+  const path = key => {
+    let connected = false;
+    return hours.map((h, i) => {
+      if (!Number.isFinite(h[key])) { connected = false; return ''; }
+      const point = `${(40 + i * 740 / Math.max(1, hours.length - 1)).toFixed(1)},${(52 - (h[key] - low) * 42 / (high - low)).toFixed(1)}`;
+      const segment = `${connected ? 'L' : 'M'}${point}`; connected = true; return segment;
+    }).join(' ');
+  };
+  return {low, high, temperature:path('air_temperature'), feels:path('feels_like')};
 }
 
 export function hourlyWeather(fc, tomorrow = false, now = Date.now() / 1000) {
@@ -119,6 +135,7 @@ export function initForecastDesk() {
   });
   hourly.append(controls);
   const note = node('p', 'fd-note'); hourly.append(note);
+  const chart = node('div'); chart.className = 'fd-trend'; hourly.append(chart);
   const table = node('div', 'fd-hour-grid'); hourly.append(table);
   const detail = node('div', 'fd-hour-detail'); detail.setAttribute('aria-live', 'polite'); hourly.append(detail);
   const timeline = node('details', 'fd-hour-timeline');
@@ -133,12 +150,13 @@ export function initForecastDesk() {
   const precipBody = node('div'); precip.append(precipBody);
   sidebar.append($('outlook-astronomy'));
   const hazards = panel('forecast-hazards', 'Local hazard outlooks', sidebar);
-  initForecastHazards(hazards);
+
   const atmosphere = panel('forecast-atmosphere', 'Atmosphere', sidebar);
   const airBody = node('div', 'fd-air-grid'); atmosphere.append(airBody);
   const sourceNote = node('p', 'fd-note'); atmosphere.append(sourceNote);
   const environment = panel('forecast-environment', 'Ground & nearby sky', sidebar);
   initForecastEnvironment(environment);
+  const balanced = initBalancedDesk();
   let supplemental = null;
   let fc = forecast(), context = cacheContext('forecast'), tomorrow = false, selected = null;
   const narrow = matchMedia('(max-width: 1100px)');
@@ -185,6 +203,21 @@ export function initForecastDesk() {
     buttons.forEach((b, i) => b.setAttribute('aria-pressed', String(tomorrow === !!i)));
     note.textContent = `${fc?._cached ? 'Saved forecast' : 'Forecast'} · ${narrow.matches ? 6 : 3}-hour steps · device local time`;
     table.replaceChildren(); detail.replaceChildren();
+    chart.replaceChildren();
+    const trend = hourlyTrend(hours);
+    if (trend) {
+      const key = node('div', 'fd-chart-key'); key.append(node('span', '', `— Temperature ${U.temp()}`), node('span', '', '┄ Feels like'));
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'fd-hour-chart'); svg.setAttribute('viewBox', '0 0 800 60'); svg.setAttribute('preserveAspectRatio', 'none');
+      svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', `Hourly temperature and feels-like trend. Scale ${trend.low} to ${trend.high} ${U.temp()}. Select an hour below for values.`);
+      for (const key of ['temperature', 'feels']) {
+        const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('class', key); path.setAttribute('d', trend[key]); svg.append(path);
+      }
+      for (const [label, y] of [[trend.high,14],[trend.low,54]]) {
+        const text = document.createElementNS(svg.namespaceURI, 'text'); text.setAttribute('x','0'); text.setAttribute('y',String(y)); text.textContent = label + '°'; svg.append(text);
+      }
+      chart.append(key, svg);
+    }
     if (!hours.length) { table.append(node('p', 'fd-note', 'Hourly forecast unavailable for this period.')); return; }
     const hour = hours.find(h => h.time === selected) || hours[0]; selected = hour.time;
     table.style.setProperty('--hours', hours.length);
@@ -196,7 +229,7 @@ export function initForecastDesk() {
       b.append(node('span', '', time(h.time)), icon(h.icon), node('strong', '', `${num(h.air_temperature)}°`));
       b.onclick = () => { selected = h.time; renderHourly(); table.querySelector('[aria-pressed="true"]')?.focus({preventScroll:true}); }; table.append(b);
     });
-    for (const [label, key] of [['Rain chance', 'precip_probability'], [`Precip / hour · ${U.precip()}`, 'precip'], ['Visibility', 'visibility'], [`Wind · ${U.wind()}`, 'wind_avg'], [`Gust · ${U.wind()}`, 'wind_gust']]) {
+    for (const [label, key] of [['Rain chance', 'precip_probability'], [`Wind · ${U.wind()}`, 'wind_avg'], [`Gust · ${U.wind()}`, 'wind_gust']]) {
       table.append(node('span', 'fd-hour-label', label));
       hours.forEach(h => {
         const cell = node('div', `fd-hour-cell${h.time === selected ? ' selected' : ''}`, key === 'precip_probability' ? chance(h[key]) : key === 'visibility' ? distance(h[key]) : key === 'precip' ? num(h.precip_period === 'preceding-hour' ? h[key] : null, 2) : num(h[key]));
@@ -231,6 +264,7 @@ export function initForecastDesk() {
       value('Cloud cover', chance(c.cloud_cover), 'Forecast estimate'),
       value('Convective cloud base', height(c.cloud_base_estimate), 'Estimated above ground · not a ceiling'),
       value('Freezing level', height(c.freezing_level), 'Model altitude above sea level'));
+    balanced.updateAtmosphere(c);
     atmosphere.title = 'Unavailable provider readings are shown as —. Cloud base is a temperature/dew-point approximation for convective clouds.';
   }
   let dirty = true;

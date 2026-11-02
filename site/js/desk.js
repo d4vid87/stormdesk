@@ -229,18 +229,33 @@ export async function refreshAlerts() {
   dismissStale('severe', new Set(feats.map((f) => key(f.properties))));
 }
 
+const aqiLocation = () => { const c = coords(); return `${c.lat},${c.lon}`; };
+let aqiContext = aqiLocation();
+window.addEventListener('wd:settings', () => {
+  const next = aqiLocation();
+  if (next === aqiContext) return;
+  aqiContext = next;
+  const value = $('aqi-val');
+  value.textContent = '--'; value.className = ''; delete value.dataset.ts;
+  $('aqi-label').textContent = 'Unavailable';
+  $('aqi-detail').textContent = 'Waiting for current air quality data';
+});
+
 export async function refreshAqi() {
   if (coords().lat == null) return;
+  const requestContext = aqiLocation();
   const j = await api.aqi();
+  if (requestContext !== aqiLocation()) return;
   const idx = j.hourly.time.findIndex((t) => new Date(t) > new Date());
   // No future hour left in the payload means the last one is the current one.
   const i = Math.min(Math.max(idx === -1 ? j.hourly.time.length - 1 : idx - 1, 0), j.hourly.time.length - 1);
-  const v = j.hourly.us_aqi[i];
-  $('aqi-val').textContent = num(v);
-  $('aqi-label').textContent = aqiLabel(v);
-  $('aqi-val').className = `aqi-${aqiBand(v)}`;
+  const v = j.hourly.us_aqi[i], known = Number.isFinite(v) && v >= 0;
+  $('aqi-val').textContent = known ? num(v) : '--';
+  $('aqi-label').textContent = known ? aqiLabel(v) : 'Unavailable';
+  $('aqi-val').className = known ? `aqi-${aqiBand(v)}` : '';
   $('aqi-detail').textContent = `PM2.5 ${num(j.hourly.pm2_5[i], 1)} µg/m³`;
-  stamp('aqi-val', 1800);
+  if (known) stamp('aqi-val', 1800);
+  else delete $('aqi-val').dataset.ts;
 }
 
 const aqiBand = (v) => (v <= 50 ? 'good' : v <= 100 ? 'mod' : v <= 150 ? 'usg' : v <= 200 ? 'bad' : 'vbad');
