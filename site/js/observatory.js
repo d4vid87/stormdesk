@@ -2,7 +2,7 @@
 import { initStatusCards } from './status-cards.js';
 import { initForecastDesk } from './forecast-desk.js';
 import { renderDayForecastRange } from './forecast-insights.js';
-import { styles, gaugeStyle } from './gauge-icons.js';
+import { styles, gaugeStyle, icon as gaugePreview } from './gauge-icons.js';
 import { settings, saveSettings, num, U, deg2compass, msToWind } from './app.js';
 import { forecast as deskForecast } from './desk.js';
 const $ = id => document.getElementById(id);
@@ -75,12 +75,41 @@ export function initObservatory() {
   shelf.append($('gauges'));
   const controls = document.createElement('div');
   controls.className = 'gauge-style-control';
-  controls.innerHTML = '<label for="gauge-style">Gauge style</label><select id="gauge-style"></select>';
-  const select = controls.querySelector('select');
-  styles.forEach(style => select.add(new Option(style.name + (style.id === 'orbit' ? ' · default' : ''), style.id)));
-  select.value = gaugeStyle(settings().gaugeStyle);
-  select.addEventListener('change', () => saveSettings({gaugeStyle: gaugeStyle(select.value)}));
-  window.addEventListener('wd:settings', () => { select.value = gaugeStyle(settings().gaugeStyle); });
+  const trigger = document.createElement('button');
+  trigger.id = 'gauge-style'; trigger.type = 'button';
+  trigger.setAttribute('aria-haspopup', 'dialog');
+  trigger.setAttribute('aria-controls', 'gauge-style-dialog');
+  const chooser = document.createElement('dialog');
+  chooser.id = 'gauge-style-dialog';
+  chooser.setAttribute('aria-labelledby', 'gauge-style-title');
+  chooser.innerHTML = '<div class="gauge-style-heading"><div><span class="gauge-style-eyebrow">MAKE IT YOURS</span><h2 id="gauge-style-title">Choose your instruments</h2><p>Five distinct looks. Your live readings, your style.</p></div><form method="dialog"><button type="submit" aria-label="Close gauge styles" autofocus>×</button></form></div><div class="gauge-style-options" role="group" aria-label="Gauge styles"></div><p class="gauge-style-footnote">Orbit Glass is the default · Motion follows your appearance settings.</p>';
+  const choices = chooser.querySelector('.gauge-style-options');
+  styles.forEach(style => {
+    const button = document.createElement('button');
+    button.type = 'button'; button.dataset.gaugeStyle = style.id;
+    button.title = style.description;
+    button.innerHTML = `<span class="gauge-style-status">${style.id === 'orbit' ? 'DEFAULT' : 'STYLE 0' + (styles.indexOf(style) + 1)}<span class="gauge-style-check" aria-hidden="true">✓</span></span><span class="gauge-style-demo" aria-hidden="true">${gaugePreview('Rain', style.id)}${gaugePreview('Wind', style.id)}</span><strong>${style.name}</strong><span class="gauge-style-tag">${style.tag}</span>`;
+    button.setAttribute('aria-label', style.name + (style.id === 'orbit' ? ', default' : ''));
+    button.addEventListener('click', () => {
+      saveSettings({gaugeStyle: style.id});
+      chooser.close(); trigger.focus({preventScroll:true});
+    });
+    choices.append(button);
+  });
+  let currentStyle;
+  const syncStyle = () => {
+    const selected = gaugeStyle(settings().gaugeStyle);
+    if (currentStyle === selected) return;
+    currentStyle = selected;
+    const style = styles.find(style => style.id === selected);
+    trigger.innerHTML = `${gaugePreview('Rain', selected)}<span><small>GAUGE STYLE</small><b>${style.name}</b></span><span class="gauge-style-chevron" aria-hidden="true">⌄</span>`;
+    trigger.setAttribute('aria-label', 'Gauge style: ' + style.name + '. Choose a style');
+    choices.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.gaugeStyle === selected)));
+  };
+  trigger.addEventListener('click', () => chooser.showModal());
+  window.addEventListener('wd:settings', syncStyle);
+  syncStyle();
+  controls.append(trigger); document.body.append(chooser);
   shelf.append(controls);
   $('observatory-radar').prepend(shelf);
   const pauseIcons = () => document.documentElement.toggleAttribute('data-gauges-paused', document.hidden || !desk.classList.contains('active'));

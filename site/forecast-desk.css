@@ -170,7 +170,6 @@ html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-
   #desk.outlook-view #observatory-left { grid-column:1; grid-row:2!important; }
   #forecast-sidebar { grid-column:1; grid-row:3; }
   #desk.outlook-view #gauges { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  #desk.outlook-view .gauge-style-control label { display:none; }
   #desk.outlook-view #daycards { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .fd-hour-grid { grid-template-columns:65px repeat(var(--hours,4),minmax(0,1fr)); }
   .fd-hour > span:first-child { font-size:10px; }

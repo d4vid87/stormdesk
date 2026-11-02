@@ -160,8 +160,7 @@ html header h1 { font-size:23px; }
 #desk #gauges .ginner > span { display:none; }
 #desk #gauges .gauge:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .gauge-style-control { padding:6px 9px; display:flex; flex-direction:column; justify-content:center; gap:3px; border-left:1px solid var(--line); }
-.gauge-style-control label { font-size:10px; color:var(--muted); }
-.gauge-style-control select { width:155px; min-height:30px; font-size:11px; padding:4px; }
+
 #desk #desk-radar { position:relative; inset:auto; flex:1; width:100%; height:auto!important; min-height:0; }
 #desk #desk-radar-frame, #desk #desk-radar-still { position:absolute; inset:0; }
 #desk #desk-radar-caption { bottom:0; pointer-events:none; background:var(--panel); padding:4px 8px; font-size:10px; }
@@ -170,7 +169,6 @@ html header h1 { font-size:23px; }
 @media(max-width:1100px) {
   #desk #radar-shelf { flex-direction:column; }
   .gauge-style-control { flex-direction:row; align-items:center; justify-content:flex-end; padding:2px 8px; border:0; }
-  .gauge-style-control select { min-height:28px; }
   #desk #hero-alerts { flex-basis:auto; }
 }
 @media(max-width:700px) {

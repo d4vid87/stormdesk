@@ -106,7 +106,6 @@ export function initForecastDesk() {
 
   const sidebar = node('aside'); sidebar.id = 'forecast-sidebar';
   sidebar.setAttribute('aria-label', 'Sky and atmosphere');
-  sidebar.append($('outlook-astronomy'));
   $('observatory-grid').append(sidebar);
   const panel = (id, title, parent) => {
     const box = node('section', 'fd-panel'); box.id = id;
@@ -132,11 +131,12 @@ export function initForecastDesk() {
   $('observatory-forecast').append(insights); initForecastInsights(insights);
   const precip = panel('forecast-precip', 'Precipitation outlook', sidebar);
   const precipBody = node('div'); precip.append(precipBody);
+  sidebar.append($('outlook-astronomy'));
+  const hazards = panel('forecast-hazards', 'Local hazard outlooks', sidebar);
+  initForecastHazards(hazards);
   const atmosphere = panel('forecast-atmosphere', 'Atmosphere', sidebar);
   const airBody = node('div', 'fd-air-grid'); atmosphere.append(airBody);
   const sourceNote = node('p', 'fd-note'); atmosphere.append(sourceNote);
-  const hazards = panel('forecast-hazards', 'Local hazard outlooks', sidebar);
-  initForecastHazards(hazards);
   const environment = panel('forecast-environment', 'Ground & nearby sky', sidebar);
   initForecastEnvironment(environment);
   let supplemental = null;

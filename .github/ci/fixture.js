@@ -80,7 +80,14 @@ addEventListener('load', () => {
   console.assert(gauges.every(el => el.querySelector('.wx-orbit svg')), 'All eight readings default to Orbit Glass');
   console.assert(document.querySelector('#observatory-radar #gauges'), 'Gauges are integrated into radar');
   const stylePicker = document.getElementById('gauge-style');
-  console.assert(stylePicker.options.length === 5, 'All five styles ship');
+  const styleDialog = document.getElementById('gauge-style-dialog');
+  const styleChoices = [...styleDialog.querySelectorAll('[data-gauge-style]')];
+  console.assert(styleChoices.length === 5 && styleChoices.every(button => button.querySelectorAll('.wx-icon').length === 2), 'All five styles have live icon previews');
+  stylePicker.click();
+  console.assert(styleDialog.open && styleDialog.querySelector('[aria-pressed=true]').dataset.gaugeStyle === 'orbit', 'Chooser opens with saved default selected');
+  console.assert(styleDialog.getBoundingClientRect().width <= innerWidth && styleDialog.getBoundingClientRect().height <= innerHeight, 'Style chooser fits the viewport');
+  styleDialog.querySelector('[aria-label="Close gauge styles"]').click();
+  console.assert(!styleDialog.open, 'Style chooser closes without changing the style');
   const outlookButton = document.querySelector('[data-weather-view="outlook"]');
   const radarButton = document.querySelector('[data-weather-view="radar"]');
   outlookButton.click();
@@ -90,7 +97,8 @@ addEventListener('load', () => {
   console.assert(JSON.parse(localStorage.getItem('wd.settings')).deskRadar === false && !document.getElementById('set-desk-radar').checked, 'View choice persists and syncs Settings');
   console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height <= document.getElementById('radar-shelf').getBoundingClientRect().height + 2, 'Radar off leaves only the gauges, without an empty map area');
   console.assert(document.querySelectorAll('#forecast-hourly .fd-hour').length > 0, 'Forecast desk shows live hourly data');
-  console.assert(document.querySelector('#forecast-sidebar #outlook-astronomy'), 'Astronomy sits directly below the gauges on the right');
+  const sidebarOrder = [...document.getElementById('forecast-sidebar').children].map(el => el.id);
+  console.assert(sidebarOrder.join(',') === 'forecast-precip,outlook-astronomy,forecast-hazards,forecast-atmosphere,forecast-environment', 'Precipitation leads astronomy, hazards precede atmosphere');
   console.assert(['forecast-insights','forecast-hazards','forecast-environment'].every(id => document.getElementById(id)), 'Forecast context, hazards and environment mount once');
   console.assert(document.querySelector('#forecast-hourly .fd-hour-grid').textContent.includes('Visibility'), 'Hourly overview includes visibility');
   const hourlyDetails = document.querySelector('.fd-hour-timeline');
@@ -103,7 +111,10 @@ addEventListener('load', () => {
   console.assert(!document.getElementById('desk-radar').hidden && document.getElementById('outlook-astronomy').hidden && radarButton.getAttribute('aria-pressed') === 'true', 'Radar view restores map');
   const rainBeforeStyle = document.querySelector('#g-rain .ginner b').textContent;
   for (const style of ['chrome','neon','dial','pixel','orbit']) {
-    stylePicker.value = style; stylePicker.dispatchEvent(new Event('change'));
+    stylePicker.click();
+    styleChoices.find(button => button.dataset.gaugeStyle === style).click();
+    console.assert(!styleDialog.open && styleDialog.querySelector('[aria-pressed=true]').dataset.gaugeStyle === style, 'Choosing a style closes the dialog and updates selection');
+    console.assert(document.activeElement === stylePicker && stylePicker.querySelector('.wx-' + style), 'Focus and current preview return to the chooser button');
     console.assert(gauges.every(el => el.querySelector('.wx-' + style)), 'Style updates all live icons: ' + style);
     console.assert(JSON.parse(localStorage.getItem('wd.settings')).gaugeStyle === style, 'Style is saved: ' + style);
     console.assert(document.querySelector('#g-rain .ginner b').textContent === rainBeforeStyle, 'Style preserves readings');
