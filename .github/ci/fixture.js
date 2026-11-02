@@ -194,6 +194,15 @@ addEventListener('load', () => {
     if (innerWidth >= 1350 && innerHeight >= 900) {
       console.assert([...document.querySelectorAll('#daycards > .daycard')].every(card => card.getBoundingClientRect().bottom <= innerHeight), 'All ten forecast days remain above the fold on desktop');
     }
+    if (innerWidth > 1100) {
+      const forecastPanel = document.getElementById('observatory-forecast');
+      const height = forecastPanel.getBoundingClientRect().height;
+      const expanded = document.createElement('div');
+      expanded.style.height = '800px'; expanded.style.flexShrink = '0';
+      document.getElementById('forecast-sidebar').append(expanded);
+      console.assert(Math.abs(forecastPanel.getBoundingClientRect().height - height) < 2, 'Expanded sidebar details do not stretch the ten-day cards');
+      expanded.remove();
+    }
     if (innerWidth >= 2400 && innerHeight >= 1200) {
       const left = document.getElementById('observatory-left').getBoundingClientRect();
       const right = document.getElementById('forecast-sidebar').getBoundingClientRect();

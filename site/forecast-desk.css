@@ -12,7 +12,7 @@
   #desk.outlook-view #observatory-heading { flex:none; }
   #desk.outlook-view #desk-stack { display:flex; flex-direction:column; flex:1 0 auto; width:100%; margin:0; }
   #desk.outlook-view #observatory-grid { flex:1 0 auto; width:100%; margin:0; grid-template-rows:auto 1fr; align-items:stretch; }
-  #desk.outlook-view #observatory-forecast { display:flex; flex-direction:column; flex:1; }
+  #desk.outlook-view #observatory-forecast { display:flex; flex-direction:column; flex:none; }
   #desk.outlook-view #daycards { flex:1; }
   #desk.outlook-view #forecast-hourly { display:flex; flex-direction:column; flex:1.35; }
   #desk.outlook-view .fd-hour-grid { flex:1; }
