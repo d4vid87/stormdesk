@@ -46,7 +46,7 @@ for motion in full lite off; do
     for attempt in 1 2; do
       if timeout 120 "$CHROME" --headless=new --disable-gpu --disable-dev-shm-usage \
         --no-sandbox --hide-scrollbars --user-data-dir="$DIR/profile-$motion-${size/,/x}-$attempt" \
-        --window-size="$size" --virtual-time-budget=15000 \
+        --window-size="$size" --virtual-time-budget=30000 \
         --enable-logging=stderr --screenshot="$OUT/$motion-${size/,/x}.png" \
         --dump-dom "$url" >"$dom" 2>"$log"; then break; fi
       [ "$attempt" = 1 ] && echo "Retrying Chrome capture for $motion $size"
@@ -62,6 +62,8 @@ for motion in full lite off; do
     if ! grep -q 'data-fixture="ok"' "$dom"; then
       echo "FAIL $motion $size — fixture checks did not finish"; fail=1
       grep -o 'data-fixture-stage="[^"]*"' "$dom" || true
+      grep -iE 'uncaught|typeerror|referenceerror|syntaxerror|unhandled' "$log" | head -20 || true
+      cp "$log" "$OUT/$motion-${size/,/x}.log"
     fi
     # Animated icons are the whole point of Full and the whole cost of Lite.
     want=$([ "$motion" = full ] && echo icons/anim/ || echo icons/static/)

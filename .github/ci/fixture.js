@@ -156,6 +156,7 @@ addEventListener('load', () => {
     console.assert(document.getElementById('observatory-local').textContent.includes('gusts'), 'Local signals refresh with station observations');
     // These checks await MutationObserver updates, not animation frames, which headless virtual time can starve.
     const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+    document.documentElement.dataset.fixtureStage = 'astronomy';
     await settle();
     console.assert(['observatory-signals','advanced-outlook','activity-planner'].every(id => getComputedStyle(document.getElementById(id)).display === 'none'), 'Removed sections no longer appear on Weather');
     console.assert(getComputedStyle(document.getElementById('daycards')).display === 'grid', 'Forecast uses glass tile layout');
@@ -169,11 +170,14 @@ addEventListener('load', () => {
     console.assert(document.querySelector('[data-sky-value="Sunrise"]').textContent !== '—', 'Sunrise is promoted into the solar scene');
     const savedSky = skySource.innerHTML;
     skySource.innerHTML = '<div>Sun and twilight times unavailable for this location</div>';
+    document.documentElement.dataset.fixtureStage = 'astronomy-unavailable';
     await settle();
     console.assert(document.getElementById('outlook-sky-times').textContent === skySource.textContent, 'Unavailable source replaces old astronomy times with an explanation');
     console.assert([...document.querySelectorAll('[data-sky-value]')].every(el => el.textContent === '—'), 'Missing astronomy clears every visual reading');
     skySource.innerHTML = savedSky;
+    document.documentElement.dataset.fixtureStage = 'astronomy-restore';
     await settle();
+    document.documentElement.dataset.fixtureStage = 'context-view';
     outlookButton.click(); await settle();
     const contexts = [...document.querySelectorAll('#balanced-contexts > .balanced-card')];
     console.assert(contexts.length === 4 && contexts.every(card => getComputedStyle(card).display !== 'none'), 'All four Balanced context cards remain visible');
@@ -187,6 +191,7 @@ addEventListener('load', () => {
       ['Hourly detail', '.fd-hour-timeline'],
       ['Sun & moon details', '.sky-details'],
     ]) {
+      document.documentElement.dataset.fixtureStage = 'modal: ' + label;
       const button = [...document.querySelectorAll('#desk button')].find(el => el.getAttribute('aria-label') === label || el.textContent.trim() === label);
       const source = selector && document.querySelector(selector), home = source?.parentElement;
       console.assert(button?.tagName === 'BUTTON' && button.tabIndex === 0, label + ' is a named keyboard control');
@@ -209,15 +214,20 @@ addEventListener('load', () => {
       if (source) console.assert(source.parentElement === home && source.closest('#balanced-details'), label + ' restores its live source after closing');
     }
     const aqi = document.getElementById('aqi-val'), oldAqi = aqi.textContent;
+    document.documentElement.dataset.fixtureStage = 'aqi';
     aqi.textContent = '--'; await settle();
     console.assert(document.getElementById('status-aqi-label').textContent === 'Reading unavailable' && document.querySelector('#balanced-air .balanced-reading').textContent === 'Air quality unavailable', 'Missing AQI never shows Good in the shared source or Balanced card');
     aqi.textContent = oldAqi;
+    document.documentElement.dataset.fixtureStage = 'device-unknown';
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77}})); await settle();
     console.assert(document.querySelector('.status-device').dataset.state === 'unknown', 'Unknown sensor status is not reporting');
+    document.documentElement.dataset.fixtureStage = 'device-reporting';
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77,sensor_status:0}})); await settle();
     console.assert(document.querySelector('.status-device').dataset.state === 'reporting', 'Reported healthy sensors update the device card');
+    document.documentElement.dataset.fixtureStage = 'device-low-battery';
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.2,sensor_status:0}})); await settle();
     console.assert(document.querySelector('.status-device').dataset.state === 'attention', 'Low battery stays visible on the device card');
+    document.documentElement.dataset.fixtureStage = 'device-restore';
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77,sensor_status:0}})); await settle();
     outlookButton.click();
     document.documentElement.dataset.fixtureStage = 'fonts';
