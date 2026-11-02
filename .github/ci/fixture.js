@@ -51,6 +51,7 @@ const fc = {
 };
 
 addEventListener('load', () => {
+  document.documentElement.dataset.fixtureStage = 'controls';
   console.assert(document.querySelector('#settings-alerts #btn-voice-test') && document.querySelector('#settings-alerts #voice-status'), 'Voice test and status stay beside the speech setting');
   const cards = [...document.querySelectorAll('[data-settings-category]')];
   console.assert(cards.length === 6, 'Settings home has six categories');
@@ -219,7 +220,18 @@ addEventListener('load', () => {
     console.assert(document.querySelector('.status-device').dataset.state === 'attention', 'Low battery stays visible on the device card');
     dispatchEvent(new CustomEvent('wd:device-status', {detail:{voltage:2.77,sensor_status:0}})); await settle();
     outlookButton.click();
-    await document.fonts.ready;
+    document.documentElement.dataset.fixtureStage = 'fonts';
+    // FontFaceSet.ready also waits for layout, which headless virtual time can starve.
+    let fontTimeout;
+    const loadedFonts = await Promise.race([
+      Promise.all([500, 600].map(weight => document.fonts.load(`${weight} 16px "Barlow SC"`))).catch(() => []),
+      new Promise(resolve => { fontTimeout = setTimeout(() => resolve([]), 3000); }),
+    ]);
+    clearTimeout(fontTimeout);
+    const fontsReady = loadedFonts.length === 2 && loadedFonts.every(faces => faces.length > 0 && faces.every(face => face.status === 'loaded'));
+    console.assert(fontsReady, 'Both bundled Barlow SC font weights load before layout checks (3-second limit)');
+    if (!fontsReady) return;
+    document.documentElement.dataset.fixtureStage = 'layout';
     await settle();
     const desk = document.getElementById('desk');
     const temperatureType = getComputedStyle(document.getElementById('hero-temp'));
@@ -254,6 +266,7 @@ addEventListener('load', () => {
       console.assert(document.documentElement.scrollWidth <= innerWidth + 1, 'Narrow and short screens reflow without horizontal page overflow');
       console.assert(document.documentElement.scrollHeight > innerHeight || desk.scrollHeight > desk.clientHeight, 'Narrow and short screens allow vertical scrolling for all content');
     }
+    document.documentElement.dataset.fixtureStage = 'complete';
     document.documentElement.dataset.fixture = 'ok';
   });
 });
