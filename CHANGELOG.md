@@ -6,6 +6,12 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.10.1] - 2026-11-01
+
+### Fixed
+- Preserve live sources, including air quality, when rapidly switching Balanced Desk detail dialogs. A delayed close event can no longer remove content from the newly opened dialog.
+- Add regression coverage for rapid detail switching and clearer CI diagnostics for UI validation failures.
+
 ## [4.10.0] - 2026-11-01
 
 ### Changed

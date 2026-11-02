@@ -29,16 +29,19 @@ export function initBalancedDesk() {
   close.setAttribute('aria-label', 'Close details'); close.onclick = () => dialog.close();
   const body = node('div'); body.id = 'balanced-detail-body'; dialog.append(close, title, body); desk.append(dialog);
   let moved = [], opener;
-  dialog.addEventListener('close', () => {
+  const restore = () => {
     for (const {el, parent, next, hidden, open} of moved) {
       parent.insertBefore(el, next?.parentNode === parent ? next : null); el.hidden = hidden;
       for (const detail of el.querySelectorAll('details[open]')) detail.open = false;
       if (el.tagName === 'DETAILS') el.open = open;
     }
     moved = []; body.replaceChildren(); opener?.focus({preventScroll:true});
-  });
+  };
+  dialog.addEventListener('close', () => { if (!dialog.open) restore(); });
   const open = (label, nodes, trigger) => {
     if (dialog.open) dialog.close();
+    // Native close events are queued; restore the previous sources before opening another detail.
+    restore();
     opener = trigger; title.textContent = label;
     moved = nodes.filter(Boolean).map(el => ({el, parent:el.parentNode, next:el.nextSibling, hidden:el.hidden, open:el.open}));
     for (const {el} of moved) { body.append(el); el.hidden = false; }

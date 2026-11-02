@@ -46,7 +46,7 @@ for motion in full lite off; do
     for attempt in 1 2; do
       if timeout 120 "$CHROME" --headless=new --disable-gpu --disable-dev-shm-usage \
         --no-sandbox --hide-scrollbars --user-data-dir="$DIR/profile-$motion-${size/,/x}-$attempt" \
-        --window-size="$size" --virtual-time-budget=30000 \
+        --window-size="$size" --virtual-time-budget=15000 \
         --enable-logging=stderr --screenshot="$OUT/$motion-${size/,/x}.png" \
         --dump-dom "$url" >"$dom" 2>"$log"; then break; fi
       [ "$attempt" = 1 ] && echo "Retrying Chrome capture for $motion $size"
