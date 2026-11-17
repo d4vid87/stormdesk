@@ -399,7 +399,12 @@ pub fn coverage_json(conn: &Connection, backfill: &str) -> String {
         })
         .unwrap_or((None, None, 0));
     let n = |v: Option<i64>| v.map(|x| x.to_string()).unwrap_or_else(|| "null".into());
-    let fingerprint = meta_get(conn, "station_fingerprint").unwrap_or_default();
+    // Source identities may contain an upload secret or account address. Public coverage only
+    // needs an opaque station identity, never the raw value used to bind the local archive.
+    use sha2::{Digest, Sha256};
+    let fingerprint = meta_get(conn, "station_fingerprint")
+        .map(|identity| format!("{:x}", Sha256::digest(identity.as_bytes())))
+        .unwrap_or_default();
     let error = meta_get(conn, "backfill_error").unwrap_or_default();
     format!(
         "{{\"first\":{},\"last\":{},\"count\":{count},\"backfill\":\"{backfill}\",\"stationFingerprint\":{},\"partial\":{},\"lastError\":{}}}",
@@ -515,6 +520,10 @@ impl std::io::Read for CsvPager {
 /// copy a WAL database that is being written to at the same time.
 pub fn backup_to(conn: &Connection, dest: &Path) -> rusqlite::Result<()> {
     let _ = std::fs::remove_file(dest);
+    // SQLite permits VACUUM INTO an existing empty file; create it privately before copying
+    // station metadata and the portable bundle's configuration into it.
+    crate::private_file(dest).map_err(|e| rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_IOERR), Some(e.to_string())))?;
     conn.execute("VACUUM INTO ?1", [dest.to_string_lossy().to_string()])?;
     Ok(())
 }
@@ -864,6 +873,30 @@ mod tests {
         obs[0] = Some(500.0);
         insert(&conn, &obs, 0);
         assert_eq!(stamp(&conn), (100, 500));
+    }
+
+    #[test]
+    fn public_coverage_never_exposes_raw_station_identity() {
+        let conn = open(std::path::Path::new(":memory:")).unwrap();
+        for identity in ["push:secret-upload-key", "lacrosse:private@example.test"] {
+            meta_set(&conn, "station_fingerprint", identity);
+            let text = coverage_json(&conn, "off");
+            assert!(!text.contains(identity));
+            let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+            assert_eq!(value["stationFingerprint"].as_str().unwrap().len(), 64);
+        }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn portable_backups_are_private_before_credentials_are_added() {
+        use std::os::unix::fs::PermissionsExt;
+        let conn = open(std::path::Path::new(":memory:")).unwrap();
+        let path = std::env::temp_dir().join(format!("stormdesk-private-backup-{}.wdbak", std::process::id()));
+        bundle_to(&conn, &path, r#"{"settings":{"token":"fake-secret"}}"#).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert!(bundle_config(&path).unwrap().contains("fake-secret"));
+        std::fs::remove_file(path).unwrap();
     }
     fn mem() -> Connection {
         open(Path::new(":memory:")).unwrap()

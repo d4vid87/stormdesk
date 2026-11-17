@@ -877,6 +877,10 @@ fn poll_lacrosse(state: &Arc<State>, token: &str, identity: &str) {
 ///
 /// ponytail: no Ecowitt `get_livedata_info` poller. Push covers every gateway they sell, and it
 /// costs the user nothing that their console isn't already configured to spend.
+fn retention_cutoff(now: i64, years: i64) -> i64 {
+    now.saturating_sub(years.saturating_mul(365 * 86400))
+}
+
 pub fn start_pollers(state: Arc<State>) {
     std::thread::spawn(move || {
         let mut tick: u64 = 0;
@@ -900,7 +904,7 @@ pub fn start_pollers(state: Arc<State>) {
                     .parse::<i64>()
                     .unwrap_or(0);
                 if years > 0 {
-                    let cutoff = epoch() as i64 - years * 365 * 86400;
+                    let cutoff = retention_cutoff(epoch() as i64, years);
                     // A week per lock: the UDP listener writes on its own connection and gives up
                     // after ten seconds, so a long DELETE is a dropped reading.
                     while state.with_db(|c| store::prune(c, cutoff)).unwrap_or(0) > 0 {}
@@ -940,6 +944,13 @@ pub fn start_pollers(state: Arc<State>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_retention_cannot_wrap_into_a_future_deletion_cutoff() {
+        let now = 1_700_000_000;
+        assert_eq!(retention_cutoff(now, 1), now - 365 * 86400);
+        assert!(retention_cutoff(now, i64::MAX) < 0);
+    }
 
     /// Rain that fell while the app was down still gets scored once, and a console that rolled
     /// its daily total over in the meantime never scores a negative interval.

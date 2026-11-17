@@ -83,12 +83,13 @@ let syncing = false;
 const EDITOR_TOKEN = localStorage.getItem('wd.editorToken') || '';
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (input, init = {}) => {
-  const raw = typeof input === 'string' ? input : input.url;
-  const url = new URL(raw, location.href);
-  if (EDITOR_TOKEN && url.origin === new URL(SRV || location.origin, location.href).origin) {
-    init = { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${EDITOR_TOKEN}` } };
+  if (!EDITOR_TOKEN) return nativeFetch(input, init);
+  // Let Fetch normalize URL/Request inputs, including Requests from another window.
+  const request = new Request(input, init);
+  if (new URL(request.url).origin === new URL(SRV || location.origin, location.href).origin) {
+    request.headers.set('Authorization', `Bearer ${EDITOR_TOKEN}`);
   }
-  return nativeFetch(input, init);
+  return nativeFetch(request);
 };
 
 // The /public dashboard: same page, injected flag, credential-free config. Everything that
@@ -977,7 +978,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-current-weather-4102`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-observatory-4110`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about
@@ -988,8 +989,8 @@ function changelog() {
   if (!seen) return; // a fresh install has nothing to be new since
   notify({
     title: `StormDesk ${APP_VERSION}`,
-    body: 'New: Forecast & sky opens first, with animated glass forecast cards, sunrise, sunset, moon and twilight. '
-      + 'HookEcho radar remains one click away. Orbit Glass gauges and all five styles are included.',
+    body: 'New: Observatory styling, animated Sky Theater forecasts with prominent rain chances, and upcoming Weather Changes. '
+      + 'Faster charts, lighter background work, and more reliable station data and server uploads.',
   });
 }
 
@@ -1491,6 +1492,7 @@ window.addEventListener('wd:storm', (e) => {
 window.addEventListener('wd:section', (e) => {
   const f = $('lab-frame');
   if (e.detail !== 'desk') {
+    loadDeskRadar.cancel?.();
     const deskFrame = $('desk-radar-frame');
     if (deskFrame.src) { deskFrame.src = 'about:blank'; deskFrame.removeAttribute('src'); }
     $('desk-radar-still').hidden = true;
@@ -1503,6 +1505,12 @@ window.addEventListener('wd:section', (e) => {
     clearJob('lab-radar-still');
     return;
   }
+  loadLabRadar();
+});
+
+function loadLabRadar() {
+  if (document.hidden) return;
+  const f = $('lab-frame');
   if (safeMode()) {
     if ($('lab-radar-still')) {
       every('lab-radar-still', 300, () => { $('lab-radar-still').src = stillUrl(); });
@@ -1524,6 +1532,23 @@ window.addEventListener('wd:section', (e) => {
     return;
   }
   if (!f.src) f.src = radarUrl(8, false);
+}
+
+// Cross-origin radar workers can keep fetching and rendering after the host tab is hidden.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    loadDeskRadar.cancel?.();
+    loadDeskRadar.armed = false;
+    for (const id of ['desk-radar-frame', 'lab-frame']) {
+      const f = $(id);
+      if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); }
+    }
+    $('desk-radar-still').hidden = true;
+    clearJob('radar-still');
+    clearJob('lab-radar-still');
+    radarAlive();
+  } else if ($('desk').classList.contains('active')) loadDeskRadar();
+  else if ($('lab').classList.contains('active')) loadLabRadar();
 });
 
 // Inline radar strip on the Desk: embedded, so it holds one frame a minute until touched. A live
@@ -1591,6 +1616,7 @@ function loadDeskRadar() {
     loadDeskRadar.armed = false;
     return;
   }
+  if (document.hidden || !$('desk').classList.contains('active')) return;
   // Motion changed while the panel was up: swap whichever one is showing for the other.
   if (stillRadar()) {
     if (!$('desk-radar-still').hidden) return;
@@ -1606,12 +1632,14 @@ function loadDeskRadar() {
   if ($('drawer').classList.contains('open') || !$('wizard').hidden) return;
   loadDeskRadar.armed = true;
 
+  let idle = 0;
   const start = () => {
-    if (panel.hidden || !$('desk').classList.contains('active') || !loadDeskRadar.armed) return;
+    idle = 0;
+    if (document.hidden || panel.hidden || !$('desk').classList.contains('active') || !loadDeskRadar.armed) return;
     if (!f.src) { f.src = radarUrl(6.5); radarWatchdog(); }
     panel.classList.add('loaded');
   };
-  const whenIdle = () => (window.requestIdleCallback
+  const whenIdle = () => (idle = window.requestIdleCallback
     ? requestIdleCallback(start, { timeout: 3000 })
     : setTimeout(start, 1200));
   // ponytail: visibility is the only gate. A panel dragged off screen and back re-arms nothing —
@@ -1621,7 +1649,15 @@ function loadDeskRadar() {
     io.disconnect();
     whenIdle();
   }, { rootMargin: '200px' });
-  loadDeskRadar.cancel = () => io.disconnect();
+  loadDeskRadar.cancel = () => {
+    io.disconnect();
+    if (idle) {
+      if (window.requestIdleCallback) cancelIdleCallback(idle);
+      else clearTimeout(idle);
+      idle = 0;
+    }
+    loadDeskRadar.armed = false;
+  };
   io.observe(panel);
 }
 

@@ -10,7 +10,7 @@
 
 use crate::store;
 use std::io::Write;
-use std::net::TcpStream;
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 const SERVER: &str = "cwop.aprs.net:14580";
@@ -109,12 +109,27 @@ fn latest(conn: &rusqlite::Connection) -> Option<(i64, Vec<Option<f64>>, f64, f6
 }
 
 fn send(line: &str, id: &str) -> std::io::Result<()> {
-    let mut sock = TcpStream::connect(SERVER)?;
+    // The OS resolver may still block; connection attempts share one ten-second deadline.
+    let mut sock = connect(SERVER.to_socket_addrs()?, Duration::from_secs(10))?;
     sock.set_write_timeout(Some(Duration::from_secs(10)))?;
     sock.set_read_timeout(Some(Duration::from_secs(10)))?;
     writeln!(sock, "user {id} pass -1 vers StormDesk 3.0")?;
     writeln!(sock, "{line}")?;
     sock.flush()
+}
+
+fn connect(addresses: impl IntoIterator<Item = SocketAddr>, timeout: Duration) -> std::io::Result<TcpStream> {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut error = std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "CWOP address unavailable");
+    for address in addresses {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() { return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "CWOP connection timed out")); }
+        match TcpStream::connect_timeout(&address, remaining) {
+            Ok(stream) => return Ok(stream),
+            Err(next) => error = next,
+        }
+    }
+    Err(error)
 }
 
 /// Ten minutes apart, forever, while a callsign is set. Reads the callsign fresh each round so
@@ -227,6 +242,15 @@ pub fn start_relay(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_uses_a_bounded_deadline_and_local_addresses() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        assert_eq!(connect([address], Duration::ZERO).unwrap_err().kind(), std::io::ErrorKind::TimedOut);
+        assert!(connect([address], Duration::from_secs(1)).is_ok());
+        assert_eq!(connect([], Duration::from_secs(1)).unwrap_err().kind(), std::io::ErrorKind::AddrNotAvailable);
+    }
 
     #[test]
     fn packet_is_fixed_width_aprs() {

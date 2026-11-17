@@ -4,19 +4,19 @@
 
 **Your forecast. Your sky.** StormDesk opens with Balanced Desk: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.10.3](https://github.com/d4vid87/stormdesk/releases/tag/v4.10.3) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.11.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.11.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-![StormDesk 4.10.0 Balanced Desk with aligned forecasts, Orbit Glass gauges, hourly weather and compact context](docs/stormdesk-4100-balanced.jpg)
+![StormDesk 4.11.0 Observatory with Sky Theater forecasts, prominent rain chances and Weather Changes](docs/stormdesk-4110-observatory.jpg)
 
-*Balanced Desk · demo station readings; forecast and regional data shown for illustration. Captured November 1, 2026. Not current weather.*
+*Observatory · local preview with model weather and regional context. Captured November 17, 2026. Illustrative, not current weather.*
 
-### What’s new in 4.10.3
+### What’s new in 4.11.0
 
-- **Security update:** bundled SQLite is updated to address RUSTSEC-2026-0459.
-
-- **Feels like first:** the current feels-like temperature leads the header, with the actual temperature underneath.
-- **Clearer current conditions:** larger weather artwork and a prominent condition label make rain, sun, clouds, and other conditions easier to recognize.
-- **Honest readings:** missing current data stays unavailable; selecting a forecast hour does not change the current-weather headline. Rapid detail switching keeps live data available.
+- **Observatory:** refined graphite surfaces, a larger place heading, actual temperature above feels-like, and clearer current-condition artwork.
+- **Sky Theater:** animated ten-day weather scenes with large, high-contrast rain chances. All five gauge styles and reduced-motion preferences remain available.
+- **Weather Changes:** upcoming temperature, wind and cloud changes replace the river summary on the main desk; forecasts and missing data stay labeled.
+- **Faster, lighter operation:** less chart work, fewer clock updates, and radar resources released when hidden. Concurrent upstream requests share cached work.
+- **More reliable hosting:** slow uploads use a separate bounded pool, with connection deadlines and rejection of incomplete data. Local access checks and credential storage are strengthened; existing station archives and settings are preserved.
 
 ### What’s new in 4.10.0
 
@@ -30,7 +30,7 @@
 | Start in the browser | Run your own host |
 | --- | --- |
 | Open [app.mystormdesk.com](https://app.mystormdesk.com/), choose a location, and use forecasts, radar, and supported cloud station data. | Install the desktop app, Linux browser-mode package, or Docker image to collect supported station readings and keep your archive locally. |
-| This browser keeps its own settings. No StormDesk account is required. | Leave the host running for collection and household screens. Use `/public` for read-only access. |
+| This browser keeps its own settings. No StormDesk account is required. | Leave the host running for collection and household screens. Unpaired screens are viewers on new hosts. |
 
 Forecast and radar services need internet access. Station connection methods vary by platform; see [compatibility](https://mystormdesk.com/compatibility.html). [StormDesk Lite](https://app.mystormdesk.com/lite/) remains available for older browsers and lighter displays.
 
@@ -145,7 +145,10 @@ The desktop app shows an address such as `http://192.168.1.20:8088` in its windo
 address on another device connected to the same Wi-Fi. Leave StormDesk running on the main
 computer so the other screens can reach it.
 
-Use the address ending in `/public` for a read-only screen that cannot change settings.
+New installations give unpaired household screens read-only access. Pair a screen with the local
+owner when it needs to edit settings. `/public` is a compatibility redirect to the same dashboard;
+it does not remove a browser's existing editor permission. Older hosts may still have legacy LAN
+editing enabled; see [access and sharing](docs/technical-reference.md#sharing-a-read-only-dashboard).
 
 ## What you get
 
@@ -252,8 +255,9 @@ StormDesk stores its settings and weather history on your own computer. It has n
 ads, or app tracking. Forecast and alert providers receive only the information needed to return
 weather for your area.
 
-The regular home-network dashboard is meant for people you trust. Use `/public` for guests or any
-screen that should not see or change private settings.
+Use unpaired viewers for guests and pair only trusted editors. Disable legacy LAN editing after
+pairing older household screens. Weather and history remain visible to devices that can reach
+the server; keep it on your trusted network or apply access controls at your reverse proxy.
 
 ## License
 

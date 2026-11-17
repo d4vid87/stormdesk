@@ -1,7 +1,7 @@
 import { settings, saveSettings, coords, U, msToWind, windToMs, deg2compass, num, timeStr, dayStr, expires } from '../js/app.js';
-import * as api from '../js/api.js?v=station-fields1';
+import * as api from '../js/api.js';
 import { safeMode } from '../js/compat.js';
-import { historyContext, rememberHistory } from './history-cache.js';
+import { historyContext, rememberHistory, stationContext } from './history-cache.js';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -12,7 +12,7 @@ let observation = null;
 let observationError = '';
 let forecastError = false;
 let observationKey = '';
-const stationKey = () => JSON.stringify([settings().stationId, settings().stationSource, settings().units, settings().windUnit]);
+const stationKey = () => JSON.stringify([stationContext(settings()), settings().units, settings().windUnit]);
 function recordHistory(reading, source) {
   if (!reading) return;
   const metric = settings().units === 'metric';
@@ -189,7 +189,7 @@ async function refreshObservation() {
   const key = stationKey();
   if (key !== observationKey) {
     observation = null; observationKey = key;
-    try { const saved = JSON.parse(localStorage.getItem('wd.liteObservation')); if (saved?.key === key) { observation = saved.reading; observationError = 'Checking station'; } } catch {}
+    try { const saved = JSON.parse(localStorage.getItem('wd.liteObservation.v2')); if (saved?.key === key) { observation = saved.reading; observationError = 'Checking station'; } } catch {}
   }
   if (!configured()) { renderWeather(); return; }
   try {
@@ -210,7 +210,7 @@ async function refreshObservation() {
     if (reading) {
       observation = reading;
       if (!settings().activePlace) recordHistory(reading, 'station');
-      try { localStorage.setItem('wd.liteObservation', JSON.stringify({ key, reading })); } catch {}
+      try { localStorage.setItem('wd.liteObservation.v2', JSON.stringify({ key, reading })); } catch {}
     }
   } catch (error) {
     if (key !== stationKey()) return;
@@ -238,9 +238,23 @@ async function refresh() {
   await Promise.allSettled([refreshForecast(), refreshObservation()]);
 }
 
+const alertContext = () => JSON.stringify([coords(), settings().alertRegion,
+  settings().places?.find(p => p.id === settings().activePlace)?.alertRegion]);
+let alertRequest = 0, alertPlace = alertContext();
+window.addEventListener('wd:settings', () => {
+  const next = alertContext();
+  if (next === alertPlace) return;
+  alertPlace = next; alertRequest++;
+  $('#warningBanner').hidden = true;
+  $('#warningDialog').close();
+});
+
 async function refreshAlerts() {
+  const request = ++alertRequest, place = alertContext();
+  const current = () => request === alertRequest && place === alertContext();
   try {
     const body = await api.alerts();
+    if (!current()) return;
     const active = (body.features || []).filter((f) => !f.properties?.expires || Date.parse(f.properties.expires) > Date.now());
     const warning = active.sort((a, b) => ['Unknown', 'Minor', 'Moderate', 'Severe', 'Extreme'].indexOf(b.properties.severity) - ['Unknown', 'Minor', 'Moderate', 'Severe', 'Extreme'].indexOf(a.properties.severity))[0];
     $('#warningBanner').hidden = !warning;
@@ -250,7 +264,7 @@ async function refreshAlerts() {
     $('#warningBanner p').textContent = `${p.areaDesc || ''} · until ${new Date(p.ends || p.expires).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
     $('#warningDialog .dialog-head h2').textContent = p.event;
     $('#warningDialog .dialog-body').innerHTML = `<div class="eyebrow">Official warning</div><p><strong>${esc(p.headline || p.areaDesc || '')}</strong></p><p>${esc(p.description || '')}</p><div class="notice">Source: National Weather Service · ${age(Date.parse(p.sent) / 1000)}</div><div class="dialog-actions"><button class="button primary" type="button" data-close>Done</button></div>`;
-  } catch { $('#warningBanner').hidden = true; }
+  } catch { if (current()) $('#warningBanner').hidden = true; }
 }
 
 function showPage(name) {
@@ -296,7 +310,7 @@ function loadRadarStill() {
 }
 
 function playRadar() {
-  if (safeMode()) return;
+  if (safeMode() || document.hidden) return;
   const frame = $('#radarViewer');
   if (!frame.src) {
     const point = coords();
@@ -315,6 +329,19 @@ function stopRadar() {
   $('#radarStill').hidden = !$('#radarStill').naturalWidth;
   $('#radarPlay').textContent = '▶';
   $('#radarPlay').setAttribute('aria-label', 'Play live radar');
+}
+
+let suspendedRadar = null;
+function visibilityChanged() {
+  const frame = $('#radarViewer');
+  if (document.hidden) {
+    suspendedRadar = frame.hidden ? null : frame.getAttribute('src');
+    stopRadar();
+  } else {
+    if (suspendedRadar && !$('#radarPage').hidden) { frame.src = suspendedRadar; playRadar(); }
+    suspendedRadar = null;
+    refresh();
+  }
 }
 
 function openDialog(id) { const dialog = document.getElementById(id); if (!dialog.open) dialog.showModal(); }
@@ -470,7 +497,7 @@ async function start() {
   setInterval(() => {
     if (!document.hidden && !$('#radarPage').hidden) { radarLoaded = false; loadRadarStill(); }
   }, 300000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  document.addEventListener('visibilitychange', visibilityChanged);
 }
 
 start();

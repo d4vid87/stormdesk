@@ -29,10 +29,22 @@ export function chart(canvas, series, opts = {}) {
 
   bindHover(canvas, series, opts);
   accessibleChart(canvas, series, opts);
-  const pts = series
-    .flatMap((s) => (s.type === 'band' ? s.data.flatMap((p) => [{ x: p.x, y: p.lo }, { x: p.x, y: p.hi }]) : s.data))
-    .filter((p) => p.y != null && !Number.isNaN(p.y));
-  if (!pts.length) {
+  // Callers supply fresh series for new data; pointer frames reuse that same snapshot.
+  let prepared = canvas._wdPrepared;
+  const groups = canvas._wdAccessible.groups;
+  if (prepared?.groups !== groups) {
+    let x0 = Infinity, x1 = -Infinity, low = Infinity, high = -Infinity;
+    for (const { series: s, data } of groups) {
+      const band = s.type === 'band';
+      for (const p of data) {
+        x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+        low = Math.min(low, band ? p.lo : p.y, band ? p.hi : p.y);
+        high = Math.max(high, band ? p.lo : p.y, band ? p.hi : p.y);
+      }
+    }
+    prepared = canvas._wdPrepared = { groups, x0, x1, low, high };
+  }
+  if (prepared.x0 === Infinity) {
     canvas._wdNearest = () => [];
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', `${opts.label || 'Chart'}: no data`);
@@ -41,9 +53,8 @@ export function chart(canvas, series, opts = {}) {
     return;
   }
   const padL = 34, padB = 16, padT = 8, padR = 6;
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-  const x0 = Math.min(...xs), x1 = Math.max(...xs);
-  let y0 = opts.yMin ?? Math.min(...ys), y1 = opts.yMax ?? Math.max(...ys);
+  const { x0, x1, low, high } = prepared;
+  let y0 = opts.yMin ?? low, y1 = opts.yMax ?? high;
   if (y1 === y0) y1 = y0 + 1;
   const pad = (y1 - y0) * 0.1; y0 -= pad; y1 += pad;
   const px = (x) => padL + ((x - x0) / (x1 - x0 || 1)) * (w - padL - padR);
@@ -57,9 +68,8 @@ export function chart(canvas, series, opts = {}) {
     c.fillText(y.toFixed(opts.digits ?? 0), 2, yy + 3);
   }
 
-  for (const s of series) {
+  for (const { series: s, data } of prepared.groups) {
     if (s.type === 'band') {
-      const data = s.data.filter((p) => p.lo != null && p.hi != null);
       if (!data.length) continue;
       c.fillStyle = s.color;
       c.globalAlpha = s.alpha ?? 0.18;
@@ -71,7 +81,6 @@ export function chart(canvas, series, opts = {}) {
       c.globalAlpha = 1;
       continue;
     }
-    const data = s.data.filter((p) => p.y != null && !Number.isNaN(p.y));
     if (!data.length) continue;
     if (s.dash) c.setLineDash(s.dash);
     if (s.type === 'bar') {
@@ -99,7 +108,7 @@ export function chart(canvas, series, opts = {}) {
   canvas.setAttribute('role', 'img');
   canvas.setAttribute(
     'aria-label',
-    `${opts.label || 'chart'}: ${Math.min(...ys).toFixed(opts.digits ?? 0)} to ${Math.max(...ys).toFixed(opts.digits ?? 0)}${
+    `${opts.label || 'chart'}: ${low.toFixed(opts.digits ?? 0)} to ${high.toFixed(opts.digits ?? 0)}${
       opts.unit ? ` ${opts.unit}` : ''}, ${fmt(x0)} to ${fmt(x1)}`
   );
 
@@ -117,10 +126,9 @@ export function chart(canvas, series, opts = {}) {
   function nearest(hx, hy) {
     if (Number.isFinite(hy) && (hx < padL || hx > w - padR || hy < padT || hy > h - padB)) return [];
     const marks = [];
-    for (const s of series) {
+    for (const { series: s, data } of prepared.groups) {
       if (s.type === 'band') continue;
       let best = null, previous = null, distance = Infinity;
-      const data = s.data.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
       for (const p of data) {
         const x = px(p.x), y = py(p.y), d = Math.abs(x - hx);
         if (!best || d < best.d) best = { d, p };

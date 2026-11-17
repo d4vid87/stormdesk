@@ -509,15 +509,20 @@ the python command above; the app embeds `site/` at compile time.
 
 ## Sharing a read-only dashboard
 
-The desktop app serves `http://<host>:8088/public` — the same dashboard with the settings drawer
-gone and a config the server strips every credential out of before sending. It is the URL to give
-a family tablet, a guest, or a reverse proxy pointed at the outside world.
+New hosts give unpaired devices read-only access. `/config-public` supplies a credential-free
+configuration; protected settings and maintenance routes require the local owner or a paired
+editor. Generate a pairing code on the owner screen, then use it on a trusted household screen.
+An editor can read station and integration credentials and change settings.
 
-Note the trust model of the ordinary `/` dashboard: `GET /config` deliberately serves the whole
-settings blob, token included, to anything on the LAN, because that is how a second browser in the
-house sets itself up without being configured by hand. Anyone on your network can read your Tempest
-token. `/public` is the address to hand out if that is not what you want, and the only one to put
-behind a proxy.
+`/public` redirects to `/`. It does not make an already-paired browser read-only. Existing hosts
+from before pairing may retain `legacyLanAccess: true`, which permits LAN administration without
+pairing. Disable that compatibility setting after pairing trusted editors.
+
+The local owner must connect through `localhost` or a literal loopback IP. Custom reverse-proxy
+hostnames use paired editor credentials instead of inheriting the proxy's loopback privileges.
+Keep the public Host header intact; rewriting it to `localhost` can confer owner authority.
+For internet access, protect the proxy with TLS and suitable access controls. Weather and history
+viewer routes remain readable without an editor credential.
 
 ## Installing on a phone
 
@@ -539,10 +544,17 @@ weather.home.arpa {
 }
 ```
 
-**That address is the whole dashboard, and `GET /config` serves the station token to anyone who
-asks it** — put it in front of screens you trust, not the internet. What goes on the internet is
-`/public` and nothing else (see the section above). On nginx, add `proxy_buffering off;` and a
-long `proxy_read_timeout` or the `/events` stream dies after a minute.
+This address serves the dashboard with the access rules above; pair browsers that need editing.
+It is not an internet authentication layer. On nginx, add `proxy_buffering off;` and a long
+`proxy_read_timeout` so `/events` can remain connected.
+
+Request bodies run on two upload workers, with room for two waiting requests, separately from
+the four normal HTTP workers. Excess uploads are disconnected rather than queued indefinitely.
+Socket reads and writes have a ten-second idle timeout; ordinary request bodies have a
+30-second total deadline, and backup inspection allows 30 minutes (up to 8 GiB). Failed or
+incomplete uploads are not applied. Retry after other uploads finish or a stalled connection
+expires. The bundled `tiny_http` transport patch also bounds discarded-body buffers and can
+cancel connections, including requests whose route does not consume a body.
 
 With https there is also a **Browser notifications** checkbox in Settings: alerts become real
 notifications while the tab is in the background. There is no push server, so the page has to be
@@ -602,12 +614,9 @@ default browser after 20 seconds. `stormdesk --browser` chooses that reliable mo
 
 ## Security
 
-`GET /config` serves your station token to anything on the LAN, and any LAN client can write
-settings back. That is deliberate — see [Sharing a read-only dashboard](#sharing-a-read-only-dashboard)
-for what to hand out instead, which is `/public`.
-
-To report something, or to read why the `rustls-webpki` advisory a scanner will find in
-`src-tauri/Cargo.lock` is not reachable from this app, see [SECURITY.md](../SECURITY.md).
+Configuration and maintenance require owner/editor access, unless legacy LAN editing is enabled.
+See [Sharing a read-only dashboard](#sharing-a-read-only-dashboard) and
+[SECURITY.md](../SECURITY.md) for the access model and current dependency audit status.
 
 ## License
 

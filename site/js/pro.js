@@ -104,6 +104,7 @@ function renderStatus() {
 // Under a Severe or Extreme warning the ticker stops being a signal strip and becomes the red
 // crawl along the bottom of the screen — same element, same animation, different job.
 let lastTicker = '';
+const escapeText = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 function renderTicker(fc = deskForecast()) {
   const track = $('ticker-track');
@@ -113,7 +114,7 @@ function renderTicker(fc = deskForecast()) {
   if (alerts.length) {
     strip?.classList.add('alert');
     writeTicker(alerts.map(([event, headline]) =>
-      `<span class="tick"><b>${event.toUpperCase()}</b>${headline}</span>`)
+      `<span class="tick"><b>${escapeText(String(event || 'Weather alert').toUpperCase())}</b>${escapeText(headline)}</span>`)
       .join('<span class="tick-sep">•</span>'));
     return;
   }
@@ -140,7 +141,7 @@ function renderTicker(fc = deskForecast()) {
   if (!items.length) items.push(['QUIET', 'No notable signals — steady conditions']);
 
   writeTicker(items
-    .map(([tag, text]) => `<span class="tick"><b>${tag}</b>${text}</span>`)
+    .map(([tag, text]) => `<span class="tick"><b>${escapeText(tag)}</b>${escapeText(text)}</span>`)
     .join('<span class="tick-sep">·</span>'));
 }
 
@@ -347,6 +348,7 @@ function renderDays(fc) {
         ${tempArc()}
         <div class="dc-mid">
           <div class="dc-icon"></div>
+          <div class="dc-scene" aria-hidden="true"></div>
           <div class="dc-temp"><b></b><span></span></div>
           <div class="dc-cond"></div>
           <div class="dc-pop"></div>
@@ -367,6 +369,13 @@ function renderDays(fc) {
     setArc(card.querySelector('[data-arc]'), d.air_temp_low, d.air_temp_high);
     // Let the card supply motion without a separate SVG animation timeline for every day.
     setWx(card.querySelector('.dc-icon'), d.icon, 30, true);
+    const scene = card.querySelector('.dc-scene');
+    const sceneKey = typeof d.icon === 'string' ? d.icon : '';
+    if (scene.dataset.wx !== sceneKey) {
+      scene.dataset.wx = sceneKey;
+      scene.innerHTML = icon.forecastScene(sceneKey);
+      card.dataset.sky = icon.forecastSceneType(sceneKey);
+    }
     tweenNumber(card.querySelector('.dc-temp b'), d.air_temp_high, (v) => `${num(v)}°`);
     tweenNumber(card.querySelector('.dc-temp span'), d.air_temp_low, (v) => `${num(v)}°`);
     setText(card.querySelector('.dc-cond'), d.conditions || '');
@@ -607,6 +616,10 @@ async function loadQpf() {
 
 export function renderPro(fc = deskForecast()) {
   if (!fc) return;
+  // Keep the latest diagnostic sample without retaining three entries per refresh forever.
+  performance.clearMarks?.('renderPro-start');
+  performance.clearMarks?.('renderPro-end');
+  performance.clearMeasures?.('renderPro');
   performance.mark?.('renderPro-start');
   renderHero(fc);
   if ($('ticker').getClientRects().length) renderTicker(fc);
@@ -790,7 +803,7 @@ async function renderHealth() {
     el.innerHTML = Object.entries(d).map(([src, v]) => {
       const ago = Math.max(0, Math.round(Date.now() / 1000 - v.at));
       const cls = !v.ok ? 'bad' : ago > 600 ? 'stale' : '';
-      return `<i class="${cls}" title="${src} · ${v.rows} rows · ${v.what} · ${ago}s ago"></i>`;
+      return `<i class="${cls}" title="${escapeText(src)} · ${escapeText(v.rows)} rows · ${escapeText(v.what)} · ${ago}s ago"></i>`;
     }).join('');
   } catch { el.innerHTML = ''; }
 }
@@ -798,13 +811,22 @@ async function renderHealth() {
 // Re-registered on every settings change: `every` keys by name, so the eco pace and the seconds
 // format both follow the toggle without a reload.
 export function registerClock() {
+  let minute = null, timeFormat, dateFormat, zoneText;
   every('clock', 1, () => {
     const d = new Date();
-    const h12 = settings().clock24 === 'auto' || !settings().clock24 ? {} : { hour12: settings().clock24 === '12' };
-    $('clock-time').textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', ...h12 });
+    const nextMinute = Math.floor(d.getTime() / 60000);
+    // Refresh once a minute so device locale/timezone changes still appear on a running kiosk.
+    if (minute !== nextMinute) {
+      minute = nextMinute;
+      const h12 = settings().clock24 === 'auto' || !settings().clock24 ? {} : { hour12: settings().clock24 === '12' };
+      timeFormat = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', second: '2-digit', ...h12 });
+      dateFormat = new Intl.DateTimeFormat([], { weekday: 'long', month: 'long', day: 'numeric' });
+      zoneText = `Device local · ${new Intl.DateTimeFormat([], { timeZoneName: 'short' }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value || ''}`;
+    }
+    setText($('clock-time'), timeFormat.format(d));
     const zone = document.getElementById('clock-zone');
-    if (zone) zone.textContent = `Device local · ${new Intl.DateTimeFormat([], { timeZoneName: 'short' }).formatToParts(d).find(p => p.type === 'timeZoneName')?.value || ''}`;
-    $('clock-date').textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    setText(zone, zoneText);
+    setText($('clock-date'), dateFormat.format(d));
   });
 }
 

@@ -2,11 +2,12 @@
 // unversioned modules, so a hand-written manifest would rot the first time one was renamed.
 // Everything is cached as it is fetched, and the network still wins whenever it answers.
 const VER = new URL(self.location).searchParams.get('v') || 'dev';
-const CACHE = `wd-shell-${VER}`;
+const CACHE = `wd-shell-${VER}-public-assets`;
 
 // The API surface. None of it is ever cached or intercepted: /events is an open SSE stream,
 // /history streams CSV, /config carries the token, and a stale copy of any of them is a bug.
-const API = /^\/(api|events|config|config-public|udp|history|history\.csv|diag|health|ingest|alerts|ha|discover|backup(?:\.db|\.wdbak)|restore|archive|environment|proxy)(\/|$|\?)/;
+const API = /^\/(api|events|config|config-public|udp|history|history\.csv|diag|health|ingest|alerts|ha|discover|backup(?:\.db|\.wdbak)|restore|archive|environment|proxy|pair)(\/|$|\?)/;
+const SHELL_DESTINATIONS = new Set(['document', 'script', 'style', 'image', 'font', 'manifest', 'worker']);
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -18,7 +19,8 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  if (req.method !== 'GET' || url.origin !== self.location.origin || API.test(url.pathname)) return;
+  if (req.method !== 'GET' || url.origin !== self.location.origin || API.test(url.pathname)
+      || req.headers.has('Authorization') || !SHELL_DESTINATIONS.has(req.destination)) return;
 
   const dest = req.destination;
   // Icons and fonts never change under a given URL; anything that is code or markup must not be
@@ -26,13 +28,17 @@ self.addEventListener('fetch', (e) => {
   const cacheFirst = dest === 'image' || dest === 'font';
 
   e.respondWith((async () => {
-    const hit = await caches.match(req);
+    // A full/disabled cache must not prevent a successful network load.
+    const cache = await caches.open(CACHE).catch(() => null);
+    const hit = await cache?.match(req).catch(() => undefined);
     if (cacheFirst && hit) return hit;
     try {
       // Revalidate the HTTP cache too: a fresh browser cache entry can otherwise
       // keep old modules alive even though this worker is network-first.
       const res = await fetch(req, { cache: 'no-cache' });
-      if (res.ok) (await caches.open(CACHE)).put(req, res.clone());
+      if (cache && res.ok && !/\b(?:private|no-store)\b/i.test(res.headers.get('Cache-Control') || '')) {
+        e.waitUntil(cache.put(req, res.clone()).catch(() => {}));
+      }
       return res;
     } catch (err) {
       if (hit) return hit;

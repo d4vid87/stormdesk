@@ -6,31 +6,57 @@
 // integration somebody installed six months ago. `/api/v1` is the one that has to stay still.
 
 use crate::{ingest, server::State, store};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-/// Open-meteo, cached: (fetched_at, body). A forecast is the same for everyone in the house, and
-/// Home Assistant polling every minute must not become a request upstream every minute.
-fn cache() -> &'static Mutex<Option<(u64, serde_json::Value)>> {
-    static C: OnceLock<Mutex<Option<(u64, serde_json::Value)>>> = OnceLock::new();
-    C.get_or_init(|| Mutex::new(None))
+struct Cached<T> {
+    key: String,
+    expires: u64,
+    value: Option<T>,
+}
+
+// Only the cache owner waits on upstream I/O. Other HTTP workers stay available while it loads.
+fn cached_fetch<T: Clone>(slot: &Mutex<Option<Cached<T>>>, key: &str, fetch: impl FnOnce() -> (Option<T>, u64)) -> Option<T> {
+    let mut cached = slot.try_lock().ok()?;
+    let now = crate::server::epoch();
+    if let Some(entry) = cached.as_ref().filter(|c| c.key == key && now < c.expires) {
+        return entry.value.clone();
+    }
+    let (value, ttl) = fetch();
+    *cached = Some(Cached { key: key.into(), expires: crate::server::epoch().saturating_add(ttl), value: value.clone() });
+    value
+}
+
+fn location(cfg: &std::path::Path) -> Option<(f64, f64)> {
+    let settings = settings_snapshot(cfg);
+    let num = |k: &str| settings[k].as_f64().or_else(|| settings[k].as_str()?.parse::<f64>().ok());
+    let (lat, lon) = (num("lat")?, num("lon")?);
+    (lat.is_finite() && lon.is_finite() && (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon)).then_some((lat, lon))
+}
+
+fn settings_snapshot(cfg: &std::path::Path) -> serde_json::Value {
+    std::fs::read_to_string(cfg).ok()
+        .and_then(|body| serde_json::from_str::<serde_json::Value>(&body).ok())
+        .and_then(|root| root.get("settings").cloned()).unwrap_or_default()
 }
 
 const FORECAST_TTL: u64 = 900;
 
-/// Today's high, low, precipitation chance and condition code, for the weather entity. Fetched
-/// from the same free endpoint the page uses, in SI whatever the dashboard is set to.
+/// Today's high, low, precipitation chance and condition code, for the weather entity.
 fn forecast(cfg: &std::path::Path) -> Option<serde_json::Value> {
-    let now = crate::server::epoch();
-    if let Ok(c) = cache().lock() {
-        if let Some((at, body)) = c.as_ref() {
-            if now.saturating_sub(*at) < FORECAST_TTL {
-                return Some(body.clone());
-            }
-        }
-    }
-    let num = |k: &str| crate::setting(cfg, k)?.trim_matches('"').parse::<f64>().ok();
-    let (lat, lon) = (num("lat")?, num("lon")?);
+    static CACHE: Mutex<Option<Cached<serde_json::Value>>> = Mutex::new(None);
+    let place = location(cfg)?;
+    let key = format!("{},{}", place.0, place.1);
+    let result = cached_fetch(&CACHE, &key, || {
+        let result = fetch_forecast(place.0, place.1);
+        let ttl = if result.is_some() { FORECAST_TTL } else { 30 };
+        (result, ttl)
+    });
+    // Settings can change while the request is in flight; never label that answer as this place.
+    (location(cfg) == Some(place)).then_some(result).flatten()
+}
+
+fn fetch_forecast(lat: f64, lon: f64) -> Option<serde_json::Value> {
     let url = format!(
         "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}\
          &daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max\
@@ -58,11 +84,7 @@ fn forecast(cfg: &std::path::Path) -> Option<serde_json::Value> {
             })
         })
         .collect();
-    let out = serde_json::json!({ "days": days });
-    if let Ok(mut c) = cache().lock() {
-        *c = Some((now, out.clone()));
-    }
-    Some(out)
+    Some(serde_json::json!({ "days": days }))
 }
 
 /// The newest archive row as named fields, plus the two derived values the MQTT publisher also
@@ -112,8 +134,14 @@ fn current(conn: &rusqlite::Connection) -> Option<serde_json::Value> {
 /// way the dashboard was set when it read this.
 pub fn snapshot(state: &Arc<State>) -> String {
     let cfg = &state.cfg_path;
-    let get = |k: &str| crate::setting(cfg, k).map(|v| v.trim_matches('"').to_string()).unwrap_or_default();
-    let obs = state.db().and_then(|c| current(&c));
+    let (settings, obs) = {
+        let _guard = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+        (settings_snapshot(cfg), state.db().and_then(|c| current(&c)))
+    };
+    let get = |k: &str| settings[k].as_str().map(String::from)
+        .or_else(|| settings[k].as_f64().map(|v| v.to_string())).unwrap_or_default();
+    let daily = forecast(cfg);
+    let daily = if settings_snapshot(cfg) == settings { daily } else { None };
     let body = serde_json::json!({
         "api": 1,
         "version": env!("CARGO_PKG_VERSION"),
@@ -126,7 +154,7 @@ pub fn snapshot(state: &Arc<State>) -> String {
             "lon": get("lon").parse::<f64>().ok(),
         },
         "current": obs,
-        "forecast": forecast(cfg),
+        "forecast": daily,
         "health": serde_json::from_str::<serde_json::Value>(&ingest::diag_json()).unwrap_or_default(),
     });
     body.to_string()
@@ -137,7 +165,8 @@ pub fn snapshot(state: &Arc<State>) -> String {
 /// reason this lives here rather than in a fetch from the drawer.
 pub fn test_smart_home(cfg: &std::path::Path) -> String {
     let (mqtt_ok, mqtt_says) = crate::mqtt::probe(cfg);
-    let get = |k: &str| crate::setting(cfg, k).unwrap_or_default().trim_matches('"').to_string();
+    let settings = settings_snapshot(cfg);
+    let get = |k: &str| settings[k].as_str().unwrap_or_default().to_string();
     let (url, token) = (get("haUrl"), get("haToken"));
     let (ha_ok, ha_says) = if url.is_empty() {
         (false, "no Home Assistant URL set".to_string())
@@ -173,19 +202,29 @@ pub fn test_smart_home(cfg: &std::path::Path) -> String {
 /// Cached briefly: a house with four dashboards open should be four reads of this, not four
 /// reads of Home Assistant.
 pub fn ha_states(cfg: &std::path::Path) -> String {
-    let now = crate::server::epoch();
-    if let Ok(c) = states_cache().lock() {
-        if let Some((at, body)) = c.as_ref() {
-            if now.saturating_sub(*at) < STATES_TTL {
-                return body.clone();
-            }
-        }
+    static CACHE: Mutex<Option<Cached<String>>> = Mutex::new(None);
+    let connection = || {
+        // Read URL and credential from one atomic config revision, never from separate reads.
+        let settings = settings_snapshot(cfg);
+        let get = |k: &str| settings[k].as_str().unwrap_or_default().to_string();
+        (get("haUrl"), get("haToken"))
+    };
+    let settings = connection();
+    if settings.0.is_empty() {
+        return r#"{"error":"no Home Assistant URL set"}"#.into();
     }
-    let get = |k: &str| crate::setting(cfg, k).unwrap_or_default().trim_matches('"').to_string();
-    let (url, token) = (get("haUrl"), get("haToken"));
-    if url.is_empty() {
-        return r#"{"error":"no Home Assistant URL set"}"#.to_string();
-    }
+    // A token change must invalidate entities fetched with the previous credentials, too.
+    let key = serde_json::to_string(&settings).unwrap_or_default();
+    let body = cached_fetch(&CACHE, &key, || {
+        let body = fetch_ha_states(&settings.0, &settings.1);
+        let ttl = if body.contains("\"entities\"") { STATES_TTL } else { 5 };
+        (Some(body), ttl)
+    });
+    if connection() != settings { return r#"{"error":"Home Assistant connection changed"}"#.into(); }
+    body.unwrap_or_else(|| r#"{"error":"Home Assistant refresh in progress"}"#.into())
+}
+
+fn fetch_ha_states(url: &str, token: &str) -> String {
     let base = url.trim_end_matches('/');
     // Five seconds, not twenty: a Home Assistant that is switched off must not hold one of the
     // four worker threads while every screen in the house asks again. The 15 s cache above is
@@ -227,15 +266,7 @@ pub fn ha_states(cfg: &std::path::Path) -> String {
         })
         .collect();
     let body = serde_json::json!({ "entities": out }).to_string();
-    if let Ok(mut c) = states_cache().lock() {
-        *c = Some((now, body.clone()));
-    }
     body
-}
-
-fn states_cache() -> &'static Mutex<Option<(u64, String)>> {
-    static C: OnceLock<Mutex<Option<(u64, String)>>> = OnceLock::new();
-    C.get_or_init(|| Mutex::new(None))
 }
 
 /// Long enough that a wall of dashboards is one read, short enough that a light switch shows up
@@ -251,31 +282,19 @@ const STATES_TTL: u64 = 15;
 // The whole result is cached rather than the two halves: a county's drought class changes once a
 // week, on a Thursday.
 pub fn drought(cfg: &std::path::Path) -> String {
-    let now = crate::server::epoch();
-    if let Ok(c) = drought_cache().lock() {
-        if let Some((expires, body)) = c.as_ref() {
-            if now < *expires {
-                return body.clone();
-            }
-        }
-    }
-    let get = |k: &str| {
-        crate::setting(cfg, k)
-            .and_then(|v| v.trim_matches('"').parse::<f64>().ok())
-    };
-    let (Some(lat), Some(lon)) = (get("lat"), get("lon")) else {
+    static CACHE: Mutex<Option<Cached<String>>> = Mutex::new(None);
+    let Some(place) = location(cfg) else {
         return r#"{"error":"no location set"}"#.to_string();
     };
-    let (body, ok) = match fetch_drought(lat, lon) {
-        Ok(b) => (b, true),
-        Err(e) => (serde_json::json!({ "error": e }).to_string(), false),
-    };
-    if let Ok(mut c) = drought_cache().lock() {
-        // A dead upstream costs one worker one round trip every ten minutes, not one per screen
-        // per refresh.
-        *c = Some((now + if ok { DROUGHT_TTL } else { 600 }, body.clone()));
-    }
-    body
+    let key = format!("{},{}", place.0, place.1);
+    let body = cached_fetch(&CACHE, &key, || {
+        match fetch_drought(place.0, place.1) {
+            Ok(body) => (Some(body), DROUGHT_TTL),
+            Err(e) => (Some(serde_json::json!({ "error": e }).to_string()), 600),
+        }
+    });
+    if location(cfg) != Some(place) { return r#"{"error":"Location changed"}"#.into(); }
+    body.unwrap_or_else(|| r#"{"error":"Drought refresh in progress"}"#.into())
 }
 
 fn fetch_drought(lat: f64, lon: f64) -> Result<String, String> {
@@ -354,17 +373,76 @@ fn newest_week(body: &str) -> Option<String> {
     )
 }
 
-fn drought_cache() -> &'static Mutex<Option<(u64, String)>> {
-    static C: OnceLock<Mutex<Option<(u64, String)>>> = OnceLock::new();
-    C.get_or_init(|| Mutex::new(None))
-}
-
 /// The map is published once a week; six hours is "the same day, at most one extra fetch".
 const DROUGHT_TTL: u64 = 6 * 3600;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upstream_cache_is_keyed_expires_and_cools_down_failures() {
+        let cache = Mutex::new(None);
+        assert_eq!(cached_fetch(&cache, "place-a", || (Some(1), 900)), Some(1));
+        assert_eq!(cached_fetch(&cache, "place-a", || panic!("cache hit fetched again")), Some(1));
+        assert_eq!(cached_fetch(&cache, "place-b", || (Some(2), 900)), Some(2));
+        cache.lock().unwrap().as_mut().unwrap().expires = 0;
+        assert_eq!(cached_fetch(&cache, "place-b", || (None, 30)), None);
+        assert_eq!(cached_fetch(&cache, "place-b", || panic!("failed upstream retried inside cooldown")), None);
+        assert_eq!(cached_fetch(&cache, "place-c", || (Some(3), 900)), Some(3));
+    }
+
+    #[test]
+    fn one_slow_upstream_never_blocks_other_readers() {
+        let cache = Arc::new(Mutex::new(None));
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let worker_cache = cache.clone();
+        let worker = std::thread::spawn(move || cached_fetch(&worker_cache, "same-place", || {
+            started_tx.send(()).unwrap();
+            finish_rx.recv().unwrap();
+            (Some(7), 900)
+        }));
+        started_rx.recv().unwrap();
+        let start = std::time::Instant::now();
+        for _ in 0..20 {
+            assert_eq!(cached_fetch(&cache, "same-place", || panic!("duplicate upstream request")), None);
+        }
+        assert!(start.elapsed() < Duration::from_millis(100), "HTTP workers waited for upstream I/O");
+        finish_tx.send(()).unwrap();
+        assert_eq!(worker.join().unwrap(), Some(7));
+        assert_eq!(cached_fetch(&cache, "same-place", || panic!("completed result was not cached")), Some(7));
+    }
+
+    #[test]
+    fn ha_cache_changes_with_credentials_and_disabled_connection() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            for expected in ["Bearer first", "Bearer second"] {
+                let (mut stream, _) = listener.accept().unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                let mut request = [0u8; 2048];
+                let n = stream.read(&mut request).unwrap();
+                assert!(String::from_utf8_lossy(&request[..n]).contains(expected));
+                let body = format!(r#"[{{"entity_id":"sensor.test","state":"{expected}"}}]"#);
+                write!(stream, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            }
+        });
+        let path = std::env::temp_dir().join(format!("stormdesk-api-{}-{}.json", std::process::id(), crate::server::epoch()));
+        let save = |url: &str, token: &str| std::fs::write(&path, serde_json::json!({"settings":{"haUrl":url,"haToken":token}}).to_string()).unwrap();
+        save(&url, "first");
+        let first = ha_states(&path);
+        assert!(first.contains("Bearer first"));
+        assert_eq!(ha_states(&path), first);
+        save(&url, "second");
+        assert!(ha_states(&path).contains("Bearer second"));
+        save("", "second");
+        assert!(ha_states(&path).contains("no Home Assistant URL set"));
+        server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
 
     /// The published week is picked by its date, not by where it happens to sit in the array, and
     /// the percentages survive whether the service quotes them or not.

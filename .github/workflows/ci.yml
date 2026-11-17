@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   rust:
     runs-on: ubuntu-latest
@@ -19,12 +22,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-      - run: cargo test --manifest-path src-tauri/Cargo.toml
-      - run: cargo check --manifest-path src-tauri/Cargo.toml --no-default-features
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml -p tiny_http
+      - run: cargo check --locked --manifest-path src-tauri/Cargo.toml --no-default-features
+      - run: python3 scripts/check-flatpak-sources.py
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: node scripts/check-archive-server.mjs
+      - run: node scripts/check-upload-isolation.mjs
 
   site:
     runs-on: ubuntu-latest
@@ -39,6 +45,12 @@ jobs:
       - run: node marketing/tests/color-studio.mjs
       - run: node scripts/check-shell-cache.mjs
       - run: node scripts/check-startup.mjs
+      - run: node scripts/check-ui-lifecycle.mjs
+      - run: node scripts/check-chart-performance.mjs
+      - run: node scripts/check-radar-lifecycle.mjs
+      - run: node scripts/check-station-overlay.mjs
+      - run: node scripts/check-sky-theater.mjs
+      - run: node scripts/check-weather-changes.mjs
       - run: node scripts/check-scheduler.mjs
       - run: node scripts/check-weather-context.mjs
       - run: node scripts/check-forecast-desk.mjs
@@ -60,6 +72,7 @@ jobs:
       - run: node scripts/check-browser-compat.mjs
       - run: node scripts/check-stormdesk-lite.mjs
       - run: node scripts/check-lite-readings.mjs
+      - run: node scripts/check-lite-lifecycle.mjs
       - run: node scripts/check-lite-history.mjs
       - run: node scripts/check-speech.mjs
       - run: python3 scripts/check-natural-voice.py

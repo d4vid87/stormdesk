@@ -1,10 +1,16 @@
 // Small, bounded browser history for screens that have no continuously running host.
-const KEY = 'wd.liteHistory.v1';
+// Keep legacy records on disk: their missing source identity cannot safely be attributed.
+const KEY = 'wd.liteHistory.v2';
 const WEEK = 7 * 86400;
 const BUCKET = 900;
 
+export function stationContext(s) {
+  return [s.stationId || '', s.stationSource || '', s.deviceId || '', s.activeStationProfile || '',
+    s.wllHost || '', s.lacrosseEmail || '', s.ecowittMac || '', s.lat ?? null, s.lon ?? null];
+}
+
 export function historyContext(s, point) {
-  return JSON.stringify([s.stationId || '', s.stationSource || '', s.activePlace || '', point.lat, point.lon]);
+  return JSON.stringify([stationContext(s), s.activePlace || '', point.lat, point.lon]);
 }
 
 export function recentHistory(context) {

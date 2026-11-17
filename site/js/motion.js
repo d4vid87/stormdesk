@@ -46,6 +46,7 @@ const ease = (t) => 1 - (1 - t) ** 3;
 function frame(now) {
   raf = 0;
   for (const [el, a] of running) {
+    a.t0 ??= now;
     // Clamped both ways: the rAF timestamp and performance.now() are the same clock in a normal
     // page, but not under headless virtual time — a negative t ran the easing curve backwards and
     // the number drifted off to nonsense instead of landing.

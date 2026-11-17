@@ -52,7 +52,10 @@ function redrawVisibleCharts() {
   requestAnimationFrame(() => { drawTemp(); drawRain(); drawWind(); drawPressure(); drawRose(); });
 }
 
-const note = (id, msg) => { $(id).innerHTML = `<div class="muted">${msg}</div>`; };
+const note = (id, msg) => {
+  const text = document.createElement('div'); text.className = 'muted'; text.textContent = msg;
+  $(id).replaceChildren(text);
+};
 const values = (idx) => history.map((o) => o[idx]).filter((v) => Number.isFinite(v));
 const snapshot = (name, value, caption) => {
   $(`snapshot-${name}`).textContent = value;
@@ -296,13 +299,19 @@ async function drawOfficial() {
     // Match on the period's own date, not its position: an afternoon load starts the list at
     // "Tonight", and every row after it compared against the wrong day.
     const dayOf = (t) => new Date(t).toDateString();
-    $('official').innerHTML = periods.map((pd) => {
+    $('official').replaceChildren(...periods.map((pd) => {
       const mine = tempestDaily.find((d) => dayOf(d.day_start_local * 1000) === dayOf(pd.startTime));
       const ref = pd.isDaytime ? mine?.air_temp_high : mine?.air_temp_low;
-      const d = ref == null ? null : pd.temperature - ref;
-      return `<div><span>${pd.name}</span><span>NWS ${pd.temperature}° · Tempest ${num(ref)}°`
-        + `${d == null ? '' : ` (${d >= 0 ? '+' : ''}${num(d)})`}</span></div>`;
-    }).join('');
+      const metric = settings().units === 'metric';
+      const temperature = !Number.isFinite(pd.temperature) ? null
+        : pd.temperatureUnit === 'F' ? (metric ? (pd.temperature - 32) * 5 / 9 : pd.temperature)
+        : pd.temperatureUnit === 'C' ? (metric ? pd.temperature : pd.temperature * 9 / 5 + 32) : null;
+      const d = ref == null || temperature == null ? null : temperature - ref;
+      const row = document.createElement('div'), name = document.createElement('span'), value = document.createElement('span');
+      name.textContent = pd.name || 'Forecast period';
+      value.textContent = `NWS ${num(temperature)}° · Tempest ${num(ref)}°${d == null ? '' : ` (${d >= 0 ? '+' : ''}${num(d)})`}`;
+      row.append(name, value); return row;
+    }));
   } catch (e) {
     note('official', `NWS gridpoint unavailable: ${e.message}`);
   }

@@ -31,6 +31,31 @@ assert.equal(Math.round(geo.milesBetween(35.33, -97.28, 32.57, -97.30)), 191);
 assert.equal(geo.milesBetween(40, -90, 40, -90), 0);
 
 const boot = readFileSync(new URL('js/boot.js', site), 'utf8');
+const sent = [], fetchWindow = {};
+// Node has no document base URL; otherwise use its real Fetch implementation.
+class BrowserRequest extends Request {
+  constructor(input, init) { super(typeof input === 'string' ? new URL(input, 'https://app.test/') : input, init); }
+}
+vm.runInNewContext(boot.match(/window.fetch = \(input, init = \{\}\) => \{[^]*?\n};/)[0], {
+  window: fetchWindow, URL, Request: BrowserRequest, Headers,
+  location: { href: 'https://app.test/', origin: 'https://app.test' },
+  EDITOR_TOKEN: 'test-editor', SRV: '',
+  nativeFetch: (input, init) => sent.push({ input, init }),
+});
+fetchWindow.fetch(new URL('https://external.test/weather'));
+assert.equal(sent.at(-1).input.headers.get('Authorization'), null, 'URL objects must not leak the editor token to another origin');
+fetchWindow.fetch(new Request('https://external.test/weather'));
+assert.equal(sent.at(-1).input.headers.get('Authorization'), null, 'Requests from another constructor must not receive editor credentials');
+fetchWindow.fetch(new Request('https://app.test/config', { headers: { 'X-Existing': 'kept' } }));
+assert.equal(sent.at(-1).input.headers.get('Authorization'), 'Bearer test-editor');
+assert.equal(sent.at(-1).input.headers.get('X-Existing'), 'kept', 'Request headers survive authentication');
+fetchWindow.fetch('/config', { headers: new Headers({ 'Content-Type': 'application/json' }) });
+assert.equal(sent.at(-1).input.headers.get('Content-Type'), 'application/json', 'Headers objects survive authentication');
+fetchWindow.fetch(new URL('https://app.test/config'), { headers: [['X-Tuple', 'kept']] });
+assert.equal(sent.at(-1).input.headers.get('X-Tuple'), 'kept');
+fetchWindow.fetch(new Request('https://app.test/config', { method: 'PUT', body: '{"test":true}' }));
+assert.equal(await sent.at(-1).input.text(), '{"test":true}', 'Authentication preserves request bodies');
+
 const push = boot.match(/async function pushConfig\([^]*?\n}/)[0];
 let scheduled = 0, requests = [], cleared = [];
 const context = vm.createContext({

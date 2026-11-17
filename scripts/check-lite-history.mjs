@@ -13,10 +13,10 @@ rememberHistory(context, { time: Math.floor(Date.now() / 900) * 900 + 60, tempC:
 assert.equal(recentHistory(context).length, 1, 'one browser write per 15-minute bucket');
 assert.equal(recentHistory('different station').length, 0, 'history stays with its station or place');
 
-const seedContext = historyContext({ stationId: '', stationSource: '', activePlace: null }, { lat: 35, lon: -97 });
+const seedContext = historyContext({ stationId: '', stationSource: '', activePlace: null, lat:35, lon:-97 }, { lat: 35, lon: -97 });
 const seed = `<script>
 localStorage.setItem('wd.settings', JSON.stringify({ lat:35, lon:-97, stationName:'Test', units:'imperial' }));
-localStorage.setItem('wd.liteHistory.v1', JSON.stringify({ context:${JSON.stringify(seedContext)}, rows:[
+localStorage.setItem('wd.liteHistory.v2', JSON.stringify({ context:${JSON.stringify(seedContext)}, rows:[
   { time:Math.floor(Date.now()/1000)-1800, tempC:21, windMs:2, rainMm:0, source:'station' }
 ] }));
 window.fetch = async (url) => new Response(String(url).includes('sites.json') ? '[]' : '{}',

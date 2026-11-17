@@ -72,6 +72,35 @@ const METEO = {
   rainy: 'rain', sleet: 'sleet', snow: 'snow', thunderstorm: 'thunderstorms-rain', windy: 'wind',
 };
 
+/** Exact provider keys only: an unknown forecast must not look like a sunny day. */
+export function forecastSceneType(key) {
+  if (typeof key !== 'string' || !Object.hasOwn(METEO, key)) return 'unknown';
+  if (has(key, 'thunder')) return 'storm';
+  if (has(key, 'sleet')) return 'sleet';
+  if (has(key, 'snow')) return 'snow';
+  if (has(key, 'rain')) return key.startsWith('possibly-') ? 'showers' : 'rain';
+  if (has(key, 'partly')) return 'partly';
+  if (key === 'cloudy') return 'cloudy';
+  if (key === 'foggy') return 'fog';
+  if (key === 'windy') return 'wind';
+  return 'sunny';
+}
+
+/** Sky Theater layers share the app's CSS motion controls instead of SVG timelines. */
+export function forecastScene(key) {
+  const type = forecastSceneType(key);
+  const night = type !== 'unknown' && key.endsWith('-night');
+  return `<span class="sf-scene ${type}${night ? ' night' : ''}" aria-hidden="true">
+    <span class="sf-aura"></span><span class="sf-sun"><span class="sf-rays"></span></span><span class="sf-moon"></span>
+    <span class="sf-cloud-back"></span><span class="sf-cloud"></span>
+    <span class="sf-rainfall"><span class="sf-drop"></span><span class="sf-drop"></span><span class="sf-drop"></span></span>
+    <span class="sf-snowfall"><span class="sf-flake">✦</span><span class="sf-flake">✦</span><span class="sf-flake">✦</span></span>
+    <span class="sf-fog"><span class="sf-fog-line"></span><span class="sf-fog-line"></span><span class="sf-fog-line"></span></span>
+    <span class="sf-wind-lines"><span class="sf-wind-line"></span><span class="sf-wind-line"></span><span class="sf-wind-line"></span></span>
+    <span class="sf-lightning"></span><span class="sf-ground"></span><span class="sf-unknown">—</span>
+  </span>`;
+}
+
 /** Path to the vendored glyph, animated only at Full motion. */
 export function wxSrc(key, still = false) {
   const name = METEO[key];

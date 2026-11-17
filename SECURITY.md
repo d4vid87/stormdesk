@@ -1,17 +1,41 @@
 # Security
 
-StormDesk is a LAN dashboard for a house, and its trust model is unusually open on purpose. Read
-the next section before deciding whether something is a bug.
+StormDesk is a household dashboard with a local owner, paired editors, and read-only viewers.
 
 ## What this app trusts
 
-Anything that can reach port 8088 can read the whole dashboard config, station token included, and
-can write settings back — `GET /config` serves the unredacted blob deliberately, because that is how
-a second browser in the house configures itself without being set up by hand. `/public` and
-`/config-public` are the redacted view, and `/public` is the only address to put behind a proxy or
-in front of a guest. The README's [Sharing a read-only dashboard][share] section is the long
-version. Assume anyone on your network can read your Tempest token and change any setting — the
-broker address discussed below included.
+- New installations require owner or paired-editor access to read `/config`, write settings,
+  inspect integrations, or perform archive maintenance. Weather and history viewer endpoints
+  remain public to devices that can reach the server; `/config-public` removes credentials.
+- The desktop owner connects over loopback with a `localhost` or literal loopback-IP Host.
+  Browser requests must also have a matching Origin (or an allowed native Tauri origin).
+  Cross-origin requests do not inherit this implicit owner authority. Arbitrary Host names do
+  not inherit it either, even when Origin matches, preventing the loopback DNS-rebinding bypass.
+- Other editors pair with an owner-generated ten-minute code. Their bearer credentials are
+  hashed on the server and can be revoked. Treat a paired browser as trusted: it can read the
+  unredacted configuration and change settings.
+- Existing pre-pairing configurations migrate with `legacyLanAccess: true` to preserve household
+  compatibility. That explicit mode trusts LAN clients with credentials and administration.
+  Disable it after pairing the screens that need editing access.
+- `/public` redirects to `/`; it is **not** an authorization boundary or a way to downgrade a
+  browser that already has editor credentials. A reverse proxy must preserve the public Host,
+  use paired credentials for administration, and enforce any additional restrictions required
+  for internet exposure. Do not rewrite every incoming request to `Host: localhost` and thereby
+  make the proxy an implicit owner. Use TLS for paired credentials outside trusted loopback.
+
+The access checks protect the application API, not the host machine from another local process.
+See the [technical reference](docs/technical-reference.md#sharing-a-read-only-dashboard) for setup.
+
+On Unix, configuration writes, new backups, and restore staging files use owner-only permissions
+(`0600`), and startup tightens the existing configuration file. Previously exported backups and
+existing archive files are not automatically changed. Windows uses its existing filesystem ACLs.
+
+Uploads use two dedicated workers and two queue slots, so stalled request bodies do not consume
+the four normal HTTP workers. A local `tiny_http 0.12.0` patch adds connection cancellation,
+ten-second socket idle timeouts and absolute request-body deadlines. Discard buffers are bounded,
+and truncated/oversized bodies cannot apply a valid prefix. See
+[`src-tauri/vendor/tiny_http/STORMDESK-PATCH.md`](src-tauri/vendor/tiny_http/STORMDESK-PATCH.md)
+for the upstream provenance and maintained changes.
 
 Only the newest release is supported. The desktop builds update themselves, the container's
 `latest` tag moves on every release, and there are no backport branches.
@@ -31,7 +55,19 @@ been read, the call path traced, and the finding recorded — not that it has be
 entry is mirrored in `src-tauri/deny.toml`, so `cargo deny check advisories` fails in CI if one
 stops being true.
 
-### RUSTSEC-2026-0104 / GHSA-82j2-j2ch-gfr8 — rustls-webpki panic parsing a CRL
+### Current dependency status (November 17, 2026)
+
+`cargo deny check advisories` passes against the checked-in lockfile. The yanked
+`async-executor 1.14.0` is replaced by `1.14.1`; the Flatpak offline archive and checksum manifest
+matches all locked registry packages; the patched HTTP crate is bundled in the source tree.
+The bundled SQLite fix is present through
+`rusqlite 0.41.1` / `libsqlite3-sys 0.39.1`.
+
+The specific maintenance exceptions in `src-tauri/deny.toml` remain enforced by CI. No broad
+advisory ignore was added. The analyses below are historical and describe earlier dependency
+trees; they do not assert that the old affected TLS packages are still shipped.
+
+### Historical: RUSTSEC-2026-0104 / GHSA-82j2-j2ch-gfr8 — rustls-webpki panic parsing a CRL
 
 **We ship the affected crate. StormDesk cannot reach the code that panics.** Assessed 2026-08-24
 against 3.2.0, with `rumqttc 0.25.1` the newest release on crates.io.
@@ -140,7 +176,7 @@ Offline, the lockfile and the source answer the same questions:
 `cargo tree` needs the registry index and `cargo audit` the advisory database, so both want a
 network on a cold checkout — `cargo fetch` first. The greps need neither.
 
-[share]: README.md#sharing-a-read-only-dashboard
+[share]: docs/technical-reference.md#sharing-a-read-only-dashboard
 
 ### October 31, 2026 release audit
 

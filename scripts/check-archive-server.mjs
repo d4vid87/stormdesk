@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,13 +60,75 @@ try {
     await pause(50);
   }
   assert.ok(ready, 'Isolated server did not start on its reserved port: ' + childOutput);
-  const request = async (path, { method = 'GET', body, raw, status = 200 } = {}) => {
+  const request = async (path, { method = 'GET', body, raw, status = 200, headers = {} } = {}) => {
     const response = await fetch(base + path, { method, signal: AbortSignal.timeout(5000),
-      ...(body !== undefined || raw !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: raw ?? JSON.stringify(body) } : {}) });
+      headers: { ...(body !== undefined || raw !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
+      ...(body !== undefined || raw !== undefined ? { body: raw ?? JSON.stringify(body) } : {}) });
     const text = await response.text();
     assert.equal(response.status, status, method + ' ' + path + ': ' + text.slice(0, 500));
     return text ? JSON.parse(text) : null;
   };
+  // A hostile browser origin must not inherit loopback/legacy owner access. Pair tokens are
+  // deliberate credentials and continue to work across origins (including hosted clients).
+  for (const headers of [
+    { Origin: 'https://untrusted.example' }, { Origin: 'null' },
+    { 'Sec-Fetch-Site': 'cross-site' }, { Origin: base + '.untrusted.example' },
+    { Host: 'untrusted.example:' + port, Origin: 'http://untrusted.example:' + port },
+  ]) {
+    await request('/config', { headers, status: 401 });
+    await request('/pair/start', { method: 'POST', headers, status: 401 });
+    await request('/config', { method: 'PUT', headers, body: { settings: { token: 'attacker' } }, status: 401 });
+  }
+  for (const origin of [base, 'tauri://localhost', 'http://tauri.localhost', 'https://tauri.localhost']) {
+    assert.equal((await request('/config', { headers: { Origin: origin } })).settings.stationName, marker);
+  }
+  const pairing = await request('/pair/start', { method: 'POST', headers: { Origin: base } });
+  const editor = await request('/pair/claim', { method: 'POST', body: { code: pairing.code, name: 'Security test' } });
+  assert.equal((await request('/config', { headers: { Host: 'hosted-client.example', Origin: 'https://hosted-client.example', Authorization: 'Bearer ' + editor.token } })).settings.stationName, marker);
+
+  // Hold a local fake Home Assistant response open. Three concurrent readers and a normal
+  // app request must complete promptly, without occupying the remaining HTTP workers.
+  let upstreamCalls = 0, upstreamReady, releaseUpstream;
+  const readyUpstream = new Promise(resolve => { upstreamReady = resolve; });
+  const heldUpstream = new Promise(resolve => { releaseUpstream = resolve; });
+  const upstream = createHttpServer(async (_req, response) => {
+    upstreamCalls++;
+    upstreamReady();
+    await heldUpstream;
+    response.setHeader('Content-Type', 'application/json');
+    response.end('[{"entity_id":"sensor.local_test","state":"42"}]');
+  });
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+  let cacheOwner;
+  try {
+    const config = await request('/config');
+    await request('/config', { method: 'PUT', body: { _rev: config._rev || 0, settings: {
+      haUrl: 'http://127.0.0.1:' + upstream.address().port, haToken: 'fake-test-token',
+    } } });
+    cacheOwner = request('/ha/states');
+    await Promise.race([readyUpstream, cacheOwner.then(() => { throw new Error('Expected a local upstream request'); })]);
+    const started = performance.now();
+    const overlapping = await Promise.race([
+      Promise.all([request('/ha/states'), request('/ha/states'), request('/ha/states'), request('/config')]),
+      pause(750).then(() => null),
+    ]);
+    assert.ok(overlapping, 'slow upstream exhausted the HTTP worker pool');
+    assert.equal(upstreamCalls, 1, 'concurrent readers duplicated the upstream fetch');
+    assert.ok(overlapping.slice(0, 3).every(value => /refresh in progress/.test(value.error)));
+    console.log(`Upstream single-flight: 1 fetch, 3 overlapping readers + config completed in ${(performance.now() - started).toFixed(1)} ms while upstream remained blocked.`);
+    releaseUpstream();
+    const cached = await cacheOwner;
+    assert.equal(cached.entities[0].state, '42');
+    assert.deepEqual(await request('/ha/states'), cached);
+    assert.equal(upstreamCalls, 1);
+    const current = await request('/config');
+    await request('/config', { method: 'PUT', body: { _rev: current._rev, settings: { haUrl: '', haToken: '' } } });
+    assert.match((await request('/ha/states')).error, /no Home Assistant URL/);
+  } finally {
+    releaseUpstream();
+    await cacheOwner?.catch(() => {});
+    await new Promise(resolve => upstream.close(resolve));
+  }
   const epoch = Math.floor(Date.now() / 1000) - 120;
   const reviewPath = '/history/review?from=' + (epoch - 1) + '&to=' + (epoch + 1);
   const tuplesPath = '/history/tuples?from=' + (epoch - 1) + '&to=' + (epoch + 1);
@@ -153,10 +216,11 @@ try {
   assert.ok(!Object.hasOwn(publicConfig, '_access'));
   const current = await request('/config');
   await request('/config', { method: 'PUT', body: { _rev: current._rev, settings: { legacyLanAccess: false } } });
+  await request('/config', { headers: { Origin: 'https://untrusted.example' }, status: 401 });
   // The server deliberately trusts its loopback owner even after remote legacy access is disabled.
   assert.equal((await request(reviewPath)).obs[0][7], -5);
   assert.equal((await request('/config-public')).settings.stationId, 'B');
-  console.log('Archive HTTP: imports, notes, exclusions, invalid requests, channel ingestion, station isolation, stale-context rejection and public credential redaction passed.');
+  console.log('Archive HTTP: imports, notes, exclusions, invalid requests, channel ingestion, station isolation, stale-context rejection, public credential redaction and browser-origin authorization passed.');
 } finally {
   if (child && child.exitCode == null && child.signalCode == null) {
     child.kill('SIGTERM');

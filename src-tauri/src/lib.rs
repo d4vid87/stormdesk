@@ -59,6 +59,19 @@ pub fn default_config_dir() -> PathBuf {
     PathBuf::from(home).join(".config/io.github.davidmay87.stormdesk")
 }
 
+/// Credential-bearing temporary files must be private before their first byte is written.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub(crate) fn private_file(path: &std::path::Path) -> std::io::Result<std::fs::File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+    let file = options.open(path)?;
+    #[cfg(unix)]
+    { use std::os::unix::fs::PermissionsExt; file.set_permissions(std::fs::Permissions::from_mode(0o600))?; }
+    Ok(file)
+}
+
 /// Read one setting out of the config blob without a full settings type — the page owns that
 /// schema, and mirroring it here would be a second copy to keep in step.
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

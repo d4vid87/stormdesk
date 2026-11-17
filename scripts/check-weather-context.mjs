@@ -20,6 +20,15 @@ assert.match(modelAgreement({utc_offset_seconds:-21600,hourly:{time:['2025-12-31
 assert.match(modelAgreement({ hourly: { time: [start], temperature_2m_a: [10] } }, start, start + 1), /unavailable/);
 
 const source = readFileSync(new URL('../site/js/api.js', import.meta.url), 'utf8');
+const polygons = vm.createContext({});
+vm.runInContext(source.slice(source.indexOf('export function pointInRing('), source.indexOf('// --- Tropical ---')).replace(/^export /gm, ''), polygons);
+const outer = [[-2,-2],[2,-2],[2,2],[-2,2],[-2,-2]], hole = [[-1,-1],[1,-1],[1,1],[-1,1],[-1,-1]];
+for (const type of ['Polygon', 'MultiPolygon']) {
+  const geometry = {type, coordinates:type === 'Polygon' ? [outer,hole] : [[outer,hole]]};
+  const outlook = {features:[{geometry,properties:{LABEL:'ENH',LABEL2:'Enhanced'}}]};
+  assert.equal(polygons.riskAt(outlook,0,0),null,`${type}: excluded interior does not trigger a severe-weather risk`);
+  assert.equal(polygons.riskAt(outlook,1.5,1.5).code,'ENH',`${type}: the surrounding risk contour still applies`);
+}
 let time = now, calls = 0, response = () => new Response('{"value":1}');
 const cacheListeners = {}, stationSettings = {stationSource:'',deviceId:'1',stationId:'1'};
 const context = vm.createContext({ URL, structuredClone, console, Date: class extends Date { static now() { return time; } },

@@ -3,7 +3,7 @@
 //
 // v2 ran one thread over `incoming_requests()`, which meant a slow route stalled the page's own
 // assets and ruled out anything long-lived. v3 runs a small pool and hands streams (SSE, CSV,
-// database backups) to threads of their own, so nothing blocks anything else.
+// database backups) to threads of their own. Request bodies have a separate bounded pool.
 //
 // Viewer weather routes stay open on the LAN. Configuration and maintenance routes are
 // authenticated below; `/config-public` is the redacted viewer bootstrap.
@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::net::UdpSocket;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::{sync_channel, SyncSender};
+use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tiny_http::{Header, Request, Response, ResponseBox, Server};
@@ -30,7 +30,11 @@ pub const DEFAULT_PORT: u16 = 8088;
 const HUB_PORT: u16 = 50222;
 /// Streams cost a thread each. Eight is more screens than any house has; the ninth is told so.
 const MAX_SSE: usize = 8;
+const MAX_DOWNLOADS: usize = 4;
 const WORKERS: usize = 4;
+const UPLOAD_WORKERS: usize = 2;
+const BODY_DEADLINE: Duration = Duration::from_secs(30);
+const RESTORE_DEADLINE: Duration = Duration::from_secs(30 * 60);
 static TEMP_N: AtomicUsize = AtomicUsize::new(0);
 
 pub struct State {
@@ -43,8 +47,9 @@ pub struct State {
     /// SQLite handle (file open, WAL header read, pragmas, schema check) a few times a second.
     /// ponytail: one writer mutex; per-thread connections if ingest ever exceeds a few rows/s.
     writer: Mutex<Option<rusqlite::Connection>>,
-    sse: Mutex<Vec<SyncSender<String>>>,
+    sse: Mutex<Vec<(usize, SyncSender<String>)>>,
     sse_n: AtomicUsize,
+    downloads: AtomicUsize,
     pub backfill: Mutex<&'static str>,
     pub(crate) config_write: Mutex<()>,
     pairing: Mutex<Option<PairCode>>,
@@ -64,6 +69,7 @@ impl State {
             writer: Mutex::new(None),
             sse: Mutex::new(Vec::new()),
             sse_n: AtomicUsize::new(0),
+            downloads: AtomicUsize::new(0),
             backfill: Mutex::new("off"),
             config_write: Mutex::new(()),
             pairing: Mutex::new(None),
@@ -79,7 +85,7 @@ impl State {
     pub fn broadcast(&self, event: &str, data: &str) {
         let frame = format!("event: {event}\ndata: {data}\n\n");
         if let Ok(mut subs) = self.sse.lock() {
-            subs.retain(|tx| tx.try_send(frame.clone()).is_ok());
+            subs.retain(|(_, tx)| tx.try_send(frame.clone()).is_ok());
         }
     }
 
@@ -142,6 +148,9 @@ fn station_fingerprint_value(cfg: &serde_json::Value) -> String {
 }
 
 fn accepts_udp(cfg: &serde_json::Value, packet: &serde_json::Value) -> bool {
+    if !matches!(packet["type"].as_str(), Some("obs_st" | "rapid_wind" | "evt_strike" | "evt_precip" | "device_status" | "hub_status" | "obs_air" | "obs_sky")) {
+        return false;
+    }
     let s = &cfg["settings"];
     if s["stationSource"].as_str().is_some_and(|v| !v.is_empty()) { return false; }
     let configured = s["deviceId"].as_str().filter(|v| !v.is_empty());
@@ -163,6 +172,30 @@ fn consume_pair(active: &mut Option<PairCode>, code: &str, at: u64) -> bool {
     let matches = active.as_ref().is_some_and(|p| p.expires >= at && p.code == code);
     if matches { active.take(); }
     matches
+}
+
+fn permit_pair_attempt(attempts: &mut HashMap<String, (u64, u8)>, source: &str, at: u64) -> bool {
+    attempts.retain(|_, (started, _)| at.saturating_sub(*started) <= 600);
+    // Never evict an active limit to make room: an IP flood cannot reset a previous limit.
+    if !attempts.contains_key(source) && attempts.len() >= 1024 { return false; }
+    let entry = attempts.entry(source.to_owned()).or_insert((at, 0));
+    if entry.1 >= 8 { return false; }
+    entry.1 += 1;
+    true
+}
+
+struct DownloadPermit(Arc<State>);
+
+impl DownloadPermit {
+    fn acquire(state: &Arc<State>) -> Option<Self> {
+        state.downloads.fetch_update(Ordering::Relaxed, Ordering::Relaxed,
+            |n| (n < MAX_DOWNLOADS).then_some(n + 1)).ok()?;
+        Some(Self(state.clone()))
+    }
+}
+
+impl Drop for DownloadPermit {
+    fn drop(&mut self) { self.0.downloads.fetch_sub(1, Ordering::Relaxed); }
 }
 
 fn random_hex(bytes: usize) -> Option<String> {
@@ -188,6 +221,17 @@ fn loopback(req: &Request) -> bool {
         .unwrap_or(false)
 }
 
+fn loopback_host(req: &Request) -> bool {
+    let Some(host) = req.headers().iter().find(|h| h.field.equiv("Host")).map(|h| h.value.as_str()) else { return false; };
+    let authority = host.to_ascii_lowercase();
+    if authority == "localhost" || authority.strip_prefix("localhost:").is_some_and(|port| port.parse::<u16>().is_ok()) {
+        return true;
+    }
+    authority.parse::<std::net::SocketAddr>().map(|addr| addr.ip().is_loopback())
+        .or_else(|_| authority.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>().map(|ip| ip.is_loopback()))
+        .unwrap_or(false)
+}
+
 fn editor_allowed(cfg: &serde_json::Value, token: &str) -> bool {
     let hash = token_hash(token);
     cfg.pointer("/_access/editors").and_then(|v| v.as_array()).is_some_and(|list| {
@@ -195,8 +239,26 @@ fn editor_allowed(cfg: &serde_json::Value, token: &str) -> bool {
     })
 }
 
+// A web page does not inherit the owner's authority just because its request reaches loopback.
+fn trusted_browser(req: &Request) -> bool {
+    let value = |name: &str| req.headers().iter()
+        .find(|h| h.field.as_str().as_str().eq_ignore_ascii_case(name))
+        .map(|h| h.value.as_str());
+    match value("Origin") {
+        Some("tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost") => true,
+        Some(origin) => origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://"))
+            .zip(value("Host"))
+            .is_some_and(|(authority, host)| !authority.contains(['/', '?', '#', '@']) && authority.eq_ignore_ascii_case(host)),
+        None => !matches!(value("Sec-Fetch-Site"), Some("cross-site" | "same-site")),
+    }
+}
+
 fn authorized(state: &State, req: &Request) -> bool {
-    if loopback(req) {
+    let browser_trusted = trusted_browser(req);
+    // Host is independent of Origin: matching attacker-controlled headers are a DNS-rebinding
+    // request, not the local owner. A custom reverse proxy must use an explicit editor token.
+    let local_owner = loopback(req) && loopback_host(req);
+    if local_owner && browser_trusted {
         return true;
     }
     let cfg: serde_json::Value =
@@ -204,7 +266,7 @@ fn authorized(state: &State, req: &Request) -> bool {
     if cfg
         .pointer("/settings/legacyLanAccess")
         .and_then(|v| v.as_bool())
-        == Some(true)
+        == Some(true) && browser_trusted && (!loopback(req) || local_owner)
     {
         return true;
     }
@@ -356,6 +418,8 @@ fn read_config(path: &Path) -> String {
 }
 
 fn ensure_access(path: &Path) {
+    #[cfg(unix)]
+    { use std::os::unix::fs::PermissionsExt; let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)); }
     let existed = path.is_file();
     let mut cfg: serde_json::Value =
         serde_json::from_str(&read_config(path)).unwrap_or_else(|_| serde_json::json!({}));
@@ -395,14 +459,12 @@ fn save_editor(state: &State, name: &str, token: &str) -> Option<String> {
     Some(id)
 }
 
-fn pairing_response(state: &State, req: &mut Request) -> ResponseBox {
+fn pairing_response(state: &State, req: &Request, body: &str) -> ResponseBox {
     let source = req
         .remote_addr()
         .map(|a| a.ip().to_string())
         .unwrap_or_else(|| "unknown".into());
-    let mut body = String::new();
-    let _ = req.as_reader().take(4096).read_to_string(&mut body);
-    let input: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+    let input: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
     let code = input["code"].as_str().unwrap_or("");
     let name = input["name"].as_str().unwrap_or("Household device");
     {
@@ -410,11 +472,7 @@ fn pairing_response(state: &State, req: &mut Request) -> ResponseBox {
             .pair_failures
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        let entry = failures.entry(source.clone()).or_insert((now(), 0));
-        if now().saturating_sub(entry.0) > 600 {
-            *entry = (now(), 0);
-        }
-        if entry.1 >= 8 {
+        if !permit_pair_attempt(&mut failures, &source, now()) {
             return Response::empty(429).boxed();
         }
     }
@@ -422,9 +480,6 @@ fn pairing_response(state: &State, req: &mut Request) -> ResponseBox {
         .map(|mut active| consume_pair(&mut active, code, now()))
         .unwrap_or(false);
     if !valid {
-        if let Ok(mut failures) = state.pair_failures.lock() {
-            failures.entry(source).or_insert((now(), 0)).1 += 1;
-        }
         return Response::empty(401).boxed();
     }
     let Some(token) = random_hex(32) else {
@@ -460,10 +515,13 @@ fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
         std::fs::create_dir_all(d)?;
     }
     let tmp = path.with_extension(format!(
-        "json.tmp.{}",
+        "json.tmp.{}.{}", std::process::id(),
         TEMP_N.fetch_add(1, Ordering::Relaxed)
     ));
-    std::fs::write(&tmp, text)?;
+    let mut file = crate::private_file(&tmp)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
     match std::fs::rename(&tmp, path) {
         Ok(()) => Ok(()),
         // Windows does not replace an existing destination. Keep the old file until the new one
@@ -558,14 +616,19 @@ fn write_config(path: &Path, body: &str) -> Option<(u16, String, u64)> {
 /// The 15-second comment is the keepalive: without a write, a peer that vanished behind a NAT
 /// sits here holding a thread and a slot until the kernel gives up on the socket.
 fn sse(state: &Arc<State>, req: Request) {
+    sse_with_heartbeat(state, req, Duration::from_secs(15));
+}
+
+fn sse_with_heartbeat(state: &Arc<State>, req: Request, heartbeat: Duration) {
     if state.sse_n.fetch_add(1, Ordering::Relaxed) >= MAX_SSE {
         state.sse_n.fetch_sub(1, Ordering::Relaxed);
         let _ = req.respond(Response::empty(503));
         return;
     }
     let (tx, rx) = sync_channel::<String>(64);
+    let id = TEMP_N.fetch_add(1, Ordering::Relaxed);
     if let Ok(mut subs) = state.sse.lock() {
-        subs.push(tx);
+        subs.push((id, tx));
     }
     let state = state.clone();
     // Its own thread for as long as the screen is open — a worker parked here would be a
@@ -581,7 +644,7 @@ fn sse(state: &Arc<State>, req: Request) {
             .is_ok();
         if ok {
             loop {
-                let frame = match rx.recv_timeout(Duration::from_secs(15)) {
+                let frame = match rx.recv_timeout(heartbeat) {
                     Ok(f) => f,
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => ": ping\n\n".into(),
                     Err(_) => break,
@@ -594,6 +657,8 @@ fn sse(state: &Arc<State>, req: Request) {
                 }
             }
         }
+        // Quiet stations may never broadcast again; retire the queue when its client leaves.
+        if let Ok(mut subs) = state.sse.lock() { subs.retain(|(other, _)| *other != id); }
         state.sse_n.fetch_sub(1, Ordering::Relaxed);
     });
 }
@@ -850,6 +915,15 @@ fn health_json(state: &State) -> String {
     }).to_string()
 }
 
+/// An incomplete body can contain valid JSON. Never apply that prefix after a read failure.
+fn read_body(req: &mut Request, limit: u64) -> Option<String> {
+    let expected = req.body_length();
+    if expected.is_some_and(|n| n as u64 > limit) { return None; }
+    let mut body = String::new();
+    req.as_reader().take(limit + 1).read_to_string(&mut body).ok()?;
+    (body.len() as u64 <= limit && expected.is_none_or(|n| n == body.len())).then_some(body)
+}
+
 fn handle(state: &Arc<State>, mut req: Request) {
     let url = req.url().to_string();
     let path = url.split('?').next().unwrap_or("/").to_string();
@@ -867,7 +941,8 @@ fn handle(state: &Arc<State>, mut req: Request) {
 
     if path == "/pair/claim" {
         let response = if *req.method() == tiny_http::Method::Post {
-            pairing_response(state, &mut req)
+            let Some(body) = read_body(&mut req, 4096) else { return req.abort(); };
+            pairing_response(state, &req, &body)
         } else {
             Response::empty(405).boxed()
         };
@@ -892,10 +967,9 @@ fn handle(state: &Arc<State>, mut req: Request) {
     // consoles default to and can't always be talked out of, so we answer on those too.
     // A Weather Underground client checks the body for the literal `success`.
     if is_ingest_path(&path) {
-        let mut body = String::new();
         // A station report is a few hundred bytes. The cap is what stops a stray POST of
         // something else from being read into memory in full.
-        let _ = req.as_reader().take(64 * 1024).read_to_string(&mut body);
+        let Some(body) = read_body(&mut req, 64 * 1024) else { return req.abort(); };
         let code = ingest::accept(state, &url, &body);
         let res = Response::from_string(if code == 200 { "success" } else { "" })
             .with_status_code(code)
@@ -925,8 +999,8 @@ fn handle(state: &Arc<State>, mut req: Request) {
             .boxed(),
         "/pair/start" => {
             if *req.method() != tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
-            let raw = random_hex(4).unwrap_or_else(|| "00000000".into());
-            let n = u32::from_str_radix(&raw, 16).unwrap_or(0) % 1_000_000;
+            let Some(raw) = random_hex(4) else { return drop(req.respond(Response::empty(503))); };
+            let n = u32::from_str_radix(&raw, 16).expect("hex from random bytes") % 1_000_000;
             let pair = PairCode {
                 code: format!("{n:06}"),
                 expires: now() + 600,
@@ -937,8 +1011,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
         "/pair/devices" => json(devices_json(state)),
         "/pair/devices/revoke" => {
             if *req.method() != tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
-            let mut body = String::new();
-            let _ = req.as_reader().take(4096).read_to_string(&mut body);
+            let Some(body) = read_body(&mut req, 4096) else { return req.abort(); };
             let id = serde_json::from_str::<serde_json::Value>(&body)
                 .ok()
                 .and_then(|v| v["id"].as_str().map(String::from))
@@ -969,8 +1042,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
             if *req.method() != tiny_http::Method::Post {
                 Response::empty(405).boxed()
             } else {
-                let mut body = String::new();
-                let _ = req.as_reader().take(1024).read_to_string(&mut body);
+                let Some(body) = read_body(&mut req, 1024) else { return req.abort(); };
                 let action = serde_json::from_str::<serde_json::Value>(&body)
                     .ok()
                     .and_then(|v| v["action"].as_str().map(String::from));
@@ -1048,7 +1120,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
         },
         "/archive/recover" => {
             if *req.method()!=tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
-            let mut body=String::new();let _=req.as_reader().take(4096).read_to_string(&mut body);
+            let Some(body) = read_body(&mut req, 4096) else { return req.abort(); };
             let input=serde_json::from_str::<serde_json::Value>(&body).unwrap_or_default();
             let result = recover_archive(state, &input, crate::environment::fetch_recovery);
             match result {
@@ -1061,9 +1133,8 @@ fn handle(state: &Arc<State>, mut req: Request) {
         }
         "/archive/edit" => {
             if *req.method()!=tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
-            let mut body=String::new();
-            let _=req.as_reader().take(4*1024*1024+1).read_to_string(&mut body);
-            let input=serde_json::from_str::<serde_json::Value>(&body).ok().filter(|_|body.len()<=4*1024*1024);
+            let Some(body) = read_body(&mut req, 4 * 1024 * 1024) else { return req.abort(); };
+            let input=serde_json::from_str::<serde_json::Value>(&body).ok();
             let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
             let context=token_hash(&station_fingerprint(&state.cfg_path));
             if input.as_ref().and_then(|v|v["context"].as_str())!=Some(context.as_str()) {
@@ -1105,6 +1176,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
             json(store::coverage_json(&conn, phase))
         }
         "/history.csv" => {
+            let Some(permit) = DownloadPermit::acquire(state) else { return drop(req.respond(Response::empty(503))); };
             let Some(conn) = state.db() else {
                 return drop(req.respond(Response::empty(503)));
             };
@@ -1124,15 +1196,17 @@ fn handle(state: &Arc<State>, mut req: Request) {
             );
             // Years of minutes at a few hundred bytes a row: not a worker's job.
             std::thread::spawn(move || {
+                let _permit = permit;
                 let _ = req.respond(res);
             });
             return;
         }
         "/backup.db" => {
+            let Some(permit) = DownloadPermit::acquire(state) else { return drop(req.respond(Response::empty(503))); };
             let Some(conn) = state.db() else {
                 return drop(req.respond(Response::empty(503)));
             };
-            let dest = state.data_dir.join("backup-tmp.db");
+            let dest = state.data_dir.join(format!("backup-tmp-{}-{}.db", std::process::id(), TEMP_N.fetch_add(1, Ordering::Relaxed)));
             if store::backup_to(&conn, &dest).is_err() {
                 return drop(req.respond(Response::empty(500)));
             }
@@ -1152,18 +1226,21 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 None,
             );
             std::thread::spawn(move || {
+                let _permit = permit;
                 let _ = req.respond(res);
                 let _ = std::fs::remove_file(&dest);
             });
             return;
         }
         "/backup.wdbak" => {
+            let Some(permit) = DownloadPermit::acquire(state) else { return drop(req.respond(Response::empty(503))); };
             let Some(conn) = state.db() else {
                 return drop(req.respond(Response::empty(503)));
             };
             let dest = state.data_dir.join(format!(
-                "backup-{}-{}.wdbak",
+                "backup-{}-{}-{}.wdbak",
                 now(),
+                std::process::id(),
                 TEMP_N.fetch_add(1, Ordering::Relaxed)
             ));
             if store::bundle_to(&conn, &dest, &read_config(&state.cfg_path)).is_err() {
@@ -1187,12 +1264,14 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 None,
             );
             std::thread::spawn(move || {
+                let _permit = permit;
                 let _ = req.respond(res);
                 let _ = std::fs::remove_file(dest);
             });
             return;
         }
         "/backup/station-replacement" => {
+            let Some(permit) = DownloadPermit::acquire(state) else { return drop(req.respond(Response::empty(503))); };
             let path = state.data_dir.join("pre-station-replacement.wdbak");
             let Ok(file) = std::fs::File::open(&path) else { return drop(req.respond(Response::empty(404))); };
             let len = file.metadata().map(|m| m.len() as usize).ok();
@@ -1200,15 +1279,14 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 header("Content-Type", "application/octet-stream"),
                 header("Content-Disposition", "attachment; filename=pre-station-replacement.wdbak"),
             ], file, len, None);
-            std::thread::spawn(move || { let _ = req.respond(res); });
+            std::thread::spawn(move || { let _permit = permit; let _ = req.respond(res); });
             return;
         }
         "/archive/replace" => {
             if *req.method()!=tiny_http::Method::Post { return drop(req.respond(Response::empty(405))); }
+            let Some(body) = read_body(&mut req, 1024) else { return req.abort(); };
             let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
             if station_fingerprint(&state.cfg_path) == "none" { return drop(req.respond(Response::empty(409))); }
-            let mut body = String::new();
-            let _ = req.as_reader().take(1024).read_to_string(&mut body);
             let confirmed = serde_json::from_str::<serde_json::Value>(&body).ok()
                 .and_then(|v| v["confirm"].as_str().map(|s| s == "REPLACE")).unwrap_or(false);
             if !confirmed { Response::empty(400).boxed() } else {
@@ -1231,6 +1309,10 @@ fn handle(state: &Arc<State>, mut req: Request) {
             if *req.method() != tiny_http::Method::Post {
                 Response::empty(405).boxed()
             } else {
+                const MAX_RESTORE: u64 = 8 * 1024 * 1024 * 1024;
+                let expected = req.body_length();
+                if expected.is_some_and(|n| n as u64 > MAX_RESTORE) { return req.abort(); }
+                req.set_body_deadline(RESTORE_DEADLINE);
                 cleanup_restores(state);
                 let id = format!(
                     "{}-{}-{}",
@@ -1239,13 +1321,13 @@ fn handle(state: &Arc<State>, mut req: Request) {
                     TEMP_N.fetch_add(1, Ordering::Relaxed)
                 );
                 let path = staged_restore(state, &id).unwrap();
-                let result = std::fs::File::create(&path).and_then(|mut f| {
+                let result = crate::private_file(&path).and_then(|mut f| {
                     let n =
-                        std::io::copy(&mut req.as_reader().take(8 * 1024 * 1024 * 1024), &mut f)?;
-                    if n == 0 {
+                        std::io::copy(&mut req.as_reader().take(MAX_RESTORE + 1), &mut f)?;
+                    if n == 0 || n > MAX_RESTORE || expected.is_some_and(|len| len as u64 != n) {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "empty",
+                            "empty or oversized backup",
                         ));
                     }
                     f.flush()
@@ -1288,15 +1370,10 @@ fn handle(state: &Arc<State>, mut req: Request) {
         "/config" => match *req.method() {
             tiny_http::Method::Get => json(read_config(&state.cfg_path)),
             tiny_http::Method::Put => {
-                let mut body = String::new();
-                let read = req
-                    .as_reader()
-                    .take(256 * 1024)
-                    .read_to_string(&mut body)
-                    .is_ok();
+                let Some(body) = read_body(&mut req, 256 * 1024) else { return req.abort(); };
                 let _write = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
                 let previous_station = station_fingerprint(&state.cfg_path);
-                let written = read.then(|| write_config(&state.cfg_path, &body)).flatten();
+                let written = write_config(&state.cfg_path, &body);
                 if station_fingerprint(&state.cfg_path) != previous_station {
                     state.packets.lock().unwrap_or_else(|e|e.into_inner()).clear();
                     *state.backfill.lock().unwrap_or_else(|e|e.into_inner()) = "off";
@@ -1388,11 +1465,32 @@ pub fn serve(state: Arc<State>, want: u16) -> u16 {
         .to_ip()
         .map(|a| a.port())
         .unwrap_or(want);
+    let (uploads, pending) = sync_channel::<Request>(UPLOAD_WORKERS);
+    let pending = Arc::new(Mutex::new(pending));
+    for _ in 0..UPLOAD_WORKERS {
+        let (pending, state) = (pending.clone(), state.clone());
+        std::thread::spawn(move || loop {
+            let req = pending.lock().unwrap_or_else(|e| e.into_inner()).recv();
+            match req { Ok(req) => handle(&state, req), Err(_) => break }
+        });
+    }
     for _ in 0..WORKERS {
         let (server, state) = (server.clone(), state.clone());
+        let uploads = uploads.clone();
         std::thread::spawn(move || {
-            while let Ok(req) = server.recv() {
-                handle(&state, req);
+            while let Ok(mut req) = server.recv() {
+                let has_body = req.body_length().unwrap_or(0) > 0 || req.headers().iter()
+                    .any(|h| h.field.equiv("Transfer-Encoding") ||
+                        (h.field.equiv("Connection") && h.value.as_str().to_ascii_lowercase().contains("upgrade")));
+                if has_body {
+                    req.set_body_deadline(BODY_DEADLINE);
+                    // Reject without draining or writing: either can block on this connection.
+                    if let Err(TrySendError::Full(req) | TrySendError::Disconnected(req)) = uploads.try_send(req) {
+                        req.abort();
+                    }
+                } else {
+                    handle(&state, req);
+                }
             }
         });
     }
@@ -1599,6 +1697,146 @@ pub fn start_backfill(state: Arc<State>) {
 // reach the public blob, and a v2 client's whole-blob write must keep working.
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn request_bodies_require_complete_utf8_within_the_route_limit() {
+        let mut exact: Request = tiny_http::TestRequest::new().with_body("abcd").into();
+        assert_eq!(read_body(&mut exact, 4).as_deref(), Some("abcd"));
+        let mut oversized: Request = tiny_http::TestRequest::new().with_body("abcde").into();
+        assert!(read_body(&mut oversized, 4).is_none());
+        let mut truncated: Request = tiny_http::TestRequest::new().with_body("{}")
+            .with_header(header("Content-Length", "1025")).into();
+        assert!(read_body(&mut truncated, 2048).is_none(), "valid JSON prefix must not hide a truncated upload");
+    }
+
+    #[test]
+    fn pipelined_requests_behind_events_do_not_occupy_http_workers() {
+        use std::io::{BufRead, BufReader};
+        let dir = std::env::temp_dir().join(format!("wd-pipeline-{}", std::process::id()));
+        let state = State::new(dir.clone(), dir.join("config.json"));
+        let port = serve(state, 0);
+        let mut streams = Vec::new();
+        for _ in 0..WORKERS {
+            let mut socket = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+            socket.write_all(b"GET /events HTTP/1.1\r\nHost: localhost\r\n\r\nGET /config-public HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+            let mut reader = BufReader::new(socket);
+            let mut status = String::new();
+            reader.read_line(&mut status).unwrap();
+            assert!(status.contains("200"));
+            streams.push(reader);
+        }
+        let mut socket = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+        socket.write_all(b"GET /config-public HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+        let mut status = String::new();
+        BufReader::new(socket).read_line(&mut status).expect("pipelined requests exhausted the normal workers");
+        assert!(status.contains("200"));
+        drop(streams);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn config_writes_and_existing_config_startup_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("wd-private-config-{}", std::process::id()));
+        let path = dir.join("config.json");
+        write_atomic(&path, r#"{"settings":{"token":"fake-secret"}}"#).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666)).unwrap();
+        ensure_access(&path);
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert!(read_config(&path).contains("fake-secret"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn concurrent_downloads_are_bounded_and_release_after_disconnect() {
+        use std::io::{BufRead, BufReader, Write};
+        let dir = std::env::temp_dir().join(format!("wd-downloads-{}", std::process::id()));
+        let state = State::new(dir.clone(), dir.join("config.json"));
+        // A sparse fake backup is enough to keep real HTTP transfers open without loading a
+        // large fixture into memory or touching the user's archive.
+        std::fs::File::create(dir.join("pre-station-replacement.wdbak")).unwrap().set_len(128 * 1024 * 1024).unwrap();
+        let port = serve(state.clone(), 0);
+        let request = |path: &str| {
+            let mut socket = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+            write!(socket, "GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").unwrap();
+            let mut reader = BufReader::new(socket);
+            let mut status = String::new();
+            reader.read_line(&mut status).unwrap();
+            (status, reader)
+        };
+        let mut clients = Vec::new();
+        for _ in 0..MAX_DOWNLOADS {
+            let (status, client) = request("/backup/station-replacement");
+            assert!(status.contains("200"));
+            clients.push(client);
+        }
+        assert_eq!(state.downloads.load(Ordering::Relaxed), MAX_DOWNLOADS);
+        assert!(request("/history.csv").0.contains("503"), "downloads must share one concurrency limit");
+        assert!(request("/config").0.contains("200"), "slow transfers must not occupy app workers");
+        drop(clients);
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while state.downloads.load(Ordering::Relaxed) > 0 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(state.downloads.load(Ordering::Relaxed), 0);
+        // A failing path releases its permit too, before any download thread is created.
+        std::fs::remove_file(dir.join("pre-station-replacement.wdbak")).unwrap();
+        assert!(request("/backup/station-replacement").0.contains("404"));
+        while state.downloads.load(Ordering::Relaxed) > 0 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(state.downloads.load(Ordering::Relaxed), 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn pairing_limits_expire_without_unbounded_sources_or_limit_eviction() {
+        let mut attempts = HashMap::new();
+        for _ in 0..8 { assert!(permit_pair_attempt(&mut attempts, "limited", 100)); }
+        assert!(!permit_pair_attempt(&mut attempts, "limited", 101));
+        for i in 1..1024 { assert!(permit_pair_attempt(&mut attempts, &format!("source-{i}"), 100)); }
+        assert!(!permit_pair_attempt(&mut attempts, "extra", 101));
+        assert_eq!(attempts.len(), 1024);
+        assert!(!permit_pair_attempt(&mut attempts, "limited", 102));
+        assert!(permit_pair_attempt(&mut attempts, "extra", 701));
+        assert_eq!(attempts.len(), 1);
+    }
+
+    #[test]
+    fn closed_event_streams_release_subscribers_without_weather_events() {
+        use std::io::{BufRead, BufReader, Write};
+        let dir = std::env::temp_dir().join(format!("wd-sse-{}", std::process::id()));
+        let state = State::new(dir.clone(), dir.join("config.json"));
+        for _ in 0..10 {
+            let server = Server::http("127.0.0.1:0").unwrap();
+            let port = server.server_addr().to_ip().unwrap().port();
+            let worker_state = state.clone();
+            let server_thread = std::thread::spawn(move || {
+                sse_with_heartbeat(&worker_state, server.recv().unwrap(), Duration::from_millis(5));
+            });
+            let mut socket = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+            socket.set_read_timeout(Some(Duration::from_secs(1))).unwrap();
+            write!(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n").unwrap();
+            let mut reader = BufReader::new(socket);
+            let mut status = String::new();
+            reader.read_line(&mut status).unwrap();
+            assert!(status.contains("200"));
+            drop(reader);
+            server_thread.join().unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+            while state.sse_n.load(Ordering::Relaxed) > 0 && std::time::Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            assert_eq!(state.sse_n.load(Ordering::Relaxed), 0);
+            assert!(state.sse.lock().unwrap().is_empty(), "disconnected client queue retained on a quiet station");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn lite_directory_serves_its_page() {
         let (body, mime) = super::asset("/lite/").expect("Lite directory entry");
@@ -1993,10 +2231,14 @@ mod tests {
         let awn=station_fingerprint_value(&json!({"settings":{"stationSource":"awn","awnApiKey":"secret"}}));
         assert!(awn.starts_with("awn:") && !awn.contains("secret"));
         let cfg=json!({"settings":{"deviceId":"7"}});
-        for kind in ["obs_st","rapid_wind","device_status","evt_strike"] {
+        for kind in ["obs_st","rapid_wind","device_status","evt_strike","evt_precip","hub_status","obs_air","obs_sky"] {
             assert!(accepts_udp(&cfg,&json!({"type":kind,"device_id":7})));
             assert!(!accepts_udp(&cfg,&json!({"type":kind,"device_id":8})));
             assert!(!accepts_udp(&cfg,&json!({"type":kind})));
+        }
+        for kind in ["", "new-key-for-every-packet", "unknown"] {
+            assert!(!accepts_udp(&cfg, &json!({"type":kind,"device_id":7})));
+            assert!(!accepts_udp(&json!({}), &json!({"type":kind})));
         }
         assert!(!accepts_udp(&json!({"settings":{"stationSource":"ecowitt"}}),&json!({"type":"obs_st","device_id":7})));
     }

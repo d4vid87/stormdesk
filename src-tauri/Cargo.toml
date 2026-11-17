@@ -1,6 +1,6 @@
 [package]
 name = "stormdesk"
-version = "4.10.3"
+version = "4.11.0"
 description = "Self-hosted WeatherFlow Tempest dashboard"
 authors = ["David May"]
 license = "MIT"
@@ -36,7 +36,8 @@ serde_json = "1"
 # its WebKit web process would outlive the shutdown watchdog and SIGTRAP. Focus the existing
 # window instead.
 tauri-plugin-single-instance = { version = "2", optional = true }
-tiny_http = "0.12"
+# Narrow local transport patch: cancellable uploads and bounded socket/body deadlines.
+tiny_http = { version = "0.12", path = "vendor/tiny_http" }
 # The observation archive. Bundled: a wall tablet's distro is not where you go looking for a
 # matching libsqlite3.
 rusqlite = { version = "0.41", features = ["bundled"] }

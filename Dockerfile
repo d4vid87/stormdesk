@@ -9,7 +9,7 @@ WORKDIR /src
 COPY site ./site
 COPY src-tauri ./src-tauri
 WORKDIR /src/src-tauri
-RUN cargo build --release --no-default-features --bin stormdesk
+RUN cargo build --locked --release --no-default-features --bin stormdesk
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 \

@@ -314,7 +314,12 @@ export async function betterForecast(stationId = settings().stationId) {
 // dashboard whose hero shows a model's guess at the temperature while a thermometer in the
 // garden says otherwise is the wrong way round.
 let lastTuple = null;
-window.addEventListener('wd:ws-obs', (e) => { lastTuple = e.detail; });
+const tupleContext = () => {
+  const s = settings();
+  return JSON.stringify([s.stationSource, s.deviceId, s.stationId, s.activeStationProfile,
+    s.wllHost, s.lacrosseEmail, s.ecowittMac, s.ingestKey, s.awnApiKey, s.lat, s.lon]);
+};
+window.addEventListener('wd:ws-obs', (e) => { lastTuple = { context: tupleContext(), obs: e.detail }; });
 
 // WMO code to the icon names `desk.js ICON` and `icons.js` already draw. Two variants where the
 // sky matters and one where it doesn't — fog at night still looks like fog.
@@ -465,7 +470,8 @@ export function shapeOm(j, ownTuple = null) {
 export function overlayStation(c, tuple, elevation) {
   const metric = settings().units === 'metric';
   const o = siToDisplay([[...tuple]])[0];
-  if (!Number.isFinite(o[OBS.time]) || Date.now() / 1000 - o[OBS.time] > 600) return c;
+  const age = Date.now() / 1000 - o[OBS.time];
+  if (!Number.isFinite(o[OBS.time]) || age > 600 || age < -300) return c;
   c._station = true;
   const own = (v) => (v == null ? undefined : v);
   const overlay = {
@@ -508,7 +514,7 @@ export async function omForecast(lat = coords().lat, lon = coords().lon, model =
     wind_speed_unit: WIND_UNITS[windUnit()].om,
     ...(imperial ? { temperature_unit: 'fahrenheit', precipitation_unit: 'inch' } : {}),
   })}`);
-  return shapeOm(j, lastTuple);
+  return shapeOm(j, lastTuple?.context === tupleContext() ? lastTuple.obs : null);
 }
 
 export function soilForecast(lat = coords().lat, lon = coords().lon, units = settings().units) {
@@ -669,7 +675,7 @@ export function riskAt(geojson, lat, lon) {
     if (!g) continue;
     const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
     for (const poly of polys) {
-      if (poly[0] && pointInRing(lon, lat, poly[0])) {
+      if (poly[0] && pointInRing(lon, lat, poly[0]) && !poly.slice(1).some(hole => pointInRing(lon, lat, hole))) {
         found = { label: f.properties?.LABEL2 || f.properties?.LABEL || '', code: f.properties?.LABEL || '' };
       }
     }

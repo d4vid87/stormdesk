@@ -526,11 +526,9 @@ fn quiet_now(cfg: &std::path::Path) -> bool {
         return false;
     }
     let parse = |s: &str| {
-        s[..2]
-            .parse::<i64>()
-            .ok()
-            .zip(s[3..].parse::<i64>().ok())
-            .map(|(h, m)| h * 60 + m)
+        let (h, m) = s.split_once(':')?;
+        let (h, m) = (h.parse::<i64>().ok()?, m.parse::<i64>().ok()?);
+        ((0..24).contains(&h) && (0..60).contains(&m)).then_some(h * 60 + m)
     };
     let Some((from, to)) = parse(&a).zip(parse(&b)) else {
         return false;
@@ -885,6 +883,16 @@ pub fn start(data_dir: std::path::PathBuf, cfg_path: std::path::PathBuf) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalid_quiet_hours_cannot_stop_the_alert_worker() {
+        let path = std::env::temp_dir().join(format!("stormdesk-quiet-{}.json", std::process::id()));
+        for time in ["1é:2", "99:99", "-1:00", "12x34"] {
+            std::fs::write(&path, serde_json::json!({"settings":{"quietStart":time,"quietEnd":"23:00"}}).to_string()).unwrap();
+            assert!(!quiet_now(&path), "invalid quiet hours must not suppress alerts");
+        }
+        std::fs::remove_file(path).unwrap();
+    }
 
     fn rule(metric: &str, op: &str, value: f64, dur_min: f64) -> Rule {
         Rule {

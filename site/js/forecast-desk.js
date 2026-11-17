@@ -265,6 +265,7 @@ export function initForecastDesk() {
       value('Convective cloud base', height(c.cloud_base_estimate), 'Estimated above ground · not a ceiling'),
       value('Freezing level', height(c.freezing_level), 'Model altitude above sea level'));
     balanced.updateAtmosphere(c);
+    balanced.updateWeatherChanges(combined);
     atmosphere.title = 'Unavailable provider readings are shown as —. Cloud base is a temperature/dew-point approximation for convective clouds.';
   }
   let dirty = true;

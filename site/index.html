@@ -918,6 +918,8 @@
 <link rel="stylesheet" href="radar-first.css">
 <link rel="stylesheet" href="forecast-desk.css">
 <link rel="stylesheet" href="balanced-desk.css">
+<link rel="stylesheet" href="sky-theater.css">
+<link rel="stylesheet" href="observatory-polish.css">
 <link rel="stylesheet" href="welcome.css?v=cards-20260926">
 </head>
 <body>
@@ -1039,9 +1041,9 @@
       <div id="hero-feels" class="hero-dim"></div>
       <div class="hero-now">
         <div class="hero-temperature">
-          <span class="hero-reading-label">Feels like</span>
-          <strong id="hero-apparent">—</strong>
-          <div class="hero-actual"><span>Actual</span> <span id="hero-temp" data-metric="temp">—</span></div>
+          <span id="hero-temp-label" class="hero-reading-label">Temperature</span>
+          <strong id="hero-temp" data-metric="temp" aria-describedby="hero-temp-label">—</strong>
+          <div class="hero-feels-like"><span>Feels like</span> <strong id="hero-apparent">—</strong></div>
         </div>
         <div class="hero-conditions">
           <div id="hero-icon" role="button" tabindex="0" title="Tap to hear today"></div>

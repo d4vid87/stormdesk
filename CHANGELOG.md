@@ -6,6 +6,29 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.11.0] - 2026-11-17
+
+### Changed
+- Apply Observatory styling to Balanced Desk, including a larger place/date heading, actual temperature above feels-like, prominent current conditions, and refined gauges and context panels.
+- Use Sky Theater forecast scenes with prominent rain probabilities and condition-driven animation; respect all motion preferences and retain all five gauge styles.
+- Replace the main river summary with upcoming Weather Changes for temperature, gusts and cloud cover. Keep estimates, gaps and cached data explicit, with details available on demand.
+
+### Performance
+- Reuse history chart calculations and accessibility preparation, avoid large-array argument overflows, and skip unchanged clock/date/time-zone writes.
+- Release hidden radar documents, abandoned observers and disconnected SSE subscribers; bound dashboard timing entries and avoid duplicate Lite API module state.
+- Deduplicate slow backend forecast, Home Assistant and drought requests with keyed caches and short failure retry windows. Bound background maps, pairing attempts and simultaneous downloads.
+
+### Fixed
+- Isolate request bodies on two upload workers with two waiting slots, preserving four normal HTTP workers. Close excess uploads, enforce ten-second idle and thirty-second ordinary body deadlines, and allow authenticated backup inspection up to thirty minutes and 8 GiB.
+- Reject incomplete or oversized mutation bodies, keep archive confirmation reads outside the configuration lock, and prevent pipelined requests behind streams from exhausting workers. Bound discarded-body memory and cancel buffered follow-ups after connection abort.
+- Preserve correct station identity in forecast/history caches and observation overlays; prevent old responses from overwriting newly selected places. Handle polygon holes, unit conversion, quiet-time parsing and retention overflow correctly.
+- Strengthen local browser Origin/Host authorization, paired credential boundaries, public-data redaction and service-worker caching. Create new credential-bearing files with owner-only permissions on Unix and fail securely if pairing randomness is unavailable.
+- Replace yanked async-executor 1.14.0 with 1.14.1, synchronize offline Flatpak dependencies, and add regression checks for the new behavior. Existing SQLite security fixes remain included.
+
+### Compatibility
+- Existing settings and archives are preserved. Custom reverse proxies should preserve the public Host and use paired credentials for editing. Explicit legacy LAN access remains supported.
+- Stalled, oversized or excess uploads are disconnected and may need retrying. The full browser app, Lite, HookEcho radar and station collection remain available.
+
 ## [4.10.3] - 2026-11-17
 
 ### Changed

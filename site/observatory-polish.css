@@ -1,0 +1,93 @@
+/* Observatory surfaces share the existing live readings, dialogs and gauge styles. */
+#desk.balanced-desk.outlook-view { --font:system-ui,-apple-system,"Segoe UI",sans-serif; --num:var(--font); }
+html[data-palette="graphite"]:not([data-theme="light"]) #desk.balanced-desk.outlook-view {
+  --panel:#1b2226; --panel2:#283238; --line:#354148; --text:#f1f5f6; --muted:#a7b4bc; --accent:#9ed8ea;
+}
+#desk.balanced-desk.outlook-view #observatory-heading { padding:2px 2px 4px; }
+#desk.balanced-desk.outlook-view .forecast-conditions { gap:22px; }
+#desk.balanced-desk.outlook-view .forecast-conditions .observatory-place { flex:0 1 220px; min-width:0; max-width:220px; padding:6px 14px; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:12px; background:linear-gradient(115deg,color-mix(in srgb,var(--accent),transparent 93%),transparent); }
+#desk.balanced-desk.outlook-view #hero-place { font:600 clamp(20px,1.38vw,26px)/1.1 var(--font); color:var(--text); letter-spacing:-.4px; text-transform:none; margin:0 0 5px; overflow-wrap:anywhere; text-wrap:balance; }
+#desk.balanced-desk.outlook-view #clock-date { font:400 13px/1.3 var(--font); color:var(--muted); letter-spacing:0; }
+#desk.balanced-desk.outlook-view #observatory-heading .hero-reading-label { font-size:9px; letter-spacing:.12em; text-transform:uppercase; }
+#desk.balanced-desk.outlook-view #observatory-heading #hero-temp { font-size:clamp(42px,2.9vw,54px); font-weight:650; line-height:1.02; letter-spacing:-2px; }
+#desk.balanced-desk.outlook-view #observatory-heading .hero-feels-like { gap:5px; margin-top:3px; font-size:12px; }
+#desk.balanced-desk.outlook-view #observatory-heading #hero-apparent { font-size:16px; font-weight:600; }
+#desk.balanced-desk.outlook-view #observatory-heading .hero-conditions { padding:0; gap:12px; border:0; background:none; box-shadow:none; }
+#desk.balanced-desk.outlook-view #observatory-heading #hero-icon,
+#desk.balanced-desk.outlook-view #observatory-heading #hero-icon :is(img,svg) { width:68px; height:68px; }
+#desk.balanced-desk.outlook-view #observatory-heading #hero-cond { font-size:21px; font-weight:550; }
+#desk.balanced-desk.outlook-view #clock-time { font-size:clamp(32px,2.7vw,46px); font-weight:600; letter-spacing:-1.5px; color:var(--text); }
+#desk.balanced-desk.outlook-view .fd-gauge-title { font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+#desk.balanced-desk.outlook-view #radar-shelf { row-gap:4px; }
+#desk.balanced-desk.outlook-view #gauges { gap:0; border:1px solid var(--line); border-radius:13px; background:var(--panel); padding:3px 0; }
+#desk.balanced-desk.outlook-view #gauges > .gauge { min-height:106px; padding:11px 17px; border:0; border-radius:0; background:none; box-shadow:none; }
+#desk.balanced-desk.outlook-view #gauges > .gauge + .gauge { border-left:1px solid var(--line); }
+#desk.balanced-desk.outlook-view #gauges h3 { font-size:11px; font-weight:500; padding-left:36px; min-height:30px; margin:0 0 5px; }
+#desk.balanced-desk.outlook-view #gauges .gwrap > span[aria-hidden] { top:10px; left:15px; }
+#desk.balanced-desk.outlook-view #gauges .wx-icon { width:30px; height:30px; }
+#desk.balanced-desk.outlook-view #gauges .ginner b { font-size:clamp(25px,1.8vw,32px); font-weight:550; letter-spacing:-.6px; }
+#desk.balanced-desk.outlook-view #gauges #g-ltg .ginner small { flex-basis:auto; }
+#desk.balanced-desk.outlook-view #gauges .ginner > span { font-size:10px; margin-top:3px; }
+#desk.balanced-desk.outlook-view #observatory-radar { min-height:min-content; }
+#desk.balanced-desk.outlook-view :is(#observatory-forecast,.fd-panel,#outlook-astronomy) { background:var(--panel); box-shadow:none; border-color:var(--line); border-radius:13px; }
+#desk.balanced-desk.outlook-view :is(.forecast-heading h2,.fd-panel h2,.sky-heading h2) { font-size:14px; font-weight:600; }
+#desk.balanced-desk.outlook-view #daycards { gap:8px; }
+#desk.balanced-desk.outlook-view #forecast-hourly { padding:14px 16px 28px; }
+#desk.balanced-desk.outlook-view .fd-hour { border-radius:8px 8px 0 0; }
+#desk.balanced-desk.outlook-view .fd-hour strong { font-weight:550; }
+#desk.balanced-desk.outlook-view .fd-hour-detail { border-top:1px solid var(--line); padding-top:6px; }
+#desk.balanced-desk.outlook-view .fd-periods { padding:3px; border:1px solid var(--line); border-radius:8px; }
+#desk.balanced-desk.outlook-view .fd-periods button { border-radius:5px; }
+#desk.balanced-desk.outlook-view #balanced-contexts { gap:0; border:1px solid var(--line); border-radius:13px; background:var(--panel); }
+#desk.balanced-desk.outlook-view #balanced-contexts > .balanced-card { padding:15px 18px; gap:8px; border:0; border-radius:0; background:none; }
+#desk.balanced-desk.outlook-view #balanced-contexts > .balanced-card + .balanced-card { border-left:1px solid var(--line); }
+#desk.balanced-desk.outlook-view .balanced-card h2 { display:flex; align-items:center; gap:9px; font-size:12px; color:var(--muted); }
+.balanced-symbol { display:inline-flex; width:20px; height:20px; flex:none; color:var(--accent); }
+.balanced-symbol svg { width:100%; height:100%; }
+#desk.balanced-desk.outlook-view .balanced-reading { font:550 clamp(18px,1.4vw,25px)/1.2 var(--num); letter-spacing:-.4px; }
+#desk.balanced-desk.outlook-view .balanced-card .balanced-summary { font-size:11px; line-height:1.45; }
+#desk.balanced-desk.outlook-view .balanced-card .balanced-detail-link { border-top:1px solid var(--line); padding-top:9px; width:100%; font-size:11px; font-weight:500; }
+#desk.balanced-desk.outlook-view .balanced-card .balanced-detail-link::after { float:right; }
+#desk.balanced-desk.outlook-view .balanced-card:focus-within { background:color-mix(in srgb,var(--accent),transparent 94%); }
+#desk.balanced-desk.outlook-view #balanced-contexts > #balanced-changes { gap:4px; padding-block:11px; }
+#desk.balanced-desk.outlook-view #balanced-changes .balanced-reading { font-size:clamp(17px,1.2vw,22px); line-height:1.15; }
+#desk.balanced-desk.outlook-view #balanced-changes .balanced-detail-link { padding-top:5px; }
+.change-timeline { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.change-timeline > div { border-top:1px solid var(--line); padding-top:3px; }
+.change-timeline time { display:block; color:var(--muted); font-size:10px; }
+.change-timeline strong { font:550 16px/1.15 var(--num); }
+#weather-change-details > :is(h3,p) { margin:0 0 12px; }
+/* Reserve enough height for live provider summaries instead of truncating them. */
+@media(min-width:1200px) and (min-height:1100px) {
+  #desk.balanced-desk.outlook-view #observatory-grid { grid-template-rows:min-content minmax(282px,1fr) minmax(348px,1.2fr) minmax(152px,.5fr); }
+}
+@media(min-width:1200px) and (max-height:1099px) {
+  #desk.balanced-desk.outlook-view #observatory-grid { grid-template-rows:auto auto minmax(360px,auto) minmax(174px,auto); }
+}
+@media(max-width:1399px) {
+  #desk.balanced-desk.outlook-view .forecast-conditions { gap:12px; }
+  #desk.balanced-desk.outlook-view #observatory-heading .hero-now { gap:9px; }
+  #desk.balanced-desk.outlook-view #observatory-heading #hero-icon,
+  #desk.balanced-desk.outlook-view #observatory-heading #hero-icon :is(img,svg) { width:54px; height:54px; }
+  #desk.balanced-desk.outlook-view #gauges > .gauge { padding-inline:10px; }
+  #desk.balanced-desk.outlook-view #gauges .gwrap > span[aria-hidden] { left:8px; }
+}
+@media(max-width:1199px) {
+  #desk.balanced-desk.outlook-view .forecast-conditions .observatory-place { flex-basis:auto; max-width:none; }
+  #desk.balanced-desk.outlook-view #balanced-contexts > .balanced-card:nth-child(3) { border-left:0; }
+  #desk.balanced-desk.outlook-view #balanced-contexts > .balanced-card:nth-child(n+3) { border-top:1px solid var(--line); }
+}
+@media(max-width:1100px) {
+  #desk.balanced-desk.outlook-view #gauges > .gauge:nth-child(4n+1) { border-left:0; }
+  #desk.balanced-desk.outlook-view #gauges > .gauge:nth-child(n+5) { border-top:1px solid var(--line); }
+}
+@media(max-width:760px) {
+  #desk.balanced-desk.outlook-view .forecast-conditions { align-items:flex-start; gap:10px; }
+  #desk.balanced-desk.outlook-view .forecast-conditions .observatory-place { max-width:none; }
+  #desk.balanced-desk.outlook-view #observatory-heading #hero-temp { font-size:42px; }
+  #desk.balanced-desk.outlook-view #gauges > .gauge:nth-child(odd) { border-left:0; }
+  #desk.balanced-desk.outlook-view #gauges > .gauge:nth-child(n+3) { border-top:1px solid var(--line); }
+}
+@media(max-width:450px) {
+  #desk.balanced-desk.outlook-view #balanced-contexts > .balanced-card + .balanced-card { border-left:0; border-top:1px solid var(--line); }
+}
