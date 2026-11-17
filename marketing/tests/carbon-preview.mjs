@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 const expected = {
-  weather: { src: 'images/stormdesk-4100-balanced.jpg', version: '4.10.0', caption: /^Balanced Desk · demo station readings; forecast and regional data shown for illustration\. Captured November 1, 2026\. Not current weather\.$/ },
+  weather: { src: 'images/stormdesk-4110-observatory.jpg', version: '4.11.0', caption: /^Local preview with model weather and regional context, captured November 17, 2026; illustrative, not current weather\.$/ },
   radar: { src: 'images/stormdesk-461-radar.jpg', version: '4.6.1', caption: /^Radar \/ StormDesk 4\.6\.1\..*Recorded interface; not live radar\.$/ },
   history: { src: 'images/stormdesk-461-history.jpg', version: '4.6.1', caption: /^History \/ StormDesk 4\.6\.1\..*Recorded interface; not live readings\.$/ }
 };
