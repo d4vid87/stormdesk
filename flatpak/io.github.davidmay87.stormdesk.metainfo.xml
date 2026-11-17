@@ -27,6 +27,7 @@
   <url type="bugtracker">https://github.com/d4vid87/stormdesk/issues</url>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="4.10.2" date="2026-11-17"><description><p>Makes current feels-like temperature prominent, with actual temperature underneath and larger current-condition artwork and labels. Keeps unavailable readings explicit and preserves live sources when switching detail dialogs.</p></description></release>
     <release version="4.10.1" date="2026-11-01"><description><p>Preserves live sources, including air quality, when quickly switching Balanced Desk detail dialogs.</p></description></release>
     <release version="4.10.0" date="2026-11-01"><description><p>Introduces Balanced Desk with aligned ten-day forecasts, larger live gauges, a compact desktop layout, details dialogs and responsive smaller screens. Adds mapped NOAA winter impacts and forecast maxima for configured river gauges where available.</p></description></release>
     <release version="4.7.0" date="2026-11-01"><description><p>Opens with animated forecast cards, sunrise, sunset, moon and twilight. HookEcho radar remains available on demand.</p></description></release>

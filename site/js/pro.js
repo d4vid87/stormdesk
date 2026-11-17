@@ -37,7 +37,10 @@ function renderHero(fc) {
   setSky(Date.now() / 1000, d, fc.forecast.daily[1]);
   setText($('hero-place'), settings().stationName || 'Station');
   tweenNumber($('hero-temp'), c.air_temperature, (v) => `${num(v)}°`);
-  setText($('hero-cond'), c.conditions || '');
+  const apparent = Number.isFinite(c.feels_like) ? c.feels_like : null;
+  tweenNumber($('hero-apparent'), apparent, (v) => v == null ? '—' : `${num(v)}°`);
+  $('hero-apparent').title = apparent == null ? 'Feels-like temperature unavailable' : readingInfo(fc, 'feels_like');
+  setText($('hero-cond'), c.conditions || 'Conditions unavailable');
   setText($('hero-hilo'), `High ${num(d.air_temp_high)}° / Low ${num(d.air_temp_low)}°`);
   // Visibility only comes from open-meteo (Tempest has no such field), so it stays optional.
   const vis = c.visibility == null ? ''
@@ -52,7 +55,11 @@ function renderHero(fc) {
   const moonHtml = `${moonGlyph(m.age)} ${m.name} · ${m.illum}%`;
   if ($('hero-moon').innerHTML !== moonHtml) $('hero-moon').innerHTML = moonHtml;
   setText($('hero-moonset'), `${m.nextName} ${m.nextDate.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric' })}`);
-  setWx($('hero-icon'), c.icon, 150);
+  if (c.icon) setWx($('hero-icon'), c.icon, 150);
+  else {
+    $('hero-icon').replaceChildren();
+    delete $('hero-icon').dataset.wx;
+  }
   setScene(c.icon);
   if ($('hero-normal')?.getClientRects().length) renderNormal(d);
   if (fc._provenance) {
@@ -676,7 +683,12 @@ function renderLocal(o) {
   $('hero-place').textContent = settings().stationName
     || (settings().stationSource ? 'Local station' : 'Local station · UDP');
   tweenNumber($('hero-temp'), temp, (v) => `${num(v)}°`);
-  setText($('hero-cond'), settings().stationSource ? 'Live · station report' : 'Live · hub broadcast');
+  tweenNumber($('hero-apparent'), null, () => '—');
+  $('hero-apparent').title = 'Feels-like temperature unavailable from this station report';
+  setText($('hero-feels'), 'Feels-like temperature unavailable');
+  setText($('hero-cond'), 'Conditions unavailable');
+  $('hero-icon').replaceChildren();
+  delete $('hero-icon').dataset.wx;
   $('hero-live').className = 'live on';
   $('hero-live').textContent = settings().stationSource ? '● Live' : '● Live · UDP';
   $('hero-batt').textContent = o[I.battery] ? `${num(o[I.battery], 2)} V` : '';

@@ -6,6 +6,16 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.10.2] - 2026-11-17
+
+### Changed
+- Lead the weather header with a large, labeled current feels-like temperature, with actual temperature underneath. Keep the selected-hour forecast separate from current conditions.
+- Make current weather easier to recognize with larger condition artwork and a prominent text label for rain, sun, clouds, and other conditions. Preserve the Balanced Desk layout and responsive smaller-screen behavior.
+
+### Fixed
+- Keep unavailable current readings explicit instead of substituting a selected future hour or displaying missing values as zero.
+- Include the 4.10.1 fix that preserves live sources when rapidly switching detail dialogs.
+
 ## [4.10.1] - 2026-11-01
 
 ### Fixed

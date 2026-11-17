@@ -71,6 +71,7 @@ addEventListener('load', () => {
   console.assert(cards.filter(card => !card.hidden).length === 1 && !document.querySelector('[data-settings-category="tools"]').hidden, 'Search finds tools by nested controls');
   document.getElementById('drawer').dispatchEvent(new Event('settings:home'));
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
+  console.assert(document.getElementById('hero-apparent').textContent === '74°' && document.getElementById('hero-temp').textContent === '72°', 'Header separates current feels-like from actual temperature');
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
   const pressureCard = document.querySelector('[data-panel="g-press"]');
   console.assert(getComputedStyle(pressureCard).display !== 'none', 'Observatory shows pressure in the eight-reading rail');
@@ -98,6 +99,10 @@ addEventListener('load', () => {
   console.assert(JSON.parse(localStorage.getItem('wd.settings')).deskRadar === false && !document.getElementById('set-desk-radar').checked, 'View choice persists and syncs Settings');
   console.assert(document.getElementById('observatory-radar').getBoundingClientRect().height <= document.getElementById('radar-shelf').getBoundingClientRect().height + 2, 'Radar off leaves only the gauges, without an empty map area');
   console.assert(document.querySelectorAll('#forecast-hourly .fd-hour').length > 0, 'Forecast desk shows live hourly data');
+  const currentApparent = document.getElementById('hero-apparent').textContent;
+  [...document.querySelectorAll('#forecast-hourly .fd-hour')].at(-1).click();
+  console.assert(document.getElementById('hero-apparent').textContent === currentApparent, 'Selecting a forecast hour never changes the current feels-like temperature');
+  document.querySelector('#forecast-hourly .fd-hour').click();
   const sidebarOrder = [...document.getElementById('forecast-sidebar').children].map(el => el.id);
   console.assert(sidebarOrder.join(',') === 'forecast-precip,outlook-astronomy', 'Precipitation and astronomy share the hourly sidebar');
   console.assert(['forecast-insights','forecast-hazards','forecast-environment'].every(id => document.getElementById(id)), 'Forecast context, hazards and environment mount once');
@@ -134,12 +139,17 @@ addEventListener('load', () => {
   console.assert(document.activeElement === firstDay, 'Closing forecast details returns focus to the selected day');
   console.assert(['severe','winter','tropical','alerts'].every(id => document.querySelector(`#observatory-signals [data-panel="${id}"]`)), 'Safety cards stay outside collapsed analysis');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: { current_conditions: {}, forecast: { daily: [{}], hourly: [] } } }));
+  console.assert(document.getElementById('hero-apparent').textContent === '—' && document.getElementById('hero-apparent').title.includes('unavailable'), 'Missing feels-like is unavailable, not zero or actual temperature');
+  console.assert(document.getElementById('hero-cond').textContent === 'Conditions unavailable' && !document.querySelector('#hero-icon img, #hero-icon svg'), 'Missing current conditions do not imply sunshine');
   console.assert(document.querySelector('#daycards .dc-pop').textContent === '—', 'Unavailable rain chance is not zero');
   console.assert(document.querySelector('#g-ltg').textContent.includes('unavailable'), 'Missing lightning is unavailable, not no strikes');
   console.assert(document.querySelector('#g-wet').dataset.unavailable === 'true', 'Missing wet bulb hides its needle');
   console.assert(document.querySelector('#g-rain').dataset.unavailable === 'true', 'Missing rain is not dry');
   console.assert(document.querySelector('#g-rain .wx-unavailable'), 'Missing rain has a muted, stationary icon');
   console.assert(!document.querySelector('#g-rain .fi-fill, #g-dew .fi-needle, #g-wbgt .fi-fill'), 'Unavailable values have no filled instrument indicators');
+  dispatchEvent(new CustomEvent('wd:forecast', { detail: { ...fc, current_conditions: { ...fc.current_conditions, feels_like: 0, icon: 'rainy', conditions: 'Rain' } } }));
+  console.assert(document.getElementById('hero-apparent').textContent === '0°', 'Zero feels-like remains a valid reading');
+  console.assert(document.getElementById('hero-cond').textContent === 'Rain' && document.querySelector('#hero-icon img')?.getAttribute('src').endsWith('/rain.svg'), 'Current rain has an explicit label and rain artwork');
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   dispatchEvent(new CustomEvent('wd:alerts', { detail: [{ properties: {
     event: '<b>Test advisory</b>', severity: 'Severe', description: '<img src=x onerror=alert(1)>',
@@ -250,9 +260,16 @@ addEventListener('load', () => {
     document.documentElement.dataset.fixtureStage = 'layout';
     await settle();
     const desk = document.getElementById('desk');
-    const temperatureType = getComputedStyle(document.getElementById('hero-temp'));
+    const temperatureType = getComputedStyle(document.getElementById('hero-apparent'));
     const clockType = getComputedStyle(document.getElementById('clock-time'));
-    console.assert(temperatureType.fontSize === clockType.fontSize && temperatureType.fontWeight === clockType.fontWeight && Number(temperatureType.fontWeight) >= 700, 'Temperature matches the bold clock at every screen size');
+    console.assert(temperatureType.fontSize === clockType.fontSize && temperatureType.fontWeight === clockType.fontWeight && Number(temperatureType.fontWeight) >= 700, 'Feels-like temperature matches the bold clock at every screen size');
+    const currentBounds = document.querySelector('.hero-now').getBoundingClientRect();
+    const clockBounds = document.querySelector('.observatory-clock').getBoundingClientRect();
+    const apparentBounds = document.getElementById('hero-apparent').getBoundingClientRect();
+    const actualBounds = document.getElementById('hero-temp').getBoundingClientRect();
+    console.assert(actualBounds.top >= apparentBounds.bottom - 1 && parseFloat(temperatureType.fontSize) > parseFloat(getComputedStyle(document.getElementById('hero-temp')).fontSize), 'Current feels-like leads above the smaller actual reading');
+    console.assert(currentBounds.right <= clockBounds.left + 1 || currentBounds.bottom <= clockBounds.top + 1, 'Current conditions and clock never overlap');
+    console.assert(document.getElementById('hero-icon').getBoundingClientRect().width >= 48 && parseFloat(getComputedStyle(document.getElementById('hero-cond')).fontSize) >= 16, 'Current weather artwork and label remain prominent');
     console.assert([...document.querySelectorAll('body > header nav .tab, body > header #btn-settings, .weather-view button')].every(button => {
       const box = button.getBoundingClientRect();
       return box.width > 0 && box.left >= 0 && box.right <= innerWidth + 1 && button.querySelector('svg[aria-hidden="true"]');

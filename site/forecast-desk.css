@@ -23,14 +23,35 @@
 /* SVG animation already repaints its pixels; keep the glow outside the animated image. */
 #desk #hero-icon :is(img,svg) { filter:none; }
 #desk #hero-icon, #desk.outlook-view #daycards .dc-icon { background:radial-gradient(ellipse,#8bd4f318,transparent 70%); }
+/* Current comfort leads; actual temperature keeps its measurement detail target. */
+#desk #observatory-heading .hero-now { flex-wrap:nowrap; align-items:center; gap:16px; }
+#desk #observatory-heading .hero-temperature { display:flex; flex-direction:column; flex:none; gap:2px; }
+#desk #observatory-heading .hero-reading-label { font-size:10px; font-weight:600; line-height:1.2; letter-spacing:.06em; color:var(--muted); }
+#desk #observatory-heading #hero-apparent { font:750 38px/1.05 var(--num); color:var(--accent); font-variant-numeric:tabular-nums; letter-spacing:-1px; }
+#desk #observatory-heading .hero-actual { display:flex; align-items:baseline; gap:6px; font-size:12px; line-height:1.2; color:var(--muted); white-space:nowrap; }
+#desk #observatory-heading #hero-temp { order:0; font:600 19px/1.2 var(--num); color:var(--text); letter-spacing:0; }
+#desk #observatory-heading .hero-conditions { display:flex; align-items:center; gap:10px; min-width:0; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:linear-gradient(135deg,var(--panel2),var(--panel)); }
+#desk #observatory-heading #hero-icon,#desk #observatory-heading #hero-icon :is(img,svg) { width:60px; height:60px; }
+#desk #observatory-heading .hero-condition-copy { min-width:0; max-width:150px; }
+#desk #observatory-heading #hero-cond { font-size:20px; font-weight:650; line-height:1.2; margin-top:4px; overflow-wrap:anywhere; }
+@media(max-width:1100px) {
+  #desk #observatory-heading .hero-now { gap:10px; }
+  #desk #observatory-heading .hero-conditions { padding:6px 8px; gap:7px; }
+  #desk #observatory-heading #hero-icon,#desk #observatory-heading #hero-icon :is(img,svg) { width:48px; height:48px; }
+  #desk #observatory-heading #hero-cond { font-size:16px; }
+}
 .fd-gauge-title { display:none; }
 #desk:not(.outlook-view) :is(#forecast-sidebar,#forecast-hourly,.dc-wind) { display:none; }
 .forecast-conditions { display:flex; align-items:center; gap:16px; min-width:0; }
+#desk.outlook-view .forecast-conditions .observatory-place { min-width:112px; max-width:160px; }
+@media(min-width:761px) and (max-width:1199px) {
+  #desk.outlook-view .forecast-conditions { flex-direction:column; align-items:flex-start; gap:6px; }
+}
 #desk.outlook-view #observatory-heading { display:grid; grid-template-columns:1fr auto 1fr; gap:10px 18px; padding:6px 0; }
 #desk.outlook-view .forecast-conditions { grid-column:1; }
 #desk.outlook-view #observatory-heading .observatory-clock { display:flex; flex-direction:column-reverse; align-items:center; grid-column:2; grid-row:1; margin:0; padding:0; border:0; gap:4px; }
 #desk.outlook-view .observatory-clock > span { display:block; color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; }
-#desk.outlook-view #clock-time,#desk.outlook-view #observatory-heading #hero-temp { font-size:calc(42 * var(--fd-reading)); font-weight:750; line-height:1.15; font-variant-numeric:tabular-nums; letter-spacing:-1px; white-space:nowrap; }
+#desk.outlook-view #clock-time,#desk.outlook-view #observatory-heading #hero-apparent { font-size:calc(42 * var(--fd-reading)); font-weight:750; line-height:1.15; font-variant-numeric:tabular-nums; letter-spacing:-1px; white-space:nowrap; }
 #desk.outlook-view #hero-clock { margin:0; }
 #desk.outlook-view .weather-view { grid-column:3; grid-row:1; justify-self:end; }
 #desk.outlook-view #hero-alerts { grid-column:1/-1; grid-row:2; margin:0; }
@@ -153,17 +174,17 @@ html #desk.outlook-view #daycards > .daycard:is(:first-child,:nth-child(n)) .dc-
   #desk.outlook-view #gauges > .gauge { min-height:95px; padding:8px 10px; }
   #desk.outlook-view #gauges h3 { margin-bottom:4px; }
   #desk.outlook-view #gauges .ginner b { font-size:26px; }
-  #desk.outlook-view #clock-time,#desk.outlook-view #observatory-heading #hero-temp { font-size:32px; }
+  #desk.outlook-view #clock-time,#desk.outlook-view #observatory-heading #hero-apparent { font-size:32px; }
   #desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,1.8fr) minmax(290px,1fr); }
   .forecast-conditions { gap:8px; }
 }
 @media(max-width:760px) {
   #desk.outlook-view #observatory-heading { grid-template-columns:1fr auto; }
-  #desk.outlook-view .forecast-conditions { flex-direction:column; align-items:flex-start; gap:4px; }
-  #desk.outlook-view #observatory-heading .observatory-clock { grid-column:2; }
-  #desk.outlook-view .weather-view { grid-column:1/-1; grid-row:2; justify-self:stretch; margin:0; }
+  #desk.outlook-view .forecast-conditions { grid-column:1/-1; flex-direction:column; align-items:flex-start; gap:8px; }
+  #desk.outlook-view #observatory-heading .observatory-clock { grid-column:1/-1; grid-row:2; }
+  #desk.outlook-view .weather-view { grid-column:1/-1; grid-row:3; justify-self:stretch; margin:0; }
   #desk.outlook-view .weather-view button { flex:1; }
-  #desk.outlook-view #hero-alerts { grid-row:3; }
+  #desk.outlook-view #hero-alerts { grid-row:4; }
   #desk.outlook-view #observatory-grid { grid-template-columns:minmax(0,1fr); }
   #desk.outlook-view #observatory-left { grid-column:1; grid-row:2!important; }
   #forecast-sidebar { grid-column:1; grid-row:3; }

@@ -1038,12 +1038,19 @@
       </div>
       <div id="hero-feels" class="hero-dim"></div>
       <div class="hero-now">
-        <div id="hero-icon" role="button" tabindex="0" title="Tap to hear today"></div>
-        <div id="hero-temp" data-metric="temp">--°</div>
-        <div>
-          <div id="hero-cond"></div>
-          <div id="hero-hilo" class="hero-dim"></div>
-          <div id="hero-normal" class="hero-dim"></div>
+        <div class="hero-temperature">
+          <span class="hero-reading-label">Feels like</span>
+          <strong id="hero-apparent">—</strong>
+          <div class="hero-actual"><span>Actual</span> <span id="hero-temp" data-metric="temp">—</span></div>
+        </div>
+        <div class="hero-conditions">
+          <div id="hero-icon" role="button" tabindex="0" title="Tap to hear today"></div>
+          <div class="hero-condition-copy">
+            <span class="hero-reading-label">Current conditions</span>
+            <div id="hero-cond">Unavailable</div>
+            <div id="hero-hilo" class="hero-dim"></div>
+            <div id="hero-normal" class="hero-dim"></div>
+          </div>
         </div>
       </div>
       <div id="hero-summary"></div>
