@@ -72,6 +72,8 @@ addEventListener('load', () => {
   document.getElementById('drawer').dispatchEvent(new Event('settings:home'));
   dispatchEvent(new CustomEvent('wd:forecast', { detail: fc }));
   console.assert(document.getElementById('hero-apparent').textContent === '74°' && document.getElementById('hero-temp').textContent === '72°', 'Header separates current feels-like from actual temperature');
+  const heroIconPath = document.documentElement.dataset.motion === 'full' ? 'icons/anim/' : 'icons/static/';
+  console.assert(document.querySelector('#hero-icon img')?.getAttribute('src').includes(heroIconPath), 'Known current weather uses artwork matching the motion setting');
   // Storm watch shares the same feed; missing readings must not become reassuring zeroes.
   const pressureCard = document.querySelector('[data-panel="g-press"]');
   console.assert(getComputedStyle(pressureCard).display !== 'none', 'Observatory shows pressure in the eight-reading rail');

@@ -65,9 +65,6 @@ for motion in full lite off; do
       grep -iE 'uncaught|typeerror|referenceerror|syntaxerror|unhandled' "$log" | head -20 || true
       cp "$log" "$OUT/$motion-${size/,/x}.log"
     fi
-    # Animated icons are the whole point of Full and the whole cost of Lite.
-    want=$([ "$motion" = full ] && echo icons/anim/ || echo icons/static/)
-    grep -q "$want" "$dom" || { echo "FAIL $motion $size — expected $want in the DOM"; fail=1; }
   done
 done
 
