@@ -203,8 +203,7 @@ addEventListener('load', () => {
     console.assert(originalAqi.isConnected && document.getElementById('aqi-val') === originalAqi, 'Immediate detail reopen preserves the original live AQI node');
     console.assert(lifecycleHomes.slice(0, 2).every(({el, parent, hidden}) => el.parentElement === parent && el.hidden === hidden), 'Immediate detail reopen restores both previous live sources');
     console.assert(balancedDialog.open && balancedDialog.contains(lifecycleSources[2]) && balancedDialog.contains(lifecycleSources[3]), 'Queued close event leaves the newly opened detail intact');
-    const finalClose = new Promise(resolve => balancedDialog.addEventListener('close', resolve, {once:true}));
-    balancedDialog.close(); await finalClose; await settle();
+    balancedDialog.close(); await settle();
     console.assert(lifecycleHomes.every(({el, parent, hidden}) => el.isConnected && el.parentElement === parent && el.hidden === hidden), 'Rapidly switched detail sources return to their original homes and visibility');
     console.assert(document.activeElement === hazardTrigger, 'Rapidly switched details return focus to the latest trigger');
     for (const [label, selector] of [

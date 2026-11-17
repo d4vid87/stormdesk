@@ -6,7 +6,18 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.10.3] - 2026-11-17
+
+### Changed
+- Put current feels-like temperature first in the weather header, with actual temperature underneath and larger current-condition artwork and labels. Keep selected-hour forecasts separate, missing data explicit, and the Balanced Desk layout responsive.
+
+### Fixed
+- Update bundled SQLite to 3.54.1 to address RUSTSEC-2026-0459, a memory-disclosure issue when opening crafted database/WAL pairs.
+- Include the fix that preserves live sources when rapidly switching detail dialogs.
+
 ## [4.10.2] - 2026-11-17
+
+Unpublished build; superseded by 4.10.3 before release.
 
 ### Changed
 - Lead the weather header with a large, labeled current feels-like temperature, with actual temperature underneath. Keep the selected-hour forecast separate from current conditions.

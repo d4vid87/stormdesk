@@ -4,13 +4,15 @@
 
 **Your forecast. Your sky.** StormDesk opens with Balanced Desk: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.10.2](https://github.com/d4vid87/stormdesk/releases/tag/v4.10.2) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.10.3](https://github.com/d4vid87/stormdesk/releases/tag/v4.10.3) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
 ![StormDesk 4.10.0 Balanced Desk with aligned forecasts, Orbit Glass gauges, hourly weather and compact context](docs/stormdesk-4100-balanced.jpg)
 
 *Balanced Desk · demo station readings; forecast and regional data shown for illustration. Captured November 1, 2026. Not current weather.*
 
-### What’s new in 4.10.2
+### What’s new in 4.10.3
+
+- **Security update:** bundled SQLite is updated to address RUSTSEC-2026-0459.
 
 - **Feels like first:** the current feels-like temperature leads the header, with the actual temperature underneath.
 - **Clearer current conditions:** larger weather artwork and a prominent condition label make rain, sun, clouds, and other conditions easier to recognize.
