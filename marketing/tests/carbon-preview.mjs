@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 const expected = {
-  weather: { src: 'images/stormdesk-4110-observatory.jpg', version: '4.11.0', caption: /^Local preview with model weather and regional context, captured November 17, 2026; illustrative, not current weather\.$/ },
-  radar: { src: 'images/stormdesk-461-radar.jpg', version: '4.6.1', caption: /^Radar \/ StormDesk 4\.6\.1\..*Recorded interface; not live radar\.$/ },
-  history: { src: 'images/stormdesk-461-history.jpg', version: '4.6.1', caption: /^History \/ StormDesk 4\.6\.1\..*Recorded interface; not live readings\.$/ }
+  weather: { src: 'images/stormdesk-4110-weather.jpg', version: '4.11.0', caption: /^StormDesk 4\.11\.0 demo weather, captured November 17, 2026; illustrative, not current weather\.$/ },
+  radar: { src: 'images/stormdesk-4110-radar.jpg', version: '4.11.0', caption: /^Radar \/ StormDesk 4\.11\.0\..*Florida and the Gulf, captured November 17, 2026\. Separate from the Fort Worth demo readings; recorded, not live radar\.$/ },
+  history: { src: 'images/stormdesk-4110-history.jpg', version: '4.11.0', caption: /^History \/ StormDesk 4\.11\.0\..*captured November 17, 2026; illustrative, not live readings\.$/ }
 };
 const buttons = ['weather', 'radar', 'history'].map(name => ({
   dataset: { preview: name },

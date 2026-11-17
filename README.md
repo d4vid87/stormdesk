@@ -2,13 +2,15 @@
 
 # StormDesk
 
-**Your forecast. Your sky.** StormDesk opens with Balanced Desk: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
+**Your forecast. Your sky.** StormDesk opens with Observatory: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
 [Open the app](https://app.mystormdesk.com/) · [Download 4.11.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.11.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-![StormDesk 4.11.0 Observatory with Sky Theater forecasts, prominent rain chances and Weather Changes](docs/stormdesk-4110-observatory.jpg)
+[![StormDesk 4.11.0 animated tour of Weather, Radar, History and appearance](docs/stormdesk-4110-hero.gif)](https://mystormdesk.com/#watch)
 
-*Observatory · local preview with model weather and regional context. Captured November 17, 2026. Illustrative, not current weather.*
+*StormDesk 4.11.0 · demo weather captured November 17, 2026. Illustrative readings and recorded interface; not current weather.*
+
+[Watch the 30-second narrated tour](https://mystormdesk.com/#watch) · [Download the video](https://mystormdesk.com/images/stormdesk-4110-promo.mp4). The tour uses AI-generated narration; captions and a transcript are available on the website.
 
 ### What’s new in 4.11.0
 
@@ -179,33 +181,35 @@ Under **Settings → More tools → Weather sources, sensors & camera**, choose 
 
 | Dedicated Radar | Station History |
 | --- | --- |
-| ![Full HookEcho radar view in StormDesk 4.6.1](docs/stormdesk-461-radar.jpg) | ![History cards and charts with sample archive readings](docs/stormdesk-461-history.jpg) |
+| ![StormDesk 4.11.0 with recorded HookEcho MRMS radar over Florida and the Gulf](docs/stormdesk-4110-radar.jpg) | ![History cards and charts with sample archive readings](docs/stormdesk-4110-history.jpg) |
 
 | Forecast & sky | Searchable Settings |
 | --- | --- |
-| ![Balanced Desk 4.10.0 with demo station readings and illustrative forecast context](docs/stormdesk-4100-balanced.jpg) | ![Six Settings categories in StormDesk 4.6.1](docs/stormdesk-461-settings.jpg) |
+| ![StormDesk 4.11.0 Observatory with demo weather, Sky Theater forecasts and Weather Changes](docs/stormdesk-4110-weather.jpg) | ![Six Settings categories in StormDesk 4.11.0](docs/stormdesk-4110-settings.jpg) |
 
 ### Five gauge styles
 
-Use **Gauge style** in the weather shelf. These static close-ups show the first four gauges; the app includes animations for all eight.
+Use **Gauge style** in the weather shelf. These static previews show all eight gauges; the app includes animations and respects reduced-motion preferences.
 
 | Style | Preview |
 | --- | --- |
-| **Orbit Glass · default** | ![Orbit Glass gauge icons](docs/stormdesk-461-gauge-orbit.jpg) |
-| Liquid Chrome | ![Liquid Chrome gauge icons](docs/stormdesk-461-gauge-liquid.jpg) |
-| Neon Trace | ![Neon Trace gauge icons](docs/stormdesk-461-gauge-neon.jpg) |
-| Precision Dial | ![Precision Dial gauge icons](docs/stormdesk-461-gauge-dial.jpg) |
-| Pixel Pulse | ![Pixel Pulse gauge icons](docs/stormdesk-461-gauge-pixel.jpg) |
+| **Orbit Glass · default** | ![Orbit Glass gauge icons](docs/stormdesk-4110-gauge-orbit.jpg) |
+| Liquid Chrome | ![Liquid Chrome gauge icons](docs/stormdesk-4110-gauge-liquid.jpg) |
+| Neon Trace | ![Neon Trace gauge icons](docs/stormdesk-4110-gauge-neon.jpg) |
+| Precision Dial | ![Precision Dial gauge icons](docs/stormdesk-4110-gauge-dial.jpg) |
+| Pixel Pulse | ![Pixel Pulse gauge icons](docs/stormdesk-4110-gauge-pixel.jpg) |
 
 Graphite Silver is the fresh-install palette. **Settings → Appearance → Theme** includes nine more dark palettes and classic light, high-contrast, and e-ink choices. Saved preferences are preserved.
+
+Preview the app in [Midnight Violet](docs/stormdesk-4110-theme-violet.jpg), [Ocean Abyss](docs/stormdesk-4110-theme-abyss.jpg), [Burnished Copper](docs/stormdesk-4110-theme-copper.jpg), or [Light](docs/stormdesk-4110-theme-light.jpg). See the [Appearance settings](docs/stormdesk-4110-appearance.jpg) and [gauge-style picker](docs/stormdesk-4110-gauge-picker.jpg).
 
 ### On your phone
 
 The layout reflows for phones and smaller windows. Weather, Radar, and History remain one tap away; details open separately so the main dashboard stays readable.
 
-<img src="docs/stormdesk-461-mobile.jpg" alt="StormDesk 4.6.1 on a phone-sized screen with Orbit Glass and HookEcho radar" width="300">
+<img src="docs/stormdesk-4110-mobile.jpg" alt="StormDesk 4.11.0 Weather on a phone-sized screen with Orbit Glass gauges" width="300">
 
-The Balanced Desk captures use demo station readings with forecast and regional data shown for illustration. Other interface captures use sample station data and retain their version labels. Screenshots are not current weather. Forecast, sensor, and regional alert availability depend on the connected sources.
+All interface captures show StormDesk 4.11.0 with demo weather, captured November 17, 2026. Weather and History use Fort Worth demo readings. The HookEcho MRMS radar capture shows Florida and the Gulf on November 17, 2026, separately from those readings. Screenshots and radar are recorded, not current weather. Forecast, sensor, and regional alert availability depend on the connected sources.
 
 ## Supported weather stations
 

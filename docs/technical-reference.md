@@ -10,17 +10,17 @@ embedded here and centered on the station.
 
 If StormDesk is useful to you, please [give the project a star](https://github.com/d4vid87/stormdesk/stargazers).
 
-![StormDesk 4.10.0 Balanced Desk with Orbit Glass gauges](stormdesk-4100-balanced.jpg)
+![StormDesk 4.11.0 Observatory with Orbit Glass gauges and Sky Theater forecasts](stormdesk-4110-weather.jpg)
 
-![StormDesk 4.6.1 History using sample station observations](stormdesk-461-history.jpg)
+![StormDesk 4.11.0 History using sample station observations](stormdesk-4110-history.jpg)
 
-Balanced Desk · demo station readings; forecast and regional data shown for illustration. Captured November 1, 2026. Not current weather. The History capture remains from 4.6.1, captured October 31, 2026.
+StormDesk 4.11.0 · demo weather captured November 17, 2026. Illustrative readings and recorded interface; not current weather. [Watch the narrated tour](https://mystormdesk.com/#watch), with captions and a transcript. The narration is AI-generated.
 
 ## The three destinations
 
-The hosted dashboard opens Balanced Desk by default, including on ChromeOS and small-memory browsers. Refreshing or interrupting a load does not switch the next visit to Lite. Samsung Smart Hub/Family Hub and other appliance browsers still open **StormDesk Lite** before loading the full dashboard modules; use `?full=1` to open the full dashboard there. Lite remains available at `/lite/` with Today, Forecast, still Radar, and basic History. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
+The hosted dashboard opens Observatory by default, including on ChromeOS and small-memory browsers. Refreshing or interrupting a load does not switch the next visit to Lite. Samsung Smart Hub/Family Hub and other appliance browsers still open **StormDesk Lite** before loading the full dashboard modules; use `?full=1` to open the full dashboard there. Lite remains available at `/lite/` with Today, Forecast, still Radar, and basic History. Lite browser samples cover up to seven days, are collected while the page is running, and are replaced by longer station history when a StormDesk host or Tempest history is available. The live radar viewer is optional in Lite and is disabled on constrained browsers.
 
-- **Weather** opens each new session with Balanced Desk: ten aligned forecast cards across the page, larger live gauges, hourly weather, and compact astronomy. The main desktop view fits without page scrolling at normal desktop sizes; smaller screens reflow. Detailed weather information opens in dialogs. The view switch enables HookEcho radar for the current session; reopening returns to Forecast & sky. Provider coverage determines which readings are available.
+- **Weather** opens each new session with Observatory: actual temperature above feels-like, eight live gauges, up to ten Sky Theater forecast cards, hourly weather, Weather Changes, and compact astronomy. The main desktop view fits without page scrolling at normal desktop sizes; smaller screens reflow. Detailed weather information opens in dialogs. The view switch enables HookEcho radar for the current session; reopening returns to Forecast & sky. Provider coverage determines which readings are available.
 - **Radar** gives the embedded [HookEcho](https://hookecho.io/) map the page. Official warnings and emergencies appear in a bottom banner. Radar controls and playback remain available inside HookEcho.
 - **History** starts with temperature, rain, wind, and pressure snapshots. Selecting a measurement or changing the range opens charts and records. Gauge details link to the relevant filtered History view.
 
