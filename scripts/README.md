@@ -44,10 +44,28 @@ Historical `docs/stormdesk-461-*.jpg` captures remain mirrored in `marketing/ima
 
 The historical 4.10.0 Balanced Desk screenshot is `docs/stormdesk-4100-balanced.jpg`, mirrored in `marketing/images/`, at 1610×1132. It combines demo station readings with forecast and regional data for illustration, captured November 1, 2026. It is not current weather.
 
-The first 4.11.0 Observatory preview, `docs/stormdesk-4110-observatory.jpg` (1662×1161), remains as an earlier capture. The current website and README use the November 17, 2026 `stormdesk-4110-weather`, `radar`, `history`, `settings`, and theme captures: 1662×1164 desktop, 390×844 mobile, and 1631×138 eight-gauge strips. These are mirrored in `docs/` and `marketing/images/`. The Lite social image, `stormdesk-lite-desktop.png`, was also recaptured from the current Lite interface with demo data.
+The first 4.11.0 Observatory preview, `docs/stormdesk-4110-observatory.jpg` (1662×1161), remains as an earlier capture. The previous website and README used the November 17, 2026 `stormdesk-4110-weather`, `radar`, `history`, `settings`, and theme captures: 1662×1164 desktop, 390×844 mobile, and 1631×138 eight-gauge strips. These are mirrored in `docs/` and `marketing/images/`. The Lite social image, `stormdesk-lite-desktop.png`, was also recaptured from the current Lite interface with demo data.
 
 The full HookEcho viewer shows real MRMS reflectivity over Florida and the Gulf, captured November 17 around 4:52 PM CST. It is separate from the Fort Worth demo station, and published media is recorded, not current weather. The radar capture is a paused live field, not a fabricated timelapse. Capture through the browser tools, inspect every view, and keep personal station settings and credentials out of public images. A website-only media refresh does not imply a new installer release.
 
 The matching `stormdesk-4110-promo.mp4` is a 30-second, 1920×1080 H.264/AAC video with faststart (about 3 MB). The hero GIF is a 12-second, 960×540 loop (about 4.7 MB); the social poster is 1200×630. The website provides an English WebVTT caption track, transcript, playback controls, and a still-image fallback for reduced motion. GitHub links to the same narrated tour.
 
-Narration was generated locally with the preexisting [Kokoro-82M v1.0 ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) model (Apache-2.0), voice `af_heart`, using `kokoro-onnx` 0.6.1 (MIT). It is disclosed as AI-generated, with no cloned personal voice. The source speech was normalized to −16.07 LUFS / −1.50 dBTP. Video duration, full decode, faststart order, media dimensions, browser playback, and visible captions were verified; no human headphone audition was performed.
+The 4.11.0 narration was generated locally with the preexisting [Kokoro-82M v1.0 ONNX](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX) model (Apache-2.0), voice `af_heart`, using `kokoro-onnx` 0.6.1 (MIT). It is disclosed as AI-generated, with no cloned personal voice. The source speech was normalized to −16.07 LUFS / −1.50 dBTP. Video duration, full decode, faststart order, media dimensions, browser playback, and visible captions were verified; no human headphone audition was performed.
+
+### Current release media · 4.12.1
+
+The website and README now use `stormdesk-4121-*` captures of the actual app, mirrored in `docs/` and `marketing/images/`. Captured November 18, 2026, the set shows Weather, Radar, History, Settings, Appearance, all five gauge styles, representative themes, the twenty-theme picker, Customize desk and its layout controls. Desktop captures are 1662×1164, mobile is 390×844, gauge strips are 1646×120, and the social poster is 1200×630. Weather and History use isolated demo fixtures; no private station settings or credentials appear. The HookEcho KFWS capture near Fort Worth is real radar recorded around 2:58 PM CST that day, separate from the demo readings and not current weather.
+
+Reproduce the screenshots and hero from a local working checkout with Playwright available:
+
+```sh
+NODE_PATH=/path/to/playwright/node_modules node scripts/capture-release-media.cjs
+NODE_PATH=/path/to/playwright/node_modules node scripts/capture-release-hero.cjs
+NODE_PATH=/path/to/playwright/node_modules node scripts/capture-release-social.cjs
+```
+
+These scripts launch a temporary local server and an isolated browser and use `.github/ci/fixture.js` for deterministic demo readings. The current clock remains real. The `stormdesk-4121-hero.gif` is a 13.67-second, 960×672 loop (6 fps, about 7.1 MiB) showing actual Customize desk interactions. The matching `stormdesk-4121-promo.mp4` is a 30-second, 1920×1080 H.264/AAC tour with English WebVTT captions, AI-generated narration and a website transcript. It demonstrates the layout picker, moving gauges and menus, changing themes and full HookEcho radar. GitHub's release includes a downloadable copy of the video. The website keeps playback controls, a caption track and a still-image fallback for the hero when reduced motion is requested.
+
+Record the narrated tour with `scripts/capture-release-promo.cjs`, then run `scripts/build-release-promo.py`. The build uses FFmpeg and the optional `kokoro-onnx==0.6.1` media environment, not new app dependencies; point `KOKORO_MODEL_DIR` at an existing local Kokoro-82M ONNX/tokenizer/voice directory if needed. The `af_heart` AI voice is disclosed on the website, and the script keeps the transcript and WebVTT in sync. The final video is exactly 30.000 seconds at 30 fps with 48 kHz AAC audio and faststart, about 3.8 MiB.
+
+The 4.12.1 video passed full decode, duration/codec/faststart checks and browser playback with all nine English caption cues visible. Measured audio is −16.38 LUFS / −1.50 dBTP. The website preview controls and all seven updated pages were checked at desktop and phone widths without horizontal overflow. No human headphone audition was performed.

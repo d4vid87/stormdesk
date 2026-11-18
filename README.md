@@ -4,15 +4,22 @@
 
 **Your forecast. Your sky.** StormDesk opens with Observatory: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.12.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.12.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.12.1](https://github.com/d4vid87/stormdesk/releases/tag/v4.12.1) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
-[![StormDesk 4.11.0 animated tour of Weather, Radar, History and appearance](docs/stormdesk-4110-hero.gif)](https://mystormdesk.com/#watch)
+[![StormDesk 4.12.1 animated demonstration of Customize desk, rearranging gauges, moving navigation and changing themes](docs/stormdesk-4121-hero.gif)](https://mystormdesk.com/#watch)
 
-*StormDesk 4.11.0 · demo weather captured November 17, 2026. Illustrative readings and recorded interface; not current weather.*
+*StormDesk 4.12.1 · demo weather captured November 18, 2026. Illustrative readings and recorded interface; not current weather.*
 
-[Watch the 30-second narrated tour](https://mystormdesk.com/#watch) · [Download the video](https://mystormdesk.com/images/stormdesk-4110-promo.mp4). The tour uses AI-generated narration; captions and a transcript are available on the website.
+[Watch the 30-second narrated tour](https://mystormdesk.com/#watch) · [Download the video](https://github.com/d4vid87/stormdesk/releases/download/v4.12.1/stormdesk-4121-promo.mp4). The tour uses AI-generated narration; captions and a transcript are available on the website.
 
-### What’s new in 4.12.0
+### What’s new in 4.12.1
+
+- **Reliable live weather:** fixes for station identity, old feed callbacks, duplicate observations, air-quality hours and alert state after changing sources.
+- **Settings and history that stay in sync:** protect pending settings edits, use real local calendar boundaries across daylight-saving changes, and clear stale charts when the source changes.
+- **Responsive archives:** cold summaries share bounded work, hurricane feeds share cached requests, and archive endpoints use indexed queries. Existing station archives and local layouts are preserved.
+- **A refreshed 30-second tour:** watch the layout picker, movable gauges and menus, twenty themes and HookEcho radar in the current app. Read the [sixteen-finding audit and measured regression results](docs/audit-2026-11-18.md).
+
+### Customize your desk (introduced in 4.12.0)
 
 - **Customize desk:** open the control beside Gauge style to make the weather view yours. Choose Observatory, Mission Control, Skyline Glass, Weather Journal or Night Watch, plus any of the twenty theme choices.
 - **Arrange your screen:** move navigation to any edge, reorder tabs, header items and gauges, and place weather panels in the top row, main column, sidebar or bottom row. Choose where icons sit and restore the default arrangement at any time.
@@ -187,11 +194,21 @@ Under **Settings → More tools → Weather sources, sensors & camera**, choose 
 
 | Dedicated Radar | Station History |
 | --- | --- |
-| ![StormDesk 4.11.0 with recorded HookEcho MRMS radar over Florida and the Gulf](docs/stormdesk-4110-radar.jpg) | ![History cards and charts with sample archive readings](docs/stormdesk-4110-history.jpg) |
+| ![StormDesk 4.12.1 with recorded HookEcho KFWS radar near Fort Worth](docs/stormdesk-4121-radar.jpg) | ![History cards and charts with sample archive readings](docs/stormdesk-4121-history.jpg) |
 
 | Forecast & sky | Searchable Settings |
 | --- | --- |
-| ![StormDesk 4.11.0 Observatory with demo weather, Sky Theater forecasts and Weather Changes](docs/stormdesk-4110-weather.jpg) | ![Six Settings categories in StormDesk 4.11.0](docs/stormdesk-4110-settings.jpg) |
+| ![StormDesk 4.12.1 Observatory with demo weather, Sky Theater forecasts and Weather Changes](docs/stormdesk-4121-weather.jpg) | ![Six Settings categories in StormDesk 4.12.1](docs/stormdesk-4121-settings.jpg) |
+
+### Make the layout your own
+
+Open **Customize desk** beside **Gauge style**. Pick a coordinated look, move navigation to any edge, reorder tabs, header items and gauges, and place weather panels in the top row, main column, sidebar or bottom row. Choose icon placement and any of the twenty themes. Each screen remembers its preferences; the default arrangement is always available to restore.
+
+| Choose a layout | Arrange gauges and menus |
+| --- | --- |
+| ![StormDesk Customize desk layout controls](docs/stormdesk-4121-layout-picker.jpg) | ![StormDesk controls to arrange navigation, gauges and panels](docs/stormdesk-4121-layout-editor.jpg) |
+
+[See the five coordinated desk looks](docs/stormdesk-4121-desk-styles.jpg) · [See the twenty-theme picker](docs/stormdesk-4121-themes-picker.jpg).
 
 ### Five gauge styles
 
@@ -199,23 +216,23 @@ Use **Gauge style** in the weather shelf. These static previews show all eight g
 
 | Style | Preview |
 | --- | --- |
-| **Orbit Glass · default** | ![Orbit Glass gauge icons](docs/stormdesk-4110-gauge-orbit.jpg) |
-| Liquid Chrome | ![Liquid Chrome gauge icons](docs/stormdesk-4110-gauge-liquid.jpg) |
-| Neon Trace | ![Neon Trace gauge icons](docs/stormdesk-4110-gauge-neon.jpg) |
-| Precision Dial | ![Precision Dial gauge icons](docs/stormdesk-4110-gauge-dial.jpg) |
-| Pixel Pulse | ![Pixel Pulse gauge icons](docs/stormdesk-4110-gauge-pixel.jpg) |
+| **Orbit Glass · default** | ![Orbit Glass gauge icons](docs/stormdesk-4121-gauge-orbit.jpg) |
+| Liquid Chrome | ![Liquid Chrome gauge icons](docs/stormdesk-4121-gauge-liquid.jpg) |
+| Neon Trace | ![Neon Trace gauge icons](docs/stormdesk-4121-gauge-neon.jpg) |
+| Precision Dial | ![Precision Dial gauge icons](docs/stormdesk-4121-gauge-dial.jpg) |
+| Pixel Pulse | ![Pixel Pulse gauge icons](docs/stormdesk-4121-gauge-pixel.jpg) |
 
 Graphite Silver is the fresh-install palette. **Settings → Appearance → Theme** includes nine more dark palettes and classic light, high-contrast, and e-ink choices. Saved preferences are preserved.
 
-Preview the app in [Midnight Violet](docs/stormdesk-4110-theme-violet.jpg), [Ocean Abyss](docs/stormdesk-4110-theme-abyss.jpg), [Burnished Copper](docs/stormdesk-4110-theme-copper.jpg), or [Light](docs/stormdesk-4110-theme-light.jpg). See the [Appearance settings](docs/stormdesk-4110-appearance.jpg) and [gauge-style picker](docs/stormdesk-4110-gauge-picker.jpg).
+Preview the app in [Midnight Violet](docs/stormdesk-4121-theme-violet.jpg), [Ocean Abyss](docs/stormdesk-4121-theme-abyss.jpg), [Burnished Copper](docs/stormdesk-4121-theme-copper.jpg), or [Light](docs/stormdesk-4121-theme-light.jpg). See the [Appearance settings](docs/stormdesk-4121-appearance.jpg) and [gauge-style picker](docs/stormdesk-4121-gauge-picker.jpg).
 
 ### On your phone
 
 The layout reflows for phones and smaller windows. Weather, Radar, and History remain one tap away; details open separately so the main dashboard stays readable.
 
-<img src="docs/stormdesk-4110-mobile.jpg" alt="StormDesk 4.11.0 Weather on a phone-sized screen with Orbit Glass gauges" width="300">
+<img src="docs/stormdesk-4121-mobile.jpg" alt="StormDesk 4.12.1 Weather on a phone-sized screen with Orbit Glass gauges" width="300">
 
-All interface captures show StormDesk 4.11.0 with demo weather, captured November 17, 2026. Weather and History use Fort Worth demo readings. The HookEcho MRMS radar capture shows Florida and the Gulf on November 17, 2026, separately from those readings. Screenshots and radar are recorded, not current weather. Forecast, sensor, and regional alert availability depend on the connected sources.
+All interface captures show StormDesk 4.12.1 with demo weather, captured November 18, 2026. Weather and History use Fort Worth demo readings. The HookEcho radar capture is recorded separately from those demo readings. Screenshots and radar are recorded, not current weather. Forecast, sensor, and regional alert availability depend on the connected sources.
 
 ## Supported weather stations
 
