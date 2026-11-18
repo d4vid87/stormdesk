@@ -5,6 +5,7 @@ import { renderDayForecastRange } from './forecast-insights.js';
 import { styles, gaugeStyle, icon as gaugePreview } from './gauge-icons.js';
 import { settings, saveSettings, num, U, deg2compass, msToWind } from './app.js';
 import { forecast as deskForecast } from './desk.js';
+import { initDeskCustomize } from './desk-customize.js';
 const $ = id => document.getElementById(id);
 export function initObservatory() {
   if ($('observatory-grid')) return;
@@ -187,4 +188,5 @@ export function initObservatory() {
     const o = e.detail;
     queue({detail:{local:true,current_conditions:{wind_avg:msToWind(o[2]),wind_gust:msToWind(o[3]),wind_direction:o[4],lightning_strike_count_last_3hr:o[15]}}});
   });
+  initDeskCustomize();
 }

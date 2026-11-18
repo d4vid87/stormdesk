@@ -114,7 +114,7 @@ _settings.deskRadar = false;
 // the migration: future host pulls simply stop replacing them.
 export const LOCAL_SETTING_KEYS = new Set([
   'activePlace', 'theme', 'accent', 'palette', 'density', 'fontScale', 'bigNumbers',
-  'gaugeStyle', 'motion', 'eco', 'kiosk', 'kioskCycleSec', 'nightDim', 'layoutLocked', 'hiddenTabs',
+  'deskStyle', 'deskMatchGauges', 'deskLayout', 'gaugeStyle', 'motion', 'eco', 'kiosk', 'kioskCycleSec', 'nightDim', 'layoutLocked', 'hiddenTabs',
   'deskRadar', 'radarSite', 'heroSummary', 'clock24', 'render',
 ]);
 

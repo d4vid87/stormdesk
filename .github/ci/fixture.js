@@ -314,6 +314,27 @@ addEventListener('load', () => {
       console.assert(document.documentElement.scrollWidth <= innerWidth + 1, 'Narrow and short screens reflow without horizontal page overflow');
       console.assert(document.documentElement.scrollHeight > innerHeight || desk.scrollHeight > desk.clientHeight, 'Narrow and short screens allow vertical scrolling for all content');
     }
+    document.documentElement.dataset.fixtureStage = 'custom-layout';
+    const {defaultDeskLayout, moveDeskPanel, applyDeskLayout} = await import('./js/desk-layout.js');
+    const personal = defaultDeskLayout();
+    moveDeskPanel(personal, 'changes', 'side');
+    applyDeskLayout(personal);
+    await settle();
+    const toolbar = document.getElementById('radar-shelf').getBoundingClientRect();
+    console.assert(document.getElementById('gauges').getBoundingClientRect().top >= toolbar.bottom - 1,
+      'Custom layout reserves space for its toolbar above readings');
+    for (const zone of document.querySelectorAll('.desk-zone:not(.desk-zone-bottom)')) {
+      const boxes = [...zone.children].map(card => card.getBoundingClientRect());
+      console.assert(boxes.every((box, i) => box.height > 0 && (!i || box.top >= boxes[i - 1].bottom - 1)),
+        'Rearranged panels retain intrinsic height without overlapping');
+    }
+    console.assert(document.getElementById('outlook-astronomy').getBoundingClientRect().height >= 100,
+      'Extra sidebar cards never collapse astronomy');
+    applyDeskLayout(defaultDeskLayout());
+    await settle();
+    console.assert(document.getElementById('gauges').parentElement.id === 'radar-shelf' &&
+      document.getElementById('balanced-changes').parentElement.id === 'balanced-contexts',
+      'Reset restores original balanced containers');
     document.documentElement.dataset.fixtureStage = 'complete';
     document.documentElement.dataset.fixture = 'ok';
   });

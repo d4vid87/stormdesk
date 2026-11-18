@@ -978,7 +978,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-observatory-4110`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-customize-4120`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about
@@ -989,8 +989,8 @@ function changelog() {
   if (!seen) return; // a fresh install has nothing to be new since
   notify({
     title: `StormDesk ${APP_VERSION}`,
-    body: 'New: Observatory styling, animated Sky Theater forecasts with prominent rain chances, and upcoming Weather Changes. '
-      + 'Faster charts, lighter background work, and more reliable station data and server uploads.',
+    body: 'New: Customize Desk beside Gauge Style. Move navigation, header items, gauges and weather panels. '
+      + 'Choose from five coordinated desk styles and all twenty themes, with preferences saved on this device.',
   });
 }
 

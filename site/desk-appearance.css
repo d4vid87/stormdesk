@@ -1,0 +1,85 @@
+/* Desk looks change surfaces, not weather sources, layout or the selected palette. */
+html[data-desk-style] { --desk-radius:13px; --desk-control-radius:10px; }
+html[data-desk-style="mission"] { --desk-radius:3px; --desk-control-radius:3px; }
+html[data-desk-style="skyline"] { --desk-radius:19px; --desk-control-radius:24px; }
+html[data-desk-style="journal"] { --desk-radius:5px; --desk-control-radius:4px; }
+html[data-desk-style="night"] { --desk-radius:9px; --desk-control-radius:8px; }
+
+html[data-desk-style] :is(body > header,#desk-navigation-dock) :is(nav,.tab,#btn-settings),
+html[data-desk-style] :is(.weather-view,.weather-view button,.fd-periods,.fd-periods button,#gauge-style) {
+  border-radius:var(--desk-control-radius);
+}
+html[data-desk-style] :is(#gauge-style-dialog,#balanced-dialog,#forecast-dialog) { border-radius:var(--desk-radius); }
+html[data-desk-style] #desk.balanced-desk.outlook-view :is(#observatory-forecast,.fd-panel,#outlook-astronomy,#balanced-contexts,#gauges) {
+  border-radius:var(--desk-radius);
+}
+
+/* Mission Control: stronger rules, restrained corners and tabular instruments. */
+html[data-desk-style="mission"] :is(body > header,#desk-navigation-dock) nav { background:transparent; border-color:transparent; box-shadow:none; }
+html[data-desk-style="mission"] :is(body > header,#desk-navigation-dock) .tab { border:1px solid var(--line); }
+html[data-desk-style="mission"] :is(body > header,#desk-navigation-dock) .tab.active { box-shadow:inset 0 -2px var(--accent); }
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view :is(.forecast-heading h2,.fd-panel h2,.sky-heading h2,.balanced-card h2) {
+  letter-spacing:.07em; text-transform:uppercase; font-size:12px;
+}
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view :is(#clock-time,#observatory-heading #hero-temp,.ginner b,.dc-temp b,.balanced-reading) {
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-weight:600;
+}
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view :is(#gauges,#balanced-contexts) {
+  gap:6px; padding:0; border:0; background:none;
+}
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view #gauges > .gauge,
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view :is(#balanced-contexts,.desk-zone) > .balanced-card {
+  border:1px solid var(--line); border-radius:3px; background:var(--panel); box-shadow:none;
+}
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view :is(#balanced-contexts,.desk-zone) > .balanced-card { border-top:3px solid var(--accent); }
+html[data-desk-style="mission"] #desk.balanced-desk.outlook-view #observatory-heading > .observatory-place { border-radius:3px; }
+
+/* Skyline Glass: depth comes from static surfaces, without expensive backdrop filters. */
+html[data-desk-style="skyline"] :is(body > header,#desk-navigation-dock) nav { box-shadow:inset 0 1px color-mix(in srgb,var(--text) 12%,transparent); }
+html[data-desk-style="skyline"] #desk.balanced-desk.outlook-view :is(#observatory-forecast,.fd-panel,#outlook-astronomy) {
+  background:linear-gradient(145deg,var(--panel2),var(--panel));
+  box-shadow:inset 0 1px color-mix(in srgb,var(--text) 8%,transparent);
+}
+html[data-desk-style="skyline"] #desk.balanced-desk.outlook-view :is(#gauges,#balanced-contexts) {
+  gap:8px; padding:0; border:0; background:none;
+}
+html[data-desk-style="skyline"] #desk.balanced-desk.outlook-view #gauges > .gauge,
+html[data-desk-style="skyline"] #desk.balanced-desk.outlook-view :is(#balanced-contexts,.desk-zone) > .balanced-card {
+  border:1px solid var(--line); border-radius:15px;
+  background:linear-gradient(140deg,var(--panel2),var(--panel));
+  box-shadow:inset 0 1px color-mix(in srgb,var(--text) 10%,transparent);
+}
+html[data-desk-style="skyline"] #desk.balanced-desk.outlook-view #observatory-heading > .observatory-place { border-radius:18px; }
+html[data-desk-style="skyline"] #desk.balanced-desk.outlook-view :is(#clock-time,#observatory-heading #hero-temp) { font-weight:550; }
+
+/* Weather Journal: typography and fine rules work with light and dark themes alike. */
+html[data-desk-style="journal"] :is(body > header,#desk-navigation-dock) nav { background:transparent; border:0; box-shadow:none; }
+html[data-desk-style="journal"] :is(body > header,#desk-navigation-dock) .tab { border:0; border-radius:0; }
+html[data-desk-style="journal"] :is(body > header,#desk-navigation-dock) .tab.active { background:transparent; box-shadow:inset 0 -2px var(--accent); }
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view :is(#hero-place,.forecast-heading h2,.fd-panel h2,.sky-heading h2,.balanced-card h2,.balanced-reading) {
+  font-family:Georgia,"Times New Roman",serif; font-weight:500;
+}
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view :is(#observatory-heading #hero-temp,#clock-time,.ginner b) { font-family:Georgia,"Times New Roman",serif; }
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view #observatory-heading > .observatory-place { background:none; border:0; border-bottom:2px solid var(--accent); border-radius:0; }
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view :is(#observatory-forecast,.fd-panel,#outlook-astronomy,#balanced-contexts,#gauges) { box-shadow:none; }
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view #balanced-contexts { border-top:2px solid var(--accent); }
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view .desk-zone > .balanced-card { border-top:2px solid var(--accent); }
+html[data-desk-style="journal"] #desk.balanced-desk.outlook-view #gauges { border-left:0; border-right:0; border-radius:0; }
+
+/* Night Watch: readable instruments, outlined cards and a clear active menu. */
+html[data-desk-style="night"] :is(body > header,#desk-navigation-dock) nav { background:transparent; box-shadow:none; }
+html[data-desk-style="night"] :is(body > header,#desk-navigation-dock) .tab.active { color:var(--accent); box-shadow:inset 0 -2px var(--accent); }
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view :is(#clock-time,#observatory-heading #hero-temp) { font-weight:750; color:var(--accent); }
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view #clock-time { font-variant-numeric:tabular-nums; }
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view :is(#gauges,#balanced-contexts) { gap:7px; padding:0; border:0; background:none; }
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view #gauges > .gauge,
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view :is(#balanced-contexts,.desk-zone) > .balanced-card {
+  border:1px solid var(--line); border-radius:9px; background:var(--panel); box-shadow:none;
+}
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view #gauges .ginner b { font-size:clamp(27px,1.9vw,34px); font-weight:650; }
+html[data-desk-style="night"] #desk.balanced-desk.outlook-view :is(#balanced-contexts,.desk-zone) > .balanced-card { border-top:2px solid var(--accent); }
+
+/* Accessibility palettes always take precedence over decorative surface choices. */
+html[data-desk-style][data-palette="contrast"] #desk.balanced-desk.outlook-view :is(#observatory-forecast,.fd-panel,#outlook-astronomy,#gauges > .gauge,:is(#balanced-contexts,.desk-zone) > .balanced-card) { border-width:2px; }
+html[data-desk-style][data-palette="eink"] #desk.balanced-desk.outlook-view :is(#observatory-forecast,.fd-panel,#outlook-astronomy,#gauges > .gauge,:is(#balanced-contexts,.desk-zone) > .balanced-card) { background:var(--panel); box-shadow:none; }
+html[data-desk-style][data-palette="eink"] :is(body > header,#desk-navigation-dock) nav { box-shadow:none; }

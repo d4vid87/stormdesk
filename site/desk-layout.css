@@ -1,0 +1,102 @@
+/* User arrangements move the original cards. Containers adapt to their new width. */
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view #observatory-grid { display:grid; flex:none; height:auto; grid-template-columns:minmax(0,2fr) minmax(300px,1fr); grid-template-rows:max-content max-content minmax(min-content,1fr) max-content; gap:10px; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view #observatory-radar { grid-column:1/-1; grid-row:1; height:auto; min-height:min-content; max-height:none; flex:none; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view :is(#observatory-left,#forecast-sidebar,#balanced-contexts) { display:none!important; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone { display:flex; flex-direction:column; gap:10px; min-width:0; container-type:inline-size; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone[hidden],#desk-navigation-dock[hidden] { display:none!important; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-top { grid-column:1/-1; grid-row:2; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-main { grid-column:1; grid-row:3; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-side { grid-column:2; grid-row:3; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view #observatory-grid[data-desk-columns="single"] :is(.desk-zone-main,.desk-zone-side) { grid-column:1/-1; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-bottom { grid-column:1/-1; grid-row:4; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:stretch; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone > :is(#gauges,#observatory-forecast,#forecast-hourly,#forecast-precip,#outlook-astronomy,#balanced-hazards,#balanced-air,#balanced-changes,#balanced-winter) { grid-column:auto; grid-row:auto; flex:0 0 auto; width:100%; min-width:0; margin:0; box-sizing:border-box; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-bottom > :is(#gauges,#observatory-forecast,#forecast-hourly) { grid-column:1/-1; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone > .balanced-card { min-height:130px; padding:15px 18px; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-main > #forecast-hourly { flex:1 0 auto; }
+#desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view .desk-zone-side > :is(#forecast-precip,#outlook-astronomy) { flex:1 0 auto; }
+body[data-desk-nav] #desk #gauges > .gauge { order:0; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading { display:flex; align-items:center; flex-wrap:wrap; gap:12px 20px; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > [data-desk-header] { order:0; min-width:0; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > .forecast-conditions { display:none!important; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > .observatory-place { flex:0 1 220px; padding:8px 14px; border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:12px; background:linear-gradient(115deg,color-mix(in srgb,var(--accent),transparent 93%),transparent); }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > .observatory-clock { flex:1 1 220px; padding:0; margin:0; border:0; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > #hero-alerts { order:1; flex:1 0 100%; margin:0; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > .weather-view { flex:none; }
+#desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading #hero-hilo { display:none; }
+
+/* Navigation keeps the existing buttons, listeners and keyboard focus behavior. */
+body[data-desk-nav] { --desk-nav-width:154px; --desk-nav-height:calc(66px + env(safe-area-inset-bottom,0px)); }
+#desk-navigation-dock { position:fixed; top:var(--desk-nav-top,64px); bottom:0; z-index:30; width:var(--desk-nav-width); padding:10px; box-sizing:border-box; background:var(--bg); border:1px solid var(--line); }
+body[data-desk-nav="left"] #desk-navigation-dock { left:0; border-left:0; }
+body[data-desk-nav="right"] #desk-navigation-dock { right:0; border-right:0; }
+body[data-desk-nav="left"] > main { margin-left:var(--desk-nav-width); }
+body[data-desk-nav="right"] > main { margin-right:var(--desk-nav-width); }
+body[data-desk-nav="bottom"] #desk-navigation-dock { top:auto; left:0; right:0; width:auto; height:var(--desk-nav-height); padding:6px 12px calc(6px + env(safe-area-inset-bottom,0px)); }
+body[data-desk-nav="bottom"] > main { margin-bottom:var(--desk-nav-height); }
+#desk-navigation-dock nav { display:flex; flex-direction:column; gap:7px; margin:0; width:100%; overflow:visible; }
+body[data-desk-nav="bottom"] #desk-navigation-dock nav { flex-direction:row; justify-content:center; }
+#desk-navigation-dock :is(.tab,#btn-settings) { position:relative; display:flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:7px 10px; border:1px solid transparent; border-radius:12px; background:var(--panel); color:var(--muted); font:600 12px var(--font); cursor:pointer; }
+#desk-navigation-dock .tab::before { content:none; display:none; }
+#desk-navigation-dock .tab::after { content:""; position:absolute; height:2px; bottom:-1px; left:32%; right:32%; border-radius:2px; background:transparent; }
+#desk-navigation-dock .tab.active { background:linear-gradient(140deg,color-mix(in srgb,var(--accent),var(--panel2) 83%),var(--panel)); color:var(--text); border-color:color-mix(in srgb,var(--accent),var(--line) 55%); box-shadow:inset 0 1px #ffffff12,0 3px 10px #0003; }
+#desk-navigation-dock .tab.active::after { background:var(--accent); box-shadow:0 0 8px color-mix(in srgb,var(--accent),transparent 65%); }
+#desk-navigation-dock :is(.tab,#btn-settings):hover { color:var(--text); border-color:var(--accent); }
+#desk-navigation-dock :is(.tab,#btn-settings):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#desk-navigation-dock .nav-glyph { display:grid; place-items:center; width:27px; height:27px; flex:none; color:var(--accent); border:1px solid var(--line); border-radius:8px; background:color-mix(in srgb,var(--accent),transparent 94%); }
+#desk-navigation-dock .nav-glyph svg { width:20px; height:20px; }
+#desk-navigation-dock .tab.active .nav-glyph { background:color-mix(in srgb,var(--accent),transparent 85%); border-color:color-mix(in srgb,var(--accent),transparent 65%); }
+#desk-navigation-dock #btn-settings .nav-glyph { border-radius:50%; }
+#desk-navigation-dock .settings-label { display:inline; }
+
+/* One icon preference coordinates navigation, view controls, readings and headings. */
+html body[data-desk-icons="right"] :is(body > header nav,#desk-navigation-dock nav) :is(.tab,#btn-settings),
+body[data-desk-icons="right"] :is(.weather-view button,#desk .hero-conditions,#desk .balanced-card h2) { flex-direction:row-reverse; }
+html body[data-desk-icons="above"] :is(body > header nav,#desk-navigation-dock nav) :is(.tab,#btn-settings),
+body[data-desk-icons="above"] :is(.weather-view button,#desk .hero-conditions,#desk .balanced-card h2) { flex-direction:column; gap:4px; }
+body[data-desk-icons="above"] { --desk-nav-height:calc(86px + env(safe-area-inset-bottom,0px)); }
+body[data-desk-icons="right"] #desk.outlook-view #gauges .gwrap > span[aria-hidden] { left:auto; right:12px; }
+body[data-desk-icons="right"] #desk.outlook-view #gauges h3 { padding-left:0; padding-right:36px; }
+body[data-desk-icons="above"] #desk.outlook-view #gauges > .gauge { padding-top:46px; text-align:center; }
+body[data-desk-icons="above"] #desk.outlook-view #gauges .gwrap > span[aria-hidden] { top:8px; left:50%; transform:translateX(-50%); }
+body[data-desk-icons="above"] #desk.outlook-view #gauges h3 { padding:0; justify-content:center; min-height:18px; }
+body[data-desk-icons="above"] #desk.outlook-view #gauges .ginner { justify-content:center; text-align:center; }
+
+@container (max-width:1050px) {
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges > .gauge { border:0; border-left:1px solid var(--line); }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges > .gauge:nth-child(4n+1) { border-left:0; }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges > .gauge:nth-child(n+5) { border-top:1px solid var(--line); }
+  html #desk.balanced-desk.desk-layout-active .desk-zone #daycards { grid-template-columns:repeat(5,minmax(0,1fr)); }
+}
+@container (max-width:600px) {
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges > .gauge:nth-child(odd) { border-left:0; }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #gauges > .gauge:nth-child(n+3) { border-top:1px solid var(--line); }
+  html #desk.balanced-desk.desk-layout-active .desk-zone #daycards { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #forecast-hourly { overflow-x:auto; }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone .fd-hour-grid { min-width:570px; }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone .forecast-heading { flex-wrap:wrap; }
+}
+@container (max-width:380px) {
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone #outlook-astronomy { display:block; }
+}
+@media(max-width:1199px) {
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone-bottom { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:760px) {
+  #desk.balanced-desk.desk-layout-active.desk-panels-custom.outlook-view #observatory-grid { display:flex; flex-direction:column; flex:none; }
+  #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone { width:100%; flex:none; }
+  #desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading { gap:14px; }
+  #desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > .observatory-place { flex:1 1 100%; }
+  #desk.balanced-desk.desk-layout-active.desk-header-custom.outlook-view #observatory-heading > .observatory-clock { flex:1 1 100%; }
+  body:is([data-desk-nav="left"],[data-desk-nav="right"]) #desk-navigation-dock { top:auto; bottom:0; left:0; right:0; width:auto; height:var(--desk-nav-height); padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px)); }
+  body:is([data-desk-nav="left"],[data-desk-nav="right"]) > main { margin:0 0 var(--desk-nav-height); }
+  body:is([data-desk-nav="left"],[data-desk-nav="right"]) #desk-navigation-dock nav { flex-direction:row; }
+  #desk-navigation-dock nav { gap:4px; }
+  #desk-navigation-dock :is(.tab,#btn-settings) { flex:1; padding-inline:5px; gap:4px; font-size:11px; }
+  #desk-navigation-dock .nav-glyph { width:20px; height:20px; }
+  #desk-navigation-dock .nav-glyph svg { width:16px; height:16px; }
+}
+@media(max-width:450px) { #desk.balanced-desk.desk-layout-active.outlook-view .desk-zone-bottom { grid-template-columns:1fr; } }
+body.kiosk #desk-navigation-dock { display:none!important; }
+body.kiosk[data-desk-nav] > main { margin:0; }

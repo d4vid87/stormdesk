@@ -97,8 +97,10 @@ const observations=Array.from({length:336},(_,i)=>{
 });
 const captureTheme=new URLSearchParams(location.search).get('theme');
 const prior=JSON.parse(localStorage.getItem('wd.settings')||'{}');
-const selectedTheme=captureTheme||prior.palette||'graphite';
-localStorage.setItem('wd.settings',JSON.stringify({token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'Fort Worth · DEMO DATA',lat:32.75,lon:-97.33,units:'imperial',theme:['light','solarized-light','contrast-light'].includes(selectedTheme)?'light':selectedTheme==='auto'?'auto':'dark',palette:['blue','light','auto'].includes(selectedTheme)?'':selectedTheme.replace(/-light$/,''),deskRadar:new URLSearchParams(location.search).get('view')==='radar',eco:'off',motion:new URLSearchParams(location.search).get('motion')||'auto',nightDim:false,kioskCycleSec:0,nearbyRadius:0,speakAlerts:false,webNotif:false}));
+const priorTheme=prior.theme==='light'&&['solarized','contrast'].includes(prior.palette)?`${prior.palette}-light`:prior.palette||(prior.theme==='light'?'light':prior.theme==='auto'?'auto':'graphite');
+const selectedTheme=captureTheme||priorTheme;
+const appearance=Object.fromEntries(['deskLayout','deskStyle','deskMatchGauges','gaugeStyle'].filter(key=>Object.hasOwn(prior,key)).map(key=>[key,prior[key]]));
+localStorage.setItem('wd.settings',JSON.stringify({...appearance,token:'demo-not-a-real-token',stationId:'1',deviceId:'1',stationName:'Fort Worth · DEMO DATA',lat:32.75,lon:-97.33,units:'imperial',theme:['light','solarized-light','contrast-light'].includes(selectedTheme)?'light':selectedTheme==='auto'?'auto':'dark',palette:['blue','light','auto'].includes(selectedTheme)?'':selectedTheme.replace(/-light$/,''),deskRadar:new URLSearchParams(location.search).get('view')==='radar',eco:'off',motion:new URLSearchParams(location.search).get('motion')||'auto',nightDim:false,kioskCycleSec:0,nearbyRadius:0,speakAlerts:false,webNotif:false}));
 const realFetch=window.fetch.bind(window);
 window.fetch=async (input,options)=>{
  const u=new URL(typeof input==='string'?input:input.url,location.href);

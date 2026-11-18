@@ -4,13 +4,19 @@
 
 **Your forecast. Your sky.** StormDesk opens with Observatory: a full-width row of ten aligned forecast cards, larger live gauges, hourly weather, and compact astronomy. The desktop view keeps everyday weather together, with deeper details in dialogs and a layout that reflows on smaller screens. The full [HookEcho](https://hookecho.io/) radar viewer and station history are one click away. Start with a location; connect a personal weather station when you’re ready. Free and open source, with no StormDesk account, ads, or subscription.
 
-[Open the app](https://app.mystormdesk.com/) · [Download 4.11.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.11.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
+[Open the app](https://app.mystormdesk.com/) · [Download 4.12.0](https://github.com/d4vid87/stormdesk/releases/tag/v4.12.0) · [Website](https://mystormdesk.com/) · [Setup & help](https://mystormdesk.com/help.html) · [Release notes](CHANGELOG.md)
 
 [![StormDesk 4.11.0 animated tour of Weather, Radar, History and appearance](docs/stormdesk-4110-hero.gif)](https://mystormdesk.com/#watch)
 
 *StormDesk 4.11.0 · demo weather captured November 17, 2026. Illustrative readings and recorded interface; not current weather.*
 
 [Watch the 30-second narrated tour](https://mystormdesk.com/#watch) · [Download the video](https://mystormdesk.com/images/stormdesk-4110-promo.mp4). The tour uses AI-generated narration; captions and a transcript are available on the website.
+
+### What’s new in 4.12.0
+
+- **Customize desk:** open the control beside Gauge style to make the weather view yours. Choose Observatory, Mission Control, Skyline Glass, Weather Journal or Night Watch, plus any of the twenty theme choices.
+- **Arrange your screen:** move navigation to any edge, reorder tabs, header items and gauges, and place weather panels in the top row, main column, sidebar or bottom row. Choose where icons sit and restore the default arrangement at any time.
+- **Your preferences stay local:** each screen remembers its layout and appearance. Match gauges to a desk look or keep an independent gauge style. Existing themes, motion preferences, station settings and archives are preserved; Sky Theater and the full HookEcho radar remain included.
 
 ### What’s new in 4.11.0
 

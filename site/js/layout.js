@@ -1,5 +1,7 @@
 import { initObservatory } from './observatory.js';
-// The Weather instruments have one protected arrangement on every device.
+import { settings } from './app.js';
+import { applyDeskLayout, normalizeDeskLayout } from './desk-layout.js';
+// Legacy hidden panels stay protected; desk customization moves live components.
 const KEY = 'wd.layout';
 const old = localStorage.getItem(KEY);
 if (old && localStorage.getItem('wd.layout.before-fixed') == null)
@@ -47,11 +49,12 @@ export function initLayout() {
       if (gauges.children[index] !== gauge) gauges.insertBefore(gauge, gauges.children[index] || null);
     }
   }
+  applyDeskLayout(settings().deskLayout);
 }
 
 if (location.search.includes('selftest')) {
   initLayout();
-  console.assert([...document.querySelectorAll('#gauges > .gauge')].map((g) => g.dataset.panel).join() === ORDER.join(),
-    'fixed layout: eight gauges keep their intended order');
+  console.assert([...document.querySelectorAll('#gauges > .gauge')].map((g) => g.dataset.panel).join() === normalizeDeskLayout(settings().deskLayout).gauges.join(),
+    'desk layout: eight gauges keep their saved order');
   console.assert(!document.querySelector('#gauges .grip, #gauges .rz'), 'fixed layout: no drag or resize controls');
 }

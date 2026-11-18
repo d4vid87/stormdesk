@@ -6,6 +6,17 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.12.0] - 2026-11-18
+
+### Added
+- Add Customize desk beside Gauge style, bringing appearance and arrangement controls together without leaving the weather view.
+- Include five coordinated desk looks: Observatory, Mission Control, Skyline Glass, Weather Journal and Night Watch. Choose from all twenty existing theme options, with coordinated gauges or an independent gauge style.
+- Move navigation to the top, bottom or either side; reorder navigation tabs, header items and gauges; and arrange weather panels across the top row, main column, sidebar and bottom row. Adjust icon placement and restore the default layout when needed.
+
+### Compatibility
+- Personalization stays local to each screen. Existing theme, gauge, units and motion choices are preserved until changed; station connections, archives and weather data are unaffected.
+- Sky Theater forecasts, the full HookEcho radar viewer, History and Lite remain available. The standard Observatory arrangement remains the default.
+
 ## [4.11.0] - 2026-11-17
 
 ### Changed
