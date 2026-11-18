@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { readingInfo, modelAgreement } from '../site/js/weather-context.js';
+import { readingInfo, modelAgreement, forecastTime } from '../site/js/weather-context.js';
 
 const now = Date.UTC(2026, 0, 1), start = now / 1000;
 const fc = { _cached: true, _savedAt: now, current_conditions: { time: start - 3600, _sources: {
@@ -104,9 +104,10 @@ document.hidden=false;listeners.visibilitychange();frame();assert.equal(rendered
   const nodes = Object.fromEntries(['aqi-val','aqi-label','aqi-detail'].map(id => [id,{textContent:'',className:'',dataset:{}}]));
   const aqiListeners = {};
   let place = {lat:35,lon:-97}, resolveAqi, stamps = 0;
-  const payload = value => ({hourly:{time:[new Date(now - 3600000).toISOString(),new Date(now + 3600000).toISOString()],us_aqi:[value,99],pm2_5:[5,6]}});
+  const payload = value => ({hourly:{time:[new Date(now).toISOString(),new Date(now + 3600000).toISOString()],us_aqi:[value,99],pm2_5:[5,6]}});
   const aqi = vm.createContext({
-    Date: class extends Date { constructor(value) { super(value === undefined ? now : value); } },
+    Date: class extends Date { constructor(value) { super(value === undefined ? now : value); } static now() { return now; } },
+    forecastTime,
     coords:()=>place, $:id=>nodes[id], num:String,
     window:{addEventListener:(type,fn)=>{aqiListeners[type]=fn;}},
     stamp:()=>{stamps++;nodes['aqi-val'].dataset.ts=String(now);},

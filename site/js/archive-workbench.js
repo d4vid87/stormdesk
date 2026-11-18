@@ -2,6 +2,7 @@ import { settings, refreshAll, U } from './app.js';
 import { openDetail } from './detail.js';
 import { toDisplay } from './almanac.js';
 import { quality, usable, gaps, storms, parseCSV } from './archive-tools.js';
+import { dailyHistory } from './history-daily.js';
 
 const el=(tag,text,parent)=>{const n=document.createElement(tag);if(text!=null)n.textContent=text;parent?.append(n);return n;};
 const fmt=t=>new Date(t*1000).toLocaleString();
@@ -147,7 +148,7 @@ export function initArchiveWorkbench(){
     try{
       const y=Number(year.value),m=Number(month.value);
       if(!Number.isInteger(y)||y<1900||y>new Date().getFullYear()||!Number.isInteger(m)||m<0||m>12)throw Error('Choose a valid year and month.');
-      const data=await request(`/history/daily?tz=${-new Date().getTimezoneOffset()}`);
+      const data=await dailyHistory();
       if(identity!==station()||seq!==reportVersion)return;
       const dayKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const start=new Date(y,m?m-1:0,1),end=new Date(y,m?m:12,1),today=new Date();

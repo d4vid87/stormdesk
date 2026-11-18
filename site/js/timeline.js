@@ -1,8 +1,8 @@
 // One answer to “what happens when?” Past events come from the station archive; future events
 // come from the same forecast, alerts and model guidance the rest of the Desk already uses.
 import * as api from './api.js';
-import { settings, U, num, every, msToWind } from './app.js';
-import { forecast as deskForecast } from './desk.js';
+import { settings, coords, U, num, every, msToWind } from './app.js';
+import { forecast as deskForecast, cacheContext } from './desk.js';
 import { openDetail } from './detail.js';
 import { timelineSettings as savedTimelineSettings } from './timeline-settings.js';
 
@@ -10,6 +10,8 @@ const $ = (id) => document.getElementById(id);
 const HOUR = 3600;
 let history = [], alerts = [], aqi = null, models = null, events = [];
 let filter = 'all';
+let sourceKeys = {}, refreshContext = '', refreshRequest = 0, pending = null;
+let dirty = true, scheduled = false, initialized = false;
 
 export const timelineSettings = (s = settings()) => savedTimelineSettings(s);
 
@@ -184,18 +186,81 @@ function render() {
   if (range) range.textContent = 'Past 24 hours  ·  NOW  ·  Next 48 hours';
 }
 
+function contexts() {
+  const s = settings(), location = JSON.stringify(coords());
+  const keys = {
+    history: JSON.stringify([api.stationContext(), s.units, s.windUnit, s.activePlace]),
+    alerts: JSON.stringify([location, s.places.find(p => p.id === s.activePlace)?.alertRegion || s.alertRegion]),
+    air: location,
+    models: cacheContext('models'),
+  };
+  return { keys, key: JSON.stringify([keys, cacheContext('forecast'), timelineSettings()]) };
+}
+
+function syncContext() {
+  const { keys, key } = contexts();
+  if (key === refreshContext) return false;
+  if (keys.history !== sourceKeys.history) history = [];
+  if (keys.alerts !== sourceKeys.alerts) alerts = [];
+  if (keys.air !== sourceKeys.air) aqi = null;
+  if (keys.models !== sourceKeys.models) models = null;
+  sourceKeys = keys; refreshContext = key; ++refreshRequest;
+  pending = null; dirty = true; events = [];
+  for (const id of ['timeline-strip', 'timeline-list']) {
+    if ($(id)) $(id).textContent = 'Updating weather timeline…';
+  }
+  return true;
+}
+
+function visible() {
+  return !document.hidden && ['timeline-list', 'timeline-strip'].some(id => {
+    const el = $(id);
+    if (!el?.getClientRects().length) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.bottom >= 0 && rect.top <= innerHeight;
+  });
+}
+
+function scheduleRefresh() {
+  dirty = true;
+  if (scheduled) return;
+  scheduled = true;
+  queueMicrotask(() => {
+    scheduled = false;
+    refresh().catch(error => console.warn('Timeline unavailable:', error.message));
+  });
+}
+
 async function refresh() {
-  const timingStarted = performance.now();
-  const fc = deskForecast();
-  if (!fc) return;
-  const settled = await Promise.allSettled([api.localObs(24), api.alerts(), api.aqi(), api.nowcast()]);
-  history = settled[0].status === 'fulfilled' ? settled[0].value.obs || [] : history;
-  alerts = settled[1].status === 'fulfilled' ? settled[1].value.features || [] : alerts;
-  aqi = settled[2].status === 'fulfilled' ? settled[2].value : aqi;
-  const near = settled[3].status === 'fulfilled' ? settled[3].value : null;
-  events = buildTimeline({ forecast: fc, observations: history, nws: alerts, air: aqi, nowcast: near, modelData: models });
-  (window.__WD_TIMINGS ||= {}).timelineBuildMs = Math.round(performance.now() - timingStarted);
-  render();
+  syncContext();
+  if (!visible() || !deskForecast()) { dirty = true; return; }
+  if (pending?.key === refreshContext) return pending.promise;
+  const key = refreshContext, request = ++refreshRequest;
+  const flight = { key };
+  pending = flight; dirty = false;
+  flight.promise = (async () => {
+    try {
+      // A saved destination has no measurements in the home station's archive.
+      const observed = settings().activePlace ? Promise.resolve({ obs: [] }) : api.localObs(24);
+      const settled = await Promise.allSettled([observed, api.alerts(), api.aqi(), api.nowcast()]);
+      if (request !== refreshRequest || key !== contexts().key) return;
+      const fc = deskForecast();
+      if (!fc) { dirty = true; return; }
+      history = settled[0].status === 'fulfilled' ? settled[0].value.obs || [] : history;
+      alerts = settled[1].status === 'fulfilled' ? settled[1].value.features || [] : alerts;
+      aqi = settled[2].status === 'fulfilled' ? settled[2].value : aqi;
+      const near = settled[3].status === 'fulfilled' ? settled[3].value : null;
+      const timingStarted = performance.now();
+      events = buildTimeline({ forecast: fc, observations: history, nws: alerts, air: aqi, nowcast: near, modelData: models });
+      (window.__WD_TIMINGS ||= {}).timelineBuildMs = Math.round(performance.now() - timingStarted);
+      dirty = false;
+      if (visible()) render();
+      else dirty = true;
+    } finally {
+      if (pending === flight) pending = null;
+    }
+  })();
+  return flight.promise;
 }
 
 function activate(e) {
@@ -216,13 +281,27 @@ document.addEventListener('click', (e) => {
   render();
 });
 document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-event][tabindex]')) { e.preventDefault(); activate(e); } });
-window.addEventListener('wd:forecast', refresh);
-window.addEventListener('wd:models', (e) => { models = e.detail; refresh(); });
-window.addEventListener('wd:settings', () => { if (deskForecast()) refresh(); });
+window.addEventListener('wd:forecast', scheduleRefresh);
+window.addEventListener('wd:models', (e) => {
+  syncContext();
+  if (e.detail?._context !== cacheContext('models')) return;
+  models = e.detail; scheduleRefresh();
+});
+window.addEventListener('wd:settings', () => { if (syncContext()) scheduleRefresh(); });
+window.addEventListener('wd:section', () => { if (dirty) scheduleRefresh(); });
+document.addEventListener('visibilitychange', () => { if (dirty && !document.hidden) scheduleRefresh(); });
 
 export function initTimeline() {
+  if (initialized) return;
+  initialized = true;
   document.querySelectorAll('[data-tl-filter]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tlFilter === filter)));
   every('timeline', 900, refresh);
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(entries => {
+      if (dirty && entries.some(entry => entry.isIntersecting)) scheduleRefresh();
+    });
+    for (const id of ['timeline-list', 'timeline-strip']) if ($(id)) observer.observe($(id));
+  }
 }
 
 if (location.search.includes('selftest')) {

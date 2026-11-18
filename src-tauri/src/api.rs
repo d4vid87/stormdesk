@@ -42,6 +42,22 @@ fn settings_snapshot(cfg: &std::path::Path) -> serde_json::Value {
 
 const FORECAST_TTL: u64 = 900;
 
+/// NHC has one public feed for every viewer. A slow request owns at most one HTTP worker.
+pub fn tropical() -> Option<String> {
+    static CACHE: Mutex<Option<Cached<String>>> = Mutex::new(None);
+    tropical_feed(&CACHE, "https://www.nhc.noaa.gov/CurrentStorms.json")
+}
+
+fn tropical_feed(cache: &Mutex<Option<Cached<String>>>, url: &str) -> Option<String> {
+    cached_fetch(cache, url, || {
+        let body = ureq::get(url).timeout(Duration::from_secs(20)).call().ok()
+            .and_then(|r| r.into_string().ok())
+            .filter(|body| serde_json::from_str::<serde_json::Value>(body).is_ok());
+        let ttl = if body.is_some() { 900 } else { 30 };
+        (body, ttl)
+    })
+}
+
 /// Today's high, low, precipitation chance and condition code, for the weather entity.
 fn forecast(cfg: &std::path::Path) -> Option<serde_json::Value> {
     static CACHE: Mutex<Option<Cached<serde_json::Value>>> = Mutex::new(None);
@@ -412,6 +428,41 @@ mod tests {
         finish_tx.send(()).unwrap();
         assert_eq!(worker.join().unwrap(), Some(7));
         assert_eq!(cached_fetch(&cache, "same-place", || panic!("completed result was not cached")), Some(7));
+    }
+
+    #[test]
+    fn tropical_feed_singleflights_and_caches_upstream_failures() {
+        use std::io::{Read, Write};
+        let listener=std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url=format!("http://{}",listener.local_addr().unwrap());
+        let cache=Arc::new(Mutex::new(None));
+        let (started_tx,started_rx)=std::sync::mpsc::channel();
+        let (finish_tx,finish_rx)=std::sync::mpsc::channel();
+        let upstream=std::thread::spawn(move|| {
+            for status in [200,503] {
+                let (mut stream,_)=listener.accept().unwrap();
+                stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                let mut bytes=[0;2048]; stream.read(&mut bytes).unwrap();
+                if status==200 { started_tx.send(()).unwrap(); finish_rx.recv().unwrap(); }
+                let body="{\"activeStorms\":[]}";
+                write!(stream,"HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+            }
+        });
+        let loader_cache=cache.clone(); let loader_url=url.clone();
+        let loader=std::thread::spawn(move||tropical_feed(&loader_cache,&loader_url));
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        let start=std::time::Instant::now();
+        for _ in 0..4 { assert!(tropical_feed(&cache,&url).is_none()); }
+        assert!(start.elapsed()<Duration::from_secs(1));
+        finish_tx.send(()).unwrap();
+        let body=loader.join().unwrap().unwrap();
+        assert_eq!(tropical_feed(&cache,&url),Some(body));
+        cache.lock().unwrap().as_mut().unwrap().expires=0;
+        assert!(tropical_feed(&cache,&url).is_none());
+        upstream.join().unwrap();
+        // Upstream is gone; a cached failure must still return immediately.
+        assert!(tropical_feed(&cache,&url).is_none());
+        assert!(cache.lock().unwrap().as_ref().unwrap().expires>crate::server::epoch());
     }
 
     #[test]

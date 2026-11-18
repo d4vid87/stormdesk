@@ -28,7 +28,10 @@ export function motionLevel() {
 }
 
 export function applyMotion() {
-  document.documentElement.dataset.motion = motionLevel();
+  const level = motionLevel();
+  if (document.documentElement.dataset.motion === level) return;
+  document.documentElement.dataset.motion = level;
+  window.dispatchEvent(new CustomEvent('wd:motion', { detail: level }));
 }
 
 window.addEventListener('wd:settings', applyMotion);

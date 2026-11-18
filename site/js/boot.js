@@ -97,9 +97,23 @@ window.fetch = (input, init = {}) => {
 let PUBLIC = !!window.__WD_PUBLIC;
 
 let rev = null;
+let pullSequence = 0;
+let pendingSettings = {};
+let sendingSettings = {};
+let pushWork = null;
+
+function applyRemoteConfig(j) {
+  if (typeof j?._rev === 'number' && rev !== null && j._rev < rev) return;
+  if (typeof j?._rev === 'number') rev = j._rev;
+  syncing = true;
+  try {
+    if (j.settings) saveSettings({ ...sharedSettings(j.settings), ...sendingSettings, ...pendingSettings });
+  } finally { syncing = false; }
+  if (j.settings) window.dispatchEvent(new CustomEvent('wd:host-config', { detail: { ...j.settings, _rev: j._rev } }));
+}
 
 async function pullConfig() {
-  syncing = true;
+  const sequence = ++pullSequence;
   try {
     let r = await fetch(`${SRV}/config`, { signal: expires(2000) });
     if (r.status === 401) {
@@ -109,16 +123,14 @@ async function pullConfig() {
     }
     if (!r.ok) return;
     const j = await r.json();
-    if (typeof j._rev === 'number') rev = j._rev;
-    if (j.settings) saveSettings(sharedSettings(j.settings));
+    if (typeof j._rev !== 'number' && sequence !== pullSequence) return;
+    applyRemoteConfig(j);
     // One-time migration for an existing household layout; after this, every device owns its
     // presentation and a host pull never rearranges another screen.
     if (j.layout && localStorage.getItem('wd.layout.before-fixed') == null)
       localStorage.setItem('wd.layout.before-fixed', JSON.stringify(j.layout));
   } catch {
     // no config server (static host, or app not running) — nothing to sync
-  } finally {
-    syncing = false;
   }
 }
 
@@ -145,32 +157,48 @@ export function mayPush(pulled = rev !== null) {
 
 // Returns the write, so a caller that needs the server to have the new settings before it asks
 // the server anything (the Home Assistant test button) can wait for it.
-let pendingSettings = {};
-async function pushConfig(retried = false) {
+async function pushConfig() {
   if (syncing || PUBLIC || !mayPush()) return false;
   clearTimeout(pushTimer);
-  const changed = pendingSettings;
-  pendingSettings = {};
-  const r = await fetch(`${SRV}/config`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ _rev: rev ?? 0, settings: Object.keys(changed).length ? changed : sharedSettings() }),
-  }).catch(() => null);
-  if (!r) { pendingSettings = { ...changed, ...pendingSettings }; return false; }
-  const j = await r.json().catch(() => null);
-  if (r.status === 409 && j && !retried) {
-    rev = j._rev;
-    // Applying a server conflict must not schedule another save of the same settings.
-    const wasSyncing = syncing;
-    syncing = true;
-    try { if (j.settings) saveSettings({ ...sharedSettings(j.settings), ...changed }); }
-    finally { syncing = wasSyncing; }
-    pendingSettings = { ...changed, ...pendingSettings };
-    return pushConfig(true);
-  }
-  if (r.ok && typeof j?._rev === 'number') rev = j._rev;
-  if (!r.ok) pendingSettings = { ...changed, ...pendingSettings };
-  return r.ok;
+  // All callers await the same drain, including edits made during an outstanding PUT.
+  if (!pushWork) pushWork = flushConfig().finally(() => { pushWork = null; });
+  return pushWork;
+}
+
+async function flushConfig() {
+  do {
+    sendingSettings = Object.keys(pendingSettings).length ? pendingSettings : sharedSettings();
+    pendingSettings = {};
+    let saved = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = await fetch(`${SRV}/config`, {
+        method: 'PUT', signal: expires(5000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _rev: rev ?? 0, settings: sendingSettings }),
+      }).catch(() => null);
+      const j = await r?.json().catch(() => null);
+      if (r?.status === 409 && j && attempt === 0) {
+        applyRemoteConfig(j);
+        sendingSettings = { ...sendingSettings, ...pendingSettings };
+        pendingSettings = {};
+        continue;
+      }
+      saved = !!r?.ok;
+      if (saved && (typeof j?._rev !== 'number' || rev === null || j._rev >= rev)) {
+        if (typeof j?._rev === 'number') rev = j._rev;
+        if (j?.settings) window.dispatchEvent(new CustomEvent('wd:host-config', { detail: { ...j.settings, _rev: j._rev } }));
+      }
+      break;
+    }
+    if (!saved) {
+      pendingSettings = { ...sendingSettings, ...pendingSettings };
+      sendingSettings = {};
+      return false;
+    }
+    sendingSettings = {};
+  } while (Object.keys(pendingSettings).length);
+  clearTimeout(pushTimer);
+  return true;
 }
 
 let pushTimer;
@@ -196,7 +224,7 @@ window.addEventListener('wd:settings', (e) => {
 // push sends it again — a loop that bumped the revision once a second and held the webview at a
 // full core. A missing rev (older server) still pulls, as it always did.
 export function shouldPull(evRev) {
-  return typeof evRev !== 'number' || evRev !== rev;
+  return typeof evRev !== 'number' || rev === null || evRev > rev;
 }
 window.addEventListener('wd:config-rev', (e) => { if (shouldPull(e.detail?.rev)) pullConfig(); });
 
@@ -653,10 +681,10 @@ $('btn-save').onclick = async () => {
 // station meta fills name/lat/lon and the Tempest device id when blank
 async function hydrateStation() {
   if (!configured()) return;
-  const identity = profileIdentity(settings());
+  const identity = api.stationContext();
   try {
     const j = await api.station();
-    if (identity !== profileIdentity(settings())) return;
+    if (identity !== api.stationContext()) return;
     const st = j.stations?.[0];
     // A valid token for the wrong account answers 200 with an empty list, and the old silent
     // return left the whole dashboard blank with nothing to go on.
@@ -679,10 +707,15 @@ async function hydrateStation() {
     else if (/^\d+$/.test(entered) && entered !== numeric) {
       notify({ title: 'Device ID corrected', body: `${entered} isn't a device on this station — using ${numeric || 'none'}.` });
     }
+    const device = st.devices?.find(d => String(d.device_id) === numeric);
+    const hubs = st.devices?.filter(d => d.device_type === 'HB') || [];
     saveSettings({
       stationName: st.name,
       lat: st.latitude, lon: st.longitude,
       deviceId: numeric,
+      deviceSerial: device?.serial_number || '',
+      hubSerial: device?.hub_sn || (hubs.length === 1 ? hubs[0].serial_number : '') || '',
+      serialDeviceId: device?.serial_number ? numeric : '',
     });
     fillDrawer();
     renderPlaces();
@@ -978,7 +1011,7 @@ if (shouldRegisterSW()) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (updatingShell) location.reload();
   }, { once: true });
-  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-customize-4120`, { updateViaCache: 'none' }).catch(() => {});
+  navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}-reliability-4121`, { updateViaCache: 'none' }).catch(() => {});
 }
 function changelog() {
   if (!APP_VERSION) return; // served from a static host: no version to be honest about
@@ -1511,28 +1544,44 @@ window.addEventListener('wd:section', (e) => {
 function loadLabRadar() {
   if (document.hidden) return;
   const f = $('lab-frame');
-  if (safeMode()) {
-    if ($('lab-radar-still')) {
-      every('lab-radar-still', 300, () => { $('lab-radar-still').src = stillUrl(); });
-      return;
-    }
-    const img = document.createElement('img');
-    img.id = 'lab-radar-still';
-    img.alt = 'Radar snapshot';
-    const caption = document.createElement('p');
-    caption.className = 'radar-safe-caption';
-    caption.textContent = 'Radar snapshot · refreshes every 5 minutes';
-    f.parentElement.append(img, caption);
+  let img = $('lab-radar-still'), caption = $('lab-radar-caption');
+  if (stillRadar()) {
+    if (f.src) { f.src = 'about:blank'; f.removeAttribute('src'); }
     f.style.display = 'none';
-    const refresh = () => { img.src = stillUrl(); };
-    img.onerror = () => { caption.textContent = 'Radar snapshot unavailable · retrying in 5 minutes'; };
-    img.onload = () => { caption.textContent = `Snapshot received ${new Date().toLocaleTimeString()} · refreshes every 5 min · scan time unavailable`; };
-    refresh();
-    every('lab-radar-still', 300, refresh);
+    if (!img) {
+      img = document.createElement('img');
+      img.id = 'lab-radar-still';
+      img.alt = 'Radar snapshot';
+      caption = document.createElement('p');
+      caption.id = 'lab-radar-caption';
+      caption.className = 'radar-safe-caption';
+      f.parentElement.append(img, caption);
+      img.onerror = () => { caption.textContent = 'Radar snapshot unavailable · retrying in 5 minutes'; };
+      img.onload = () => { caption.textContent = `Snapshot received ${new Date().toLocaleTimeString()} · refreshes every 5 min · scan time unavailable`; };
+    }
+    img.hidden = caption.hidden = false;
+    caption.textContent = 'Radar snapshot · refreshes every 5 minutes';
+    every('lab-radar-still', 300, () => { img.src = stillUrl(); });
     return;
   }
+  clearJob('lab-radar-still');
+  if (img) img.hidden = caption.hidden = true;
+  f.style.display = '';
   if (!f.src) f.src = radarUrl(8, false);
 }
+
+// Resolved policy changes also come from the OS and the quick theme chooser.
+let radarStillPolicy = stillRadar();
+function reconcileRadarPolicy() {
+  const next = stillRadar();
+  if (next === radarStillPolicy) return;
+  radarStillPolicy = next;
+  loadDeskRadar.cancel?.();
+  if ($('desk').classList.contains('active')) loadDeskRadar();
+  else if ($('lab').classList.contains('active')) loadLabRadar();
+}
+window.addEventListener('wd:motion', reconcileRadarPolicy);
+window.addEventListener('wd:settings', reconcileRadarPolicy);
 
 // Cross-origin radar workers can keep fetching and rendering after the host tab is hidden.
 document.addEventListener('visibilitychange', () => {
@@ -1619,6 +1668,8 @@ function loadDeskRadar() {
   if (document.hidden || !$('desk').classList.contains('active')) return;
   // Motion changed while the panel was up: swap whichever one is showing for the other.
   if (stillRadar()) {
+    loadDeskRadar.cancel?.();
+    radarAlive();
     if (!$('desk-radar-still').hidden) return;
     return showStill(panel);
   }
@@ -1635,7 +1686,7 @@ function loadDeskRadar() {
   let idle = 0;
   const start = () => {
     idle = 0;
-    if (document.hidden || panel.hidden || !$('desk').classList.contains('active') || !loadDeskRadar.armed) return;
+    if (document.hidden || panel.hidden || stillRadar() || !$('desk').classList.contains('active') || !loadDeskRadar.armed) return;
     if (!f.src) { f.src = radarUrl(6.5); radarWatchdog(); }
     panel.classList.add('loaded');
   };

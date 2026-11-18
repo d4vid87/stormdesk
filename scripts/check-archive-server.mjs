@@ -206,6 +206,22 @@ try {
   await setStation('B');
   assert.equal((await request(reviewPath)).obs[0][7], -5, 'station B retains the same timestamp independently');
 
+  await request('/history/daily?tz_name=Not%2FA_Time_Zone', { status: 400 });
+  // Exercise the named-zone HTTP contract, including both DST day lengths and summer midnight.
+  const at = text => Date.parse(text) / 1000;
+  const calendarRows = [tuple(25, at('2025-07-01T05:30:00Z'))];
+  for (const [start, end] of [
+    ['2025-03-09T06:00:00Z', '2025-03-10T05:00:00Z'],
+    ['2025-11-02T05:00:00Z', '2025-11-03T06:00:00Z'],
+  ]) for (let ts = at(start); ts < at(end); ts += 3600) calendarRows.push(tuple(10, ts));
+  await request('/archive/edit', { method: 'POST', body: { context: stationB.context, action: 'import', rows: calendarRows } });
+  const calendarPath = '/history/daily?tz=-360&tz_name=America%2FChicago';
+  const calendar = await request(calendarPath);
+  assert.equal(calendar.find(day => day.day === '2025-03-09').readings, 23);
+  assert.equal(calendar.find(day => day.day === '2025-11-02').readings, 25);
+  assert.equal(calendar.find(day => day.day === '2025-07-01').tempMax, 25);
+  assert.deepEqual(await request(calendarPath), calendar, 'warm named-day cache preserves results');
+
   const publicConfig = await request('/config-public');
   const publicText = JSON.stringify(publicConfig);
   for (const secret of secrets) assert.ok(!publicText.includes(secret), 'public configuration leaked a test credential');
@@ -220,7 +236,7 @@ try {
   // The server deliberately trusts its loopback owner even after remote legacy access is disabled.
   assert.equal((await request(reviewPath)).obs[0][7], -5);
   assert.equal((await request('/config-public')).settings.stationId, 'B');
-  console.log('Archive HTTP: imports, notes, exclusions, invalid requests, channel ingestion, station isolation, stale-context rejection, public credential redaction and browser-origin authorization passed.');
+  console.log('Archive HTTP: imports, notes, exclusions, named-zone DST summaries, invalid requests, channel ingestion, station isolation, stale-context rejection, public credential redaction and browser-origin authorization passed.');
 } finally {
   if (child && child.exitCode == null && child.signalCode == null) {
     child.kill('SIGTERM');

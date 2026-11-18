@@ -89,7 +89,7 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
            PRIMARY KEY(ts,name));
          CREATE VIEW IF NOT EXISTS usable_obs AS SELECT * FROM obs
            WHERE NOT EXISTS (SELECT 1 FROM notes WHERE kind='exclude' AND obs.ts BETWEEN notes.ts AND notes.until);
-         CREATE TABLE IF NOT EXISTS daily_cache (tz INTEGER PRIMARY KEY, until INTEGER NOT NULL, body TEXT NOT NULL);
+         CREATE TABLE IF NOT EXISTS daily_cache (tz TEXT PRIMARY KEY, until INTEGER NOT NULL, body TEXT NOT NULL);
          CREATE TRIGGER IF NOT EXISTS notes_insert AFTER INSERT ON notes BEGIN DELETE FROM daily_cache; END;
          CREATE TRIGGER IF NOT EXISTS notes_delete AFTER DELETE ON notes BEGIN DELETE FROM daily_cache; END;
          CREATE TRIGGER IF NOT EXISTS notes_update AFTER UPDATE ON notes BEGIN DELETE FROM daily_cache; END;
@@ -104,9 +104,14 @@ pub fn open(path: &Path) -> rusqlite::Result<Connection> {
          END;",
         FIELDS.iter().map(|f| format!("{f} REAL")).collect::<Vec<_>>().join(", ")
     ))?;
-    if meta_get(&conn,"summary_format").as_deref()!=Some("2") {
-        conn.execute("DELETE FROM daily_cache",[])?;
-        meta_set(&conn,"summary_format","2");
+    if meta_get(&conn,"summary_format").as_deref()!=Some("3") {
+        // Only derived summaries change: archive observations and notes stay untouched.
+        let tx = conn.unchecked_transaction()?;
+        tx.execute_batch("DROP TABLE daily_cache;
+            CREATE TABLE daily_cache (tz TEXT PRIMARY KEY, until INTEGER NOT NULL, body TEXT NOT NULL);
+            INSERT INTO meta(key,value) VALUES ('summary_format','3')
+            ON CONFLICT(key) DO UPDATE SET value='3';")?;
+        tx.commit()?;
     }
     Ok(conn)
 }
@@ -140,8 +145,13 @@ fn insert_sql() -> &'static str {
 /// One raw SI tuple, exactly as the hub broadcast it. `INSERT OR IGNORE` on the timestamp
 /// primary key is what makes the import, the backfill and a re-broadcasting hub all idempotent.
 pub fn insert(conn: &Connection, obs: &[Option<f64>], src: i64) -> bool {
+    insert_checked(conn, obs, src).unwrap_or(false)
+}
+
+/// Ingest callers must distinguish an idempotent duplicate from a storage failure.
+pub fn insert_checked(conn: &Connection, obs: &[Option<f64>], src: i64) -> rusqlite::Result<bool> {
     let Some(Some(ts)) = obs.first().copied() else {
-        return false;
+        return Err(rusqlite::Error::InvalidQuery);
     };
     let mut vals: Vec<Option<f64>> = Vec::with_capacity(20);
     vals.push(Some(ts));
@@ -150,12 +160,9 @@ pub fn insert(conn: &Connection, obs: &[Option<f64>], src: i64) -> bool {
     }
     vals.push(Some(src as f64));
     // prepare_cached: the statement is parsed once per connection instead of once per reading.
-    let Ok(mut stmt) = conn.prepare_cached(insert_sql()) else {
-        return false;
-    };
+    let mut stmt = conn.prepare_cached(insert_sql())?;
     stmt.execute(params_from_iter(vals))
         .map(|n| n > 0)
-        .unwrap_or(false)
 }
 
 /// Every tuple in the v2 JSONL log, oldest file first. Lines that don't parse are skipped rather
@@ -201,9 +208,8 @@ pub fn migrate_jsonl(conn: &mut Connection, log_dir: &Path) {
     eprintln!("stormdesk: imported {n} observations from the JSONL log (files kept as backup)");
 }
 
-/// Per-day aggregates, SI, keyed by the viewer's local date — the browser passes its own UTC
-/// offset because the process has no notion of a timezone and "yesterday" has to mean the same
-/// day the user saw.
+/// Legacy fixed-offset summaries for older clients. New clients send an IANA timezone so
+/// historical summer and winter dates both match the calendar the viewer saw.
 pub fn daily_json(conn: &Connection, tz_off_min: i64) -> String {
     let ds = day_start(
         std::time::SystemTime::now()
@@ -304,6 +310,65 @@ pub fn daily_today_row(conn: &Connection, tz_off_min: i64, day_start: i64) -> Op
     .pop()
 }
 
+/// Named calendar days are indexed UTC ranges, never a per-observation timezone conversion.
+/// A completed-day cache remains valid across DST changes; observation/notes triggers invalidate it.
+pub fn daily_named_json(conn: &Connection, zone: &jiff::tz::TimeZone, now: i64) -> rusqlite::Result<String> {
+    fn calendar_error(e: jiff::Error) -> rusqlite::Error {
+        rusqlite::Error::ToSqlConversionFailure(Box::new(e))
+    }
+    let midnight = |ts| jiff::Timestamp::from_second(ts).map_err(calendar_error)?
+        .to_zoned(zone.clone()).start_of_day().map_err(calendar_error);
+    let today = midnight(now)?;
+    let until = today.timestamp().as_second();
+    let key = format!("iana:{}", zone.iana_name().unwrap_or("UTC"));
+    let tx = conn.unchecked_transaction()?;
+    let saved: Option<(i64, String)> = tx.query_row(
+        "SELECT until,body FROM daily_cache WHERE tz=?1", [&key],
+        |r| Ok((r.get(0)?, r.get(1)?))).optional()?;
+    let (from, head) = saved.filter(|(end,_)| *end <= until).unwrap_or((i64::MIN, "[]".into()));
+    // Skip gaps before the first observation and after the last one.
+    let (first,last): (Option<i64>,Option<i64>) = if from == until { (None,None) } else {
+        tx.query_row("SELECT (SELECT MIN(ts) FROM obs WHERE ts>=?1 AND ts<?2),
+                            (SELECT MAX(ts) FROM obs WHERE ts>=?1 AND ts<?2)",
+            rusqlite::params![from,until], |r| Ok((r.get(0)?,r.get(1)?)))?
+    };
+    let mut stmt = tx.prepare(
+        "SELECT ?1, MIN(temp), MAX(temp), MAX(wind_gust), SUM(rain), SUM(strikes), MIN(battery),
+                COUNT(*), MIN(ts), MAX(ts), SUM(COALESCE(report_interval,1))
+         FROM usable_obs WHERE ts>=?2 AND ts<?3 HAVING COUNT(*)>0")?;
+    let mut additions = Vec::new();
+    if let (Some(first),Some(last)) = (first,last) {
+        let mut day = midnight(first)?;
+        while day.timestamp().as_second() <= last {
+            let next = day.tomorrow().and_then(|d| d.start_of_day()).map_err(calendar_error)?;
+            if let Some(row) = stmt.query_row(rusqlite::params![day.date().to_string(),
+                day.timestamp().as_second(),next.timestamp().as_second()], daily_row).optional()? {
+                additions.push(row);
+            }
+            day = next;
+        }
+    }
+    let body = if additions.is_empty() { head } else { daily_join(&head, Some(&additions.join(","))) };
+    let tomorrow = today.tomorrow().and_then(|d| d.start_of_day()).map_err(calendar_error)?;
+    let live = stmt.query_row(rusqlite::params![today.date().to_string(), until,
+        tomorrow.timestamp().as_second()], daily_row).optional()?;
+    drop(stmt);
+    if from != until {
+        // A concurrent writer may win the WAL snapshot upgrade; still return the valid read.
+        if let Err(e) = tx.execute("INSERT INTO daily_cache(tz,until,body) VALUES (?1,?2,?3)
+                ON CONFLICT(tz) DO UPDATE SET until=excluded.until,body=excluded.body",
+                rusqlite::params![key,until,body]) {
+            eprintln!("stormdesk: daily calendar cache deferred: {e}");
+            tx.rollback()?;
+            return Ok(daily_join(&body, live.as_deref()));
+        }
+        tx.execute("DELETE FROM daily_cache WHERE tz NOT IN
+            (SELECT tz FROM daily_cache ORDER BY until DESC,tz LIMIT 8)", [])?;
+    }
+    tx.commit()?;
+    Ok(daily_join(&body, live.as_deref()))
+}
+
 /// Glue the cached head and today's row back into one array, without parsing either.
 pub fn daily_join(head: &str, today: Option<&str>) -> String {
     match today {
@@ -378,13 +443,13 @@ pub fn tuples_json(conn: &Connection, from: i64, to: i64) -> String {
     format!("{{\"obs\":[{}]}}", body.join(","))
 }
 
-/// MIN/MAX over the primary key are index lookups; COUNT(*) was a full scan of an archive that
-/// is meant to hold years, run on every /history/daily request.
-/// ponytail: the aggregate itself is still recomputed whenever a new row lands — split it into a
-/// cached head plus today's bucket if the archive ever makes that visible.
+// Separate scalar subqueries enable SQLite's MIN/MAX index optimization for both endpoints.
+const STAMP_SQL: &str = "SELECT COALESCE((SELECT MIN(ts) FROM obs), 0), COALESCE((SELECT MAX(ts) FROM obs), 0)";
+
+/// Archive endpoints, without scanning all observations.
 pub fn stamp(conn: &Connection) -> (i64, i64) {
     conn.query_row(
-        "SELECT COALESCE(MIN(ts), 0), COALESCE(MAX(ts), 0) FROM obs",
+        STAMP_SQL,
         [],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )
@@ -873,6 +938,10 @@ mod tests {
         obs[0] = Some(500.0);
         insert(&conn, &obs, 0);
         assert_eq!(stamp(&conn), (100, 500));
+        let mut plan = conn.prepare(&format!("EXPLAIN QUERY PLAN {STAMP_SQL}")).unwrap();
+        let steps = plan.query_map([], |r| r.get::<_, String>(3)).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap();
+        assert_eq!(steps.iter().filter(|step| step.starts_with("SEARCH obs")).count(), 2, "{steps:?}");
+        assert!(!steps.iter().any(|step| step.starts_with("SCAN obs")), "{steps:?}");
     }
 
     #[test]
@@ -979,6 +1048,54 @@ mod tests {
         assert!(daily_head_json(&c, -300, day + 5 * 3600).contains("2023-11-14"));
         drop(c);
         std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn named_calendar_uses_historical_offsets_and_variable_length_days() {
+        let c = open(Path::new(":memory:")).unwrap();
+        let zone = jiff::tz::TimeZone::get("America/Chicago").unwrap();
+        let epoch = |text: &str| text.parse::<jiff::Timestamp>().unwrap().as_second();
+        insert(&c, &obs(epoch("2026-07-01T04:30:00Z"), 20.0, 1.0), SRC_UDP);
+        insert(&c, &obs(epoch("2026-07-01T05:30:00Z"), 25.0, 2.0), SRC_UDP);
+        let summer = daily_named_json(&c, &zone, epoch("2026-07-02T12:00:00Z")).unwrap();
+        let winter = daily_named_json(&c, &zone, epoch("2026-11-18T12:00:00Z")).unwrap();
+        assert_eq!(summer, winter, "historical dates cannot depend on today's DST offset");
+        let rows: Vec<serde_json::Value> = serde_json::from_str(&winter).unwrap();
+        assert_eq!(rows[0]["day"], "2026-06-30"); assert_eq!(rows[0]["rain"], 1.0);
+        assert_eq!(rows[1]["day"], "2026-07-01"); assert_eq!(rows[1]["rain"], 2.0);
+        for (start, end, date, hours) in [
+            ("2026-03-08T06:00:00Z", "2026-03-09T05:00:00Z", "2026-03-08", 23),
+            ("2026-11-01T05:00:00Z", "2026-11-02T06:00:00Z", "2026-11-01", 25),
+        ] {
+            c.execute("DELETE FROM obs", []).unwrap();
+            for ts in (epoch(start)..epoch(end)).step_by(3600) { insert(&c, &obs(ts, 10.0, 1.0), SRC_UDP); }
+            let json = daily_named_json(&c, &zone, epoch(end)+3600).unwrap();
+            let rows: Vec<serde_json::Value> = serde_json::from_str(&json).unwrap();
+            assert_eq!(rows.len(), 1); assert_eq!(rows[0]["day"], date);
+            assert_eq!(rows[0]["readings"], hours); assert_eq!(rows[0]["rain"], hours);
+        }
+    }
+
+    #[test]
+    fn named_daily_cache_invalidates_and_preserves_legacy_keys() {
+        let c = open(Path::new(":memory:")).unwrap();
+        let zone = jiff::tz::TimeZone::get("America/Chicago").unwrap();
+        let now = "2026-11-18T12:00:00Z".parse::<jiff::Timestamp>().unwrap().as_second();
+        let ts = now - 86400;
+        assert_eq!(daily_named_json(&c, &zone, now).unwrap(), "[]");
+        insert(&c, &obs(ts, 10.0, 1.0), SRC_BACKFILL);
+        assert!(daily_named_json(&c, &zone, now).unwrap().contains("\"tempMax\":10"));
+        c.execute("UPDATE obs SET temp=20", []).unwrap();
+        assert!(daily_named_json(&c, &zone, now).unwrap().contains("\"tempMax\":20"));
+        c.execute("INSERT INTO notes(ts,until,kind,text) VALUES (?1,?1,'exclude','test')", [ts]).unwrap();
+        assert_eq!(daily_named_json(&c, &zone, now).unwrap(), "[]");
+        c.execute("DELETE FROM notes", []).unwrap();
+        assert!(daily_named_json(&c, &zone, now).unwrap().contains("\"tempMax\":20"));
+        daily_head_json(&c, -360, day_start(now, -360));
+        let count: i64 = c.query_row("SELECT COUNT(*) FROM daily_cache", [], |r| r.get(0)).unwrap();
+        assert_eq!(count, 2, "named and legacy fixed-offset caches cannot collide");
+        c.execute("DELETE FROM obs", []).unwrap();
+        assert_eq!(daily_named_json(&c, &zone, now).unwrap(), "[]");
     }
 
     #[test]

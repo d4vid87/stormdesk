@@ -42,7 +42,7 @@ type Fields = HashMap<String, String>;
 
 // --- Parsing ---
 
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -396,18 +396,18 @@ fn n(v: Option<f64>) -> String {
 ///
 /// The counters are only advanced on a report we keep — a differenced total against a report we
 /// threw away would drop that interval's rain on the floor.
-fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str) -> bool {
+fn take(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str) -> Result<bool, u16> {
     let identity = crate::server::station_fingerprint(&state.cfg_path);
     take_for_station(state, f, raw_ts, src, origin, &identity)
 }
 
-fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str, expected: &str) -> bool {
+fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origin: &'static str, expected: &str) -> Result<bool, u16> {
     // Config writes use this same lock: the selected archive cannot change midway through commit.
     let _configuration = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
     if state.maintenance.load(std::sync::atomic::Ordering::Relaxed)
         || crate::server::station_fingerprint(&state.cfg_path) != expected
     {
-        return false;
+        return Err(503);
     }
     if origin == "push" {
         let source = crate::setting(&state.cfg_path, "stationSource").unwrap_or_default();
@@ -417,7 +417,7 @@ fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origi
         } else { String::new() };
         if matches!(source.as_str(), "wll" | "awn" | "lacrosse" | "tempest")
             || !push_identity_matches(&id, f) || !push_mac_matches(&mac, f) {
-            return false;
+            return Err(409);
         }
     }
     let at = epoch();
@@ -460,7 +460,7 @@ fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origi
         drop(all);
         // Healthy: the poll is faster than the archive write gate. "throttled" read as a fault.
         note(origin, true, "ok · waiting for next write slot", false);
-        return false;
+        return Ok(false);
     }
     let mut next = m;
     let t = tuple(f, ts, &mut next);
@@ -473,24 +473,32 @@ fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origi
     // its rain/lightning state are durably committed together.
     let committed = state.with_db(|conn| {
             if crate::server::station_fingerprint(&state.cfg_path) != expected {
-                return false;
+                return Err(rusqlite::Error::InvalidQuery);
             }
             if !state.archive_accepts_as(conn, &fallback) {
-                return false;
+                return Err(rusqlite::Error::InvalidQuery);
             }
             store_observation_channels(conn, &t, src, &counter_key(origin), &saved, &extras)
         })
-        .unwrap_or(false);
-    if !committed {
-        drop(all);
-        note(origin, false, "archive write failed", false);
-        return false;
+        .unwrap_or(Err(rusqlite::Error::InvalidQuery));
+    match committed {
+        Err(_) => {
+            drop(all);
+            note(origin, false, "archive write failed; retry report", false);
+            return Err(503);
+        }
+        Ok(false) => {
+            drop(all);
+            note(origin, true, "duplicate report", false);
+            return Ok(false);
+        }
+        Ok(true) => {}
     }
     all.insert(memory_key, next);
     drop(all);
     note(origin, true, "stored", true);
     if crate::server::station_fingerprint(&state.cfg_path) != expected {
-        return true; // The old station's row is safe, but its live reading is no longer selected.
+        return Ok(true); // The old station's row is safe, but its live reading is no longer selected.
     }
     if let (Some(d), Some(c)) = (t[14], t[15]) {
         if c > 0.0 {
@@ -512,25 +520,25 @@ fn take_for_station(state: &Arc<State>, f: &Fields, raw_ts: f64, src: i64, origi
             t.iter().map(|v| n(*v)).collect::<Vec<_>>().join(",")
         ),
     );
-    true
+    Ok(true)
 }
 
 #[cfg(test)]
 fn store_observation(conn: &mut rusqlite::Connection, tuple: &[Option<f64>], src: i64, key: &str, counters: &str) -> bool {
-    store_observation_channels(conn, tuple, src, key, counters, &[])
+    store_observation_channels(conn, tuple, src, key, counters, &[]).unwrap_or(false)
 }
 
-fn store_observation_channels(conn: &mut rusqlite::Connection, tuple: &[Option<f64>], src: i64, key: &str, counters: &str, extras: &[Channel]) -> bool {
-    conn.transaction().ok().map(|tx| {
-        if !store::insert(&tx, tuple, src) { return false; }
-        for c in extras {
-            if tx.execute("INSERT INTO channels(ts,name,value,unit) VALUES (?1,?2,?3,?4)",
-                rusqlite::params![tuple[0], c.name, c.value, c.unit]).is_err() { return false; }
-        }
-        if tx.execute("INSERT INTO meta(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=?2",
-            [key, counters]).is_err() { return false; }
-        tx.commit().is_ok()
-    }).unwrap_or(false)
+fn store_observation_channels(conn: &mut rusqlite::Connection, tuple: &[Option<f64>], src: i64, key: &str, counters: &str, extras: &[Channel]) -> rusqlite::Result<bool> {
+    let tx = conn.transaction()?;
+    if !store::insert_checked(&tx, tuple, src)? { return Ok(false); }
+    for c in extras {
+        tx.execute("INSERT INTO channels(ts,name,value,unit) VALUES (?1,?2,?3,?4)",
+            rusqlite::params![tuple[0], c.name, c.value, c.unit])?;
+    }
+    tx.execute("INSERT INTO meta(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=?2",
+        [key, counters])?;
+    tx.commit()?;
+    Ok(true)
 }
 
 // --- The push route ---
@@ -569,16 +577,14 @@ pub fn accept(state: &Arc<State>, url: &str, body: &str) -> u16 {
         && num(&f, &["windspeedmph", "wind_avg_m_s"]).is_none()
     {
         if !channels(&f).is_empty() {
-            take(state, &f, epoch() as f64, SRC_INGEST, "push");
-            return 200;
+            return take(state, &f, epoch() as f64, SRC_INGEST, "push").map(|_| 200).unwrap_or_else(|status| status);
         }
         note("push", false, "no supported measurements in report", false);
         return 400;
     }
     // Console clocks are wrong often enough that trusting `dateutc` would scatter rows across
     // the archive. What matters is when we heard it.
-    take(state, &f, epoch() as f64, SRC_INGEST, "push");
-    200
+    take(state, &f, epoch() as f64, SRC_INGEST, "push").map(|_| 200).unwrap_or_else(|status| status)
 }
 
 fn push_mac_matches(configured: &str, fields: &Fields) -> bool {
@@ -649,7 +655,7 @@ fn poll_wll(state: &Arc<State>, host: &str) {
         .unwrap_or(epoch() as f64);
     let f = wll_fields(&v);
     if !f.is_empty() {
-        take_for_station(state, &f, ts, SRC_INGEST, "wll", &identity);
+        let _ = take_for_station(state, &f, ts, SRC_INGEST, "wll", &identity);
     }
 }
 
@@ -741,7 +747,7 @@ fn poll_awn(state: &Arc<State>, api_key: &str, app_key: &str) {
         .and_then(|t| t.as_f64())
         .map(|ms| ms / 1000.0)
         .unwrap_or(epoch() as f64);
-    take_for_station(state, &f, ts, SRC_CLOUD, "awn", &identity);
+    let _ = take_for_station(state, &f, ts, SRC_CLOUD, "awn", &identity);
 }
 
 fn awn_device<'a>(value: &'a serde_json::Value, selected: &str) -> Option<&'a serde_json::Value> {
@@ -867,7 +873,7 @@ fn poll_lacrosse(state: &Arc<State>, token: &str, identity: &str) {
         }
     }
     if !f.is_empty() {
-        take_for_station(state, &f, ts, SRC_CLOUD, "lacrosse", identity);
+        let _ = take_for_station(state, &f, ts, SRC_CLOUD, "lacrosse", identity);
     }
 }
 
@@ -1318,19 +1324,41 @@ mod tests {
     }
 
     #[test]
+    fn push_retries_storage_failures_but_acknowledges_duplicates() {
+        let dir = std::env::temp_dir().join(format!("wd-ingest-retry-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg = dir.join("config.json");
+        std::fs::write(&cfg, serde_json::json!({"settings":{"stationSource":"push","stationId":dir.to_string_lossy()}}).to_string()).unwrap();
+        let state = State::new(dir.clone(), cfg);
+        let db = state.db().unwrap();
+        db.execute_batch("CREATE TRIGGER reject_obs BEFORE INSERT ON obs BEGIN SELECT RAISE(ABORT, 'storage fault'); END;").unwrap();
+        assert_eq!(accept(&state, "/ingest", "tempf=68&dailyrainin=1"), 503);
+        assert_eq!(store::stamp(&db), (0, 0));
+        assert!(store::meta_get(&db, &counter_key("push")).is_none());
+        assert!(!state.packets.lock().unwrap().contains_key("obs_st"));
+        db.execute_batch("DROP TRIGGER reject_obs;").unwrap();
+        assert_eq!(accept(&state, "/ingest", "tempf=68&dailyrainin=1"), 200);
+        assert_eq!(accept(&state, "/ingest", "tempf=68&dailyrainin=1"), 200);
+        assert_eq!(db.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+        assert!(store::meta_get(&db, &counter_key("push")).is_some());
+        drop(db); drop(state);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn channel_failure_rolls_back_observation_and_counters() {
         let mut conn = store::open(std::path::Path::new(":memory:")).unwrap();
         let mut row = vec![None; 19];
         row[0] = Some(1_700_000_000.0);
         let extras = channels(&collect("/ingest", "tempinf=68&wh65batt=1"));
         conn.execute_batch("CREATE TRIGGER reject_channel BEFORE INSERT ON channels BEGIN SELECT RAISE(ABORT, 'test'); END;").unwrap();
-        assert!(!store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "new", &extras));
+        assert!(store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "new", &extras).is_err());
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
         assert!(store::meta_get(&conn, "counters:push").is_none());
         conn.execute_batch("DROP TRIGGER reject_channel;").unwrap();
-        assert!(store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "new", &extras));
+        assert_eq!(store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "new", &extras).unwrap(), true);
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM channels", [], |r| r.get::<_, i64>(0)).unwrap(), 2);
-        assert!(!store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "duplicate", &extras));
+        assert_eq!(store_observation_channels(&mut conn, &row, SRC_INGEST, "counters:push", "duplicate", &extras).unwrap(), false);
         assert_eq!(store::meta_get(&conn, "counters:push").as_deref(), Some("new"));
     }
 
@@ -1367,12 +1395,12 @@ mod tests {
         let state=State::new(dir.clone(),cfg);
         let expected=crate::server::station_fingerprint(&state.cfg_path);
         let other=collect("/ingest","mac=AA:BB:CC:DD:EE:02&tempf=68");
-        assert!(!take_for_station(&state,&other,epoch() as f64,SRC_INGEST,"push",&expected));
+        assert_eq!(take_for_station(&state,&other,epoch() as f64,SRC_INGEST,"push",&expected), Err(409));
         assert_eq!(accept(&state,"/ingest?key=upload-secret","mac=AA:BB:CC:DD:EE:02&tempf=68"),409);
         assert!(state.packets.lock().unwrap().is_empty());
         assert_eq!(state.db().unwrap().query_row("SELECT COUNT(*) FROM obs",[],|r|r.get::<_,i64>(0)).unwrap(),0);
         let own=collect("/ingest","mac=aabbccddee01&tempf=68");
-        assert!(take_for_station(&state,&own,epoch() as f64,SRC_INGEST,"push",&expected));
+        assert_eq!(take_for_station(&state,&own,epoch() as f64,SRC_INGEST,"push",&expected), Ok(true));
         assert_eq!(state.db().unwrap().query_row("SELECT COUNT(*) FROM obs",[],|r|r.get::<_,i64>(0)).unwrap(),1);
         drop(state);
         let _=std::fs::remove_dir_all(dir);
@@ -1386,7 +1414,7 @@ mod tests {
         std::fs::write(&path, r#"{"settings":{"stationSource":"wll","wllHost":"new-station"}}"#).unwrap();
         let state = State::new(dir.clone(), path);
         let f = collect("/ingest", "tempf=68&windspeedmph=3&winddir=180&wh65batt=1");
-        assert!(!take_for_station(&state, &f, epoch() as f64, SRC_INGEST, "wll", "wll:old-station"));
+        assert_eq!(take_for_station(&state, &f, epoch() as f64, SRC_INGEST, "wll", "wll:old-station"), Err(503));
         assert!(state.packets.lock().unwrap().is_empty());
         let conn = state.db().unwrap();
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), 0);

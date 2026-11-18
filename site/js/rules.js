@@ -7,7 +7,7 @@
 // Fires through notify(), so a rule reaches every channel the banners already reach — the ntfy
 // topic, the webhook, the broker — with no per-channel code here.
 import { settings, saveSettings, notify, num, U, msToWind } from './app.js';
-import { OBS } from './api.js';
+import { OBS, stationContext } from './api.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -50,8 +50,8 @@ function fromStation(o) {
   return {
     temp: o.air_temperature, dew: o.dew_point, gust: o.wind_gust, wind: o.wind_avg,
     rh: o.relative_humidity, rain: o.precip_accum_last_1hr, uv: o.uv,
-    _press: o.station_pressure ?? o.barometric_pressure, _strikes: o.lightning_strike_count ?? 0,
-    _t: o.timestamp || Math.floor(Date.now() / 1000),
+    _press: o.station_pressure ?? o.barometric_pressure, _strikes: o.lightning_strike_count ?? null,
+    _t: o.timestamp,
   };
 }
 
@@ -62,8 +62,8 @@ function fromTuple(t) {
   return {
     temp: toTemp(t[OBS.temp]), dew: null, gust: toWind(t[OBS.windGust]), wind: toWind(t[OBS.windAvg]),
     rh: t[OBS.rh], rain: toRain(t[OBS.rain] == null ? null : t[OBS.rain] * (60 / mins)), uv: t[OBS.uv],
-    _press: toPress(t[OBS.press]), _strikes: t[OBS.strikes] || 0,
-    _t: t[OBS.time] || Math.floor(Date.now() / 1000),
+    _press: toPress(t[OBS.press]), _strikes: t[OBS.strikes] ?? null,
+    _t: t[OBS.time],
   };
 }
 
@@ -176,14 +176,29 @@ export function evaluate(m, rules = settings().rules || [], nowSec = Math.floor(
 // The last derived reading, so a new forecast can re-evaluate without pushing a duplicate sample
 // into the ring.
 let lastM = null;
+const ruleContext = () => JSON.stringify([stationContext(), settings().units, settings().windUnit, settings().activePlace]);
+let activeRuleContext = ruleContext();
+function syncRuleContext() {
+  const next = ruleContext();
+  if (next === activeRuleContext) return;
+  activeRuleContext = next;
+  ring.length = 0; state.clear(); lastM = null; fcM = {};
+}
+window.addEventListener('wd:settings', syncRuleContext);
 
 function run(m) {
+  syncRuleContext();
+  const age = Date.now() / 1000 - m._t;
+  if (!Number.isFinite(m._t) || m._t <= 0 || age > 600 || age < -300 || (lastM && m._t < lastM._t)) return;
+  // REST can add dew point after the tuple, or omit an interval strike count. Enrich the same
+  // sample without erasing valid fields or counting those strikes a second time.
+  if (lastM?._t === m._t) m = { ...lastM, ...Object.fromEntries(Object.entries(m).filter(([, v]) => v != null)) };
   lastM = derive(m);
-  fire(lastM);
+  fire(lastM, m._t);
 }
 
-function fire(m) {
-  for (const { rule, value, index } of evaluate(m)) {
+function fire(m, nowSec) {
+  for (const { rule, value, index } of evaluate(m, settings().rules || [], nowSec)) {
     // home.js turns this into a per-rule binary sensor; the banner alone had no way to say
     // which rule it came from.
     window.dispatchEvent(new CustomEvent('wd:rule', { detail: { index, rule, value } }));
@@ -204,11 +219,14 @@ window.addEventListener('wd:ws-obs', (e) => run(fromTuple(e.detail)));
 // Not a rule the user has to think to write. The forecast low, not the reading: a warning that
 // arrives when it is already freezing is not a warning.
 window.addEventListener('wd:forecast', (e) => {
+  syncRuleContext();
   if (e.detail?._cached) { fcM = {}; return; }
   fcM = forecastMetrics(e.detail);
   // A forecast rule that waited for the next station report would be up to ten minutes late on
   // a REST source, and the whole point of these is lead time.
-  if (lastM) fire(Object.assign(lastM, fcM));
+  // A model refresh is not proof that a sensor threshold kept holding. Use the report's clock,
+  // and stop reusing sensor metrics once they are stale.
+  if (lastM && Date.now() / 1000 - lastM._t <= 180) fire(Object.assign(lastM, fcM), lastM._t);
   const days = e.detail?.forecast?.daily?.slice(0, 2) || [];
   const limit = settings().units === 'metric' ? 1 : 34;
   for (const d of days) {

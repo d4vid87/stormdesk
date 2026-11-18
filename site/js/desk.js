@@ -3,6 +3,7 @@ import * as api from './api.js';
 import { wx } from './icons.js';
 import { settings, coords, configured, hasSource, hasLocation, U, num, timeStr, dayStr, notify, dismissStale, every, stamp, store, load, setStorm } from './app.js';
 import { syncSpokenAlerts } from './app.js';
+import { forecastTime } from './weather-context.js';
 
 // Last-good copies of the two payloads the Desk can't render without. An outage that spans a
 // reload would otherwise leave the whole page at `--`; in-session failures already keep the DOM.
@@ -37,7 +38,7 @@ let severe = [];
 export const severeAlerts = () => severe;
 
 let latestForecast = null, forecastContext = null;
-export const forecast = () => latestForecast;
+export const forecast = () => forecastContext === cacheContext('forecast') ? latestForecast : null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -133,17 +134,18 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden || !pendingObs) return;
   const o = pendingObs;
   pendingObs = null;
-  window.dispatchEvent(new CustomEvent('wd:ws-obs', { detail: o }));
+  if (o.context === cacheContext('forecast')) applyObservation(o.tuple);
 });
 
-window.addEventListener('wd:ws-obs', (e) => {
+function applyObservation(tuple) {
   if (!latestForecast || forecastContext !== cacheContext('forecast')) return;
-  if (document.hidden) { pendingObs = e.detail; return; }
+  if (document.hidden) { pendingObs = { tuple, context: forecastContext }; return; }
   if (settings().activePlace) return;
-  api.overlayStation(latestForecast.current_conditions, e.detail, latestForecast.elevation);
-  renderCurrent(latestForecast.current_conditions, !latestForecast._cached || latestForecast.current_conditions._sources?.wind_gust?.at === e.detail[api.OBS.time]);
+  api.overlayStation(latestForecast.current_conditions, tuple, latestForecast.elevation);
+  renderCurrent(latestForecast.current_conditions, !latestForecast._cached || latestForecast.current_conditions._sources?.wind_gust?.at === tuple[api.OBS.time]);
   window.dispatchEvent(new CustomEvent('wd:current', { detail: latestForecast }));
-});
+}
+window.addEventListener('wd:ws-obs', (e) => applyObservation(e.detail));
 
 function renderCurrent(c, fresh = true) {
   if (!c) return;
@@ -246,14 +248,16 @@ export async function refreshAqi() {
   const requestContext = aqiLocation();
   const j = await api.aqi();
   if (requestContext !== aqiLocation()) return;
-  const idx = j.hourly.time.findIndex((t) => new Date(t) > new Date());
-  // No future hour left in the payload means the last one is the current one.
-  const i = Math.min(Math.max(idx === -1 ? j.hourly.time.length - 1 : idx - 1, 0), j.hourly.time.length - 1);
-  const v = j.hourly.us_aqi[i], known = Number.isFinite(v) && v >= 0;
+  const now = Date.now() / 1000;
+  const times = (j.hourly?.time || []).map(t => forecastTime(t, j.utc_offset_seconds));
+  // Provider times describe its location, not the browser's timezone. Only the current hourly
+  // interval is a current reading; missing, future-only and expired responses stay unavailable.
+  const i = times.findIndex(at => Number.isFinite(at) && at <= now && now < at + 3600);
+  const v = j.hourly?.us_aqi?.[i], known = Number.isFinite(v) && v >= 0;
   $('aqi-val').textContent = known ? num(v) : '--';
   $('aqi-label').textContent = known ? aqiLabel(v) : 'Unavailable';
   $('aqi-val').className = known ? `aqi-${aqiBand(v)}` : '';
-  $('aqi-detail').textContent = `PM2.5 ${num(j.hourly.pm2_5[i], 1)} µg/m³`;
+  $('aqi-detail').textContent = i < 0 ? 'Current air quality data unavailable' : `PM2.5 ${num(j.hourly?.pm2_5?.[i], 1)} µg/m³`;
   if (known) stamp('aqi-val', 1800);
   else delete $('aqi-val').dataset.ts;
 }
@@ -264,10 +268,11 @@ const aqiLabel = (v) => ({ good: 'Good', mod: 'Moderate', usg: 'Unhealthy (sensi
 export async function refreshObs() {
   if (!configured()) return;
   const requestContext = cacheContext('observation');
+  const station = api.stationContext();
   const publish = (j, fresh) => {
     if (requestContext !== cacheContext('observation')) return;
     const o = j.obs?.[0];
-    if (!o) return;
+    if (!o || !api.acceptObservation(o, { context: station, cached: !fresh })) return;
     if (fresh) stamp('hero', settings().refreshSec);
     const cc = latestForecast?.current_conditions;
     o._cached = !fresh;

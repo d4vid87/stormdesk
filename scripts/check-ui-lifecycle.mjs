@@ -97,12 +97,14 @@ const boardNode = id => { if (!boardNodes.has(id)) boardNodes.set(id, dom()); re
 let period = { name: hostile, startTime: new Date(now).toISOString(), isDaytime: true, temperature: 68, temperatureUnit: 'F' }, rejectFetch = false;
 const board = vm.createContext({
   $: boardNode, document: { createElement: dom }, Date, settings: () => ({ units: 'metric' }),
+  cacheContext: () => 'current', analysisRequests: new Map(),
   num: v => v == null ? '--' : (+v).toFixed(0), expires() {},
   deskForecast: () => ({ forecast: { daily: [{ day_start_local: now / 1000, air_temp_high: 20 }] } }),
   api: { nwsPoint: async () => ({ properties: { forecast: '/nws' } }) },
   fetch: async () => { if (rejectFetch) throw Error(hostile); return { json: async () => ({ properties: { periods: [period] } }) }; },
 });
-vm.runInContext(part(boards, 'const note =', 'const values =') + part(boards, 'async function drawOfficial(', 'async function drawOutlook('), board);
+vm.runInContext(part(boards, 'const note =', 'const values =') + part(boards, 'function analysisRequest(', '// history is heavy;')
+  + part(boards, 'async function drawOfficial(', 'async function drawOutlook('), board);
 await board.drawOfficial();
 assert.equal(boardNode('official').children[0].children[0].textContent, hostile, 'provider name is literal text');
 assert.equal(boardNode('official').children[0].children[1].textContent, 'NWS 20° · Tempest 20° (+0)', 'official comparison uses matching temperature units');

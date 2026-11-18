@@ -9,7 +9,7 @@
 // A click on a point in any of the dashboard's own charts lands here too, with the time that was
 // clicked: same panel, windowed on that moment instead of on now.
 
-import { U, num, expires } from './app.js';
+import { U, num, settings } from './app.js';
 import * as api from './api.js';
 import { chart } from './charts.js';
 
@@ -69,6 +69,7 @@ function build() {
 }
 
 function close() {
+  ++gen;
   const el = $('detail');
   el.classList.remove('open');
   el.setAttribute('aria-hidden', 'true');
@@ -81,11 +82,25 @@ function close() {
 // Click two metrics quickly and the slower archive read used to land last, painting the first
 // metric's chart under the second one's title.
 let gen = 0;
+const detailContext = () => JSON.stringify([api.stationContext(), settings().units, settings().windUnit, settings().activePlace]);
+let context = detailContext();
+window.addEventListener('wd:settings', () => {
+  const next = detailContext();
+  if (context === next) return;
+  context = next;
+  ++gen;
+  if ($('detail')) {
+    chart($('detail-chart'), [], { label: 'Measurement history' });
+    if ($('detail').classList.contains('open')) close();
+  }
+});
 
 export async function openDetail(metric, at = null) {
   const m = METRICS[metric];
   if (!m) return;
   const mine = ++gen;
+  const requestContext = detailContext();
+  const current = () => mine === gen && requestContext === detailContext();
   build();
   const el = $('detail');
   el.dataset.selectedMetric = metric;
@@ -97,6 +112,7 @@ export async function openDetail(metric, at = null) {
   $('detail-blurb').textContent = [source, m.blurb].filter(Boolean).join('\n\n');
   $('detail-now').textContent = 'loading…';
   $('detail-stats').innerHTML = '';
+  chart($('detail-chart'), [], { label: m.label });
   el.classList.add('open');
   el.setAttribute('aria-hidden', 'false');
   document.querySelector('main')?.setAttribute('inert', '');
@@ -112,7 +128,7 @@ export async function openDetail(metric, at = null) {
   $('detail-history').hidden = false;
   try {
     const obs = (await api.localObs(48, at)).obs || [];
-    if (mine !== gen) return;
+    if (!current()) return;
     const pts = obs.map((o) => ({ x: o[I.time] * 1000, y: o[m.idx] })).filter((p) => p.y != null);
     if (!pts.length) {
       $('detail-now').textContent = at ? 'nothing in the archive around that time' : 'nothing in the archive for the last 48 h';
@@ -130,7 +146,7 @@ export async function openDetail(metric, at = null) {
          ['Mean · 48 h', fmt(ys.reduce((a, b) => a + b, 0) / ys.length)]];
     $('detail-stats').innerHTML = rows.map(([k, v]) => `<div><span>${k}</span><span>${v}</span></div>`).join('');
   } catch (e) {
-    if (mine !== gen) return;
+    if (!current()) return;
     $('detail-now').textContent = `no archive to read — ${e.message}`;
   }
 }

@@ -35,10 +35,31 @@ assert.equal(selector.disabled,false);assert.equal(refreshes,0);assert.equal(hyd
 
 let resolveStation;
 context.configured=()=>true;
-context.api={station:()=>new Promise(resolve=>{resolveStation=resolve;})};
+context.api={stationContext:()=>JSON.stringify([state.stationId,state.token,state.deviceId]),station:()=>new Promise(resolve=>{resolveStation=resolve;})};
+context.renderPlaces=()=>{};
 vm.runInContext(functionBody('hydrateStation'),context);
 const oldLookup=context.hydrateStation();state={...state,stationId:'B'};
 resolveStation({stations:[{name:'Old station',latitude:1,longitude:2,devices:[]}]});
 await oldLookup;
 assert.equal(state.stationId,'B');assert.equal(state.stationName,undefined,'late station lookup cannot overwrite the new selection');
 console.log('Station switching: rollback, overlapping switches and stale lookup checks passed.');
+
+const credentialLookup=context.hydrateStation();state={...state,token:'new-token'};
+resolveStation({stations:[{name:'Old account',devices:[]}]});await credentialLookup;
+assert.equal(state.stationName,undefined,'credential changes also invalidate metadata');
+state.deviceId='12';
+const validLookup=context.hydrateStation();
+resolveStation({stations:[{name:'Selected',devices:[
+  {device_id:11,device_type:'ST',serial_number:'ST-OLD'},
+  {device_id:12,device_type:'ST',serial_number:'ST-NEW'},
+  {device_type:'HB',serial_number:'HB-HOME'},
+]}]});await validLookup;
+assert.equal(state.deviceSerial,'ST-NEW');assert.equal(state.hubSerial,'HB-HOME');
+assert.equal(state.serialDeviceId,'12','trusted serial is bound to the selected numeric device');
+const ambiguousHub=context.hydrateStation();
+resolveStation({stations:[{name:'Selected',devices:[
+  {device_id:12,device_type:'ST',serial_number:'ST-NEW'},
+  {device_type:'HB',serial_number:'HB-ONE'}, {device_type:'HB',serial_number:'HB-TWO'},
+]}]});await ambiguousHub;
+assert.equal(state.hubSerial,'','an ambiguous hub is never bound to a device');
+console.log('Station metadata: credential race and selected-device serial binding checks passed.');

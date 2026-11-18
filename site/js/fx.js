@@ -13,6 +13,12 @@ window.addEventListener('wd:section', (e) => {
 });
 // Full → Lite has to kill a running loop, not wait for the next weather change.
 window.addEventListener('wd:settings', () => { if (lastKey) setScene(lastKey); });
+window.addEventListener('wd:layout', () => { if (lastKey) setScene(lastKey); });
+window.addEventListener('wd:motion', () => { if (lastKey) setScene(lastKey); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stop();
+  else if (lastKey) setScene(lastKey);
+});
 
 // Which particle regime an icon key means. Anything unlisted (clear, fog, wind) draws nothing.
 function regimeFor(key = '') {
@@ -94,20 +100,19 @@ function sizeTo(hero) {
 export function setScene(iconKey) {
   lastKey = iconKey || '';
   // Particles are the most expensive thing on the page: full motion only, Desk only.
-  if (motionLevel() !== 'full' || !onDesk) { regime = ''; return stop(); }
+  if (motionLevel() !== 'full' || !onDesk || document.hidden) { regime = ''; return stop(); }
   const hero = document.getElementById('hero');
-  if (!hero) return;
+  if (!hero) return stop();
   if (!ctx) {
     const c = document.createElement('canvas');
     c.id = 'hero-fx';
     hero.prepend(c);
     ctx = c.getContext('2d');
-    addEventListener('resize', () => ctx && sizeTo(hero));
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stop();
-      else if (regime) { frame.last = 0; raf = raf || requestAnimationFrame(frame); }
-    });
+    addEventListener('resize', () => { setScene(lastKey); if (raf) sizeTo(hero); });
+    if ('ResizeObserver' in window) new ResizeObserver(() => setScene(lastKey)).observe(c);
   }
+  // Observatory hides this legacy canvas; inspect visibility only on scene/layout changes.
+  if (!ctx.canvas.getClientRects().length || !hero.clientWidth || !hero.clientHeight) { regime = ''; return stop(); }
   const r = regimeFor(iconKey);
   if (r === regime && raf) return;
   regime = r;

@@ -57,6 +57,8 @@ pub struct State {
     started: u64,
     pub maintenance: AtomicBool,
     archive_generation: AtomicUsize,
+    // Do not let several cold daily aggregates occupy every ordinary HTTP worker.
+    daily_build: Mutex<()>,
 }
 
 impl State {
@@ -77,6 +79,7 @@ impl State {
             started: now(),
             maintenance: AtomicBool::new(false),
             archive_generation: AtomicUsize::new(0),
+            daily_build: Mutex::new(()),
         })
     }
 
@@ -152,14 +155,48 @@ fn accepts_udp(cfg: &serde_json::Value, packet: &serde_json::Value) -> bool {
         return false;
     }
     let s = &cfg["settings"];
-    if s["stationSource"].as_str().is_some_and(|v| !v.is_empty()) { return false; }
+    if s["stationSource"].as_str().is_some_and(|v| !v.is_empty() && v != "tempest") { return false; }
     let configured = s["deviceId"].as_str().filter(|v| !v.is_empty());
-    let packet_device = packet["device_id"].as_i64().map(|v| v.to_string());
-    // Device-less hub packets cannot be attributed safely on a multi-station LAN.
-    match configured {
-        Some(id) => packet_device.as_deref() == Some(id),
-        None => station_fingerprint_value(cfg) == "none",
+    let Some(id) = configured else { return station_fingerprint_value(cfg) == "none"; };
+    // Numeric REST device IDs are absent from real UDP broadcasts. Only metadata obtained for
+    // the selected device may bind its serial; never learn an identity from a nearby hub.
+    if s["serialDeviceId"].as_str() != Some(id) { return false; }
+    let serial = packet["serial_number"].as_str().filter(|v| !v.is_empty());
+    let device = s["deviceSerial"].as_str().filter(|v| !v.is_empty());
+    let hub = s["hubSerial"].as_str().filter(|v| !v.is_empty());
+    if packet["type"] == "hub_status" { return hub.is_some() && serial == hub; }
+    device.is_some() && serial == device
+        && hub.map(|expected| packet["hub_sn"].as_str() == Some(expected)).unwrap_or(true)
+}
+
+// Runs outside the receiver: old/headless installations can resolve the binding without a
+// dashboard open, and a slow cloud lookup cannot stall local UDP observations.
+fn resolve_udp_serials(state: &Arc<State>, fetch: impl FnOnce(&str, &str) -> Option<serde_json::Value>) {
+    let before: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+    let s = &before["settings"];
+    if s["stationSource"].as_str().is_some_and(|v| !v.is_empty() && v != "tempest") { return; }
+    let Some(device) = s["deviceId"].as_str().filter(|v| !v.is_empty()) else { return; };
+    if s["serialDeviceId"].as_str() == Some(device) && s["deviceSerial"].as_str().is_some_and(|v| !v.is_empty()) { return; }
+    let Some(station) = s["stationId"].as_str().filter(|v| !v.is_empty() && v.bytes().all(|b| b.is_ascii_digit())) else { return; };
+    let Some(token) = s["token"].as_str().filter(|v| !v.is_empty()) else { return; };
+    let Some(body) = fetch(station, token) else { return; };
+    let Some(devices) = body["stations"].as_array().and_then(|stations| stations.iter().find(|st| st["station_id"].as_i64().map(|id| id.to_string()).as_deref() == Some(station)))
+        .and_then(|st| st["devices"].as_array()) else { return; };
+    let Some(selected) = devices.iter().find(|d| d["device_id"].as_i64().map(|id| id.to_string()).as_deref() == Some(device)) else { return; };
+    let Some(serial) = selected["serial_number"].as_str().filter(|v| !v.is_empty()) else { return; };
+    let hubs: Vec<&str> = devices.iter().filter(|d| d["device_type"] == "HB").filter_map(|d| d["serial_number"].as_str()).collect();
+    let hub = selected["hub_sn"].as_str().filter(|v| !v.is_empty())
+        .or_else(|| if hubs.len() == 1 { Some(hubs[0]) } else { None }).unwrap_or("");
+    let _config = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+    let mut current: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+    // A request started before a station/credential change may not update the new selection.
+    for key in ["stationSource", "stationId", "deviceId", "token"] {
+        if current["settings"][key] != before["settings"][key] { return; }
     }
+    current["settings"]["deviceSerial"] = serial.into();
+    current["settings"]["hubSerial"] = hub.into();
+    current["settings"]["serialDeviceId"] = device.into();
+    let _ = write_atomic(&state.cfg_path, &current.to_string());
 }
 
 #[derive(Clone)]
@@ -1088,12 +1125,7 @@ fn handle(state: &Arc<State>, mut req: Request) {
         // The National Hurricane Center serves its storm list without CORS headers, so no page
         // can read it. One fixed URL, fetched here and handed on — not a general proxy.
         "/proxy/nhc" => {
-            let body = ureq::get("https://www.nhc.noaa.gov/CurrentStorms.json")
-                .timeout(Duration::from_secs(20))
-                .call()
-                .ok()
-                .and_then(|r| r.into_string().ok());
-            match body {
+            match crate::api::tropical() {
                 Some(body) => json(body),
                 None => Response::empty(502)
                     .with_header(header("Access-Control-Allow-Origin", "*"))
@@ -1150,13 +1182,18 @@ fn handle(state: &Arc<State>, mut req: Request) {
                 .and_then(|v| v.parse::<i64>().ok())
                 .unwrap_or(0)
                 .clamp(-840, 840);
-            let Some(conn) = state.db() else {
-                return drop(req.respond(Response::empty(503)));
+            let zone = match query(&url, "tz_name").map(|name| ingest::percent_decode(&name)) {
+                Some(name) => match jiff::tz::TimeZone::get(&name) {
+                    Ok(zone) => Some(zone),
+                    Err(_) => return drop(req.respond(json("{\"error\":\"Unknown calendar timezone\"}".into()).with_status_code(400))),
+                },
+                None => None,
             };
-            let ds = store::day_start(now() as i64, tz);
-            let head = store::daily_head_json(&conn, tz, ds);
-            let body = store::daily_join(&head, store::daily_today_row(&conn, tz, ds).as_deref());
-            json(body)
+            match daily_snapshot_zone(state, tz, zone.as_ref()) {
+                Ok(body) => json(body),
+                Err(status) => json(serde_json::json!({"error":"Archive refresh in progress; retry shortly"}).to_string())
+                    .with_status_code(status).with_header(header("Retry-After", "1")).boxed(),
+            }
         }
         // The raw archive, SI, in `store::FIELDS` order. `/history/daily` answers the almanac's
         // question; this one answers the Data tab's, which for a non-Tempest station is the only
@@ -1528,50 +1565,89 @@ pub fn listen_udp(state: Arc<State>) {
             return;
         }
     };
+    let metadata_state = state.clone();
+    std::thread::spawn(move || loop {
+        resolve_udp_serials(&metadata_state, |station, token| {
+            ureq::get(&format!("https://swd.weatherflow.com/swd/rest/stations/{station}"))
+                .query("token", token).timeout(Duration::from_secs(10)).call().ok()
+                .and_then(|r| r.into_string().ok()).and_then(|body| serde_json::from_str(&body).ok())
+        });
+        std::thread::sleep(Duration::from_secs(30));
+    });
     let mut buf = [0u8; 2048];
     loop {
         let Ok((n, _)) = sock.recv_from(&mut buf) else {
             continue;
         };
-        let Ok(mut v) = serde_json::from_slice::<serde_json::Value>(&buf[..n]) else {
-            continue;
-        };
-        let Some(kind) = v.get("type").and_then(|t| t.as_str()).map(String::from) else {
-            continue;
-        };
-        let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
-        let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
-        if !accepts_udp(&cfg, &v) || state.maintenance.load(Ordering::SeqCst) { continue; }
-        if kind == "obs_st" {
-            let path = store::station_db_path(&state.data_dir, &state.cfg_path);
-            if conn.as_ref().and_then(|c| c.path()).map(Path::new) != Some(path.as_path()) {
-                conn = store::open(&path).ok();
-            }
-            if !state.maintenance.load(Ordering::Relaxed) {
-                if let (Some(c), Some(obs)) = (
-                    conn.as_ref(),
-                    v.get("obs")
-                        .and_then(|o| o.get(0))
-                        .and_then(|o| o.as_array()),
-                ) {
-                    let tuple: Vec<Option<f64>> = obs.iter().map(|x| x.as_f64()).collect();
-                    if state.archive_accepts(c) {
-                        store::insert(c, &tuple, store::SRC_UDP);
-                    }
+        receive_udp(&state, &mut conn, &buf[..n]);
+    }
+}
+
+fn receive_udp(state: &Arc<State>, conn: &mut Option<rusqlite::Connection>, bytes: &[u8]) {
+    let Ok(mut v) = serde_json::from_slice::<serde_json::Value>(bytes) else { return; };
+    let Some(kind) = v.get("type").and_then(|t| t.as_str()).map(String::from) else {
+        return;
+    };
+    let _config = state.config_write.lock().unwrap_or_else(|e|e.into_inner());
+    let cfg: serde_json::Value = serde_json::from_str(&read_config(&state.cfg_path)).unwrap_or_default();
+    if !accepts_udp(&cfg, &v) || state.maintenance.load(Ordering::SeqCst) { return; }
+    if kind == "obs_st" {
+        let path = store::station_db_path(&state.data_dir, &state.cfg_path);
+        if conn.as_ref().and_then(|c| c.path()).map(Path::new) != Some(path.as_path()) {
+            *conn = store::open(&path).ok();
+        }
+        if !state.maintenance.load(Ordering::Relaxed) {
+            if let (Some(c), Some(obs)) = (
+                conn.as_ref(),
+                v.get("obs")
+                    .and_then(|o| o.get(0))
+                    .and_then(|o| o.as_array()),
+            ) {
+                let tuple: Vec<Option<f64>> = obs.iter().map(|x| x.as_f64()).collect();
+                if state.archive_accepts(c) {
+                    store::insert(c, &tuple, store::SRC_UDP);
                 }
             }
         }
-        // stamped on arrival so the page can tell a live packet from the last one before a
-        // hub reboot
-        if let Some(obj) = v.as_object_mut() {
-            obj.insert("_at".into(), now().into());
-        }
-        let body = v.to_string();
-        if let Ok(mut map) = state.packets.lock() {
-            map.insert(kind, body.clone());
-        }
-        state.broadcast("udp", &body);
     }
+    // stamped on arrival so the page can tell a live packet from the last one before a
+    // hub reboot
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert("_at".into(), now().into());
+    }
+    let body = v.to_string();
+    if let Ok(mut map) = state.packets.lock() {
+        map.insert(kind, body.clone());
+    }
+    state.broadcast("udp", &body);
+}
+
+#[cfg(test)]
+
+fn daily_snapshot(state: &Arc<State>, tz: i64) -> Result<String, u16> {
+    daily_snapshot_zone(state, tz, None)
+}
+
+fn daily_snapshot_zone(state: &Arc<State>, tz: i64, zone: Option<&jiff::tz::TimeZone>) -> Result<String, u16> {
+    let _build = state.daily_build.try_lock().map_err(|_| 503u16)?;
+    let (conn, identity, generation) = {
+        let _config = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+        if state.maintenance.load(Ordering::SeqCst) { return Err(503); }
+        (state.db().ok_or(503u16)?, station_fingerprint(&state.cfg_path), state.archive_generation.load(Ordering::SeqCst))
+    };
+    let body = if let Some(zone) = zone {
+        store::daily_named_json(&conn, zone, now() as i64).map_err(|e| {
+            eprintln!("stormdesk: daily calendar read failed: {e}"); 503u16
+        })?
+    } else {
+        let ds = store::day_start(now() as i64, tz);
+        let head = store::daily_head_json(&conn, tz, ds);
+        store::daily_join(&head, store::daily_today_row(&conn, tz, ds).as_deref())
+    };
+    let _config = state.config_write.lock().unwrap_or_else(|e| e.into_inner());
+    if state.maintenance.load(Ordering::SeqCst) || station_fingerprint(&state.cfg_path) != identity
+        || state.archive_generation.load(Ordering::SeqCst) != generation { return Err(409); }
+    Ok(body)
 }
 
 fn recover_archive(
@@ -2230,17 +2306,76 @@ mod tests {
         assert_eq!(station_fingerprint_value(&json!({"settings":{"stationSource":"ecowitt","ingestKey":"key","ecowittMac":"AA:BB"}})),"ecowitt:key");
         let awn=station_fingerprint_value(&json!({"settings":{"stationSource":"awn","awnApiKey":"secret"}}));
         assert!(awn.starts_with("awn:") && !awn.contains("secret"));
-        let cfg=json!({"settings":{"deviceId":"7"}});
-        for kind in ["obs_st","rapid_wind","device_status","evt_strike","evt_precip","hub_status","obs_air","obs_sky"] {
-            assert!(accepts_udp(&cfg,&json!({"type":kind,"device_id":7})));
-            assert!(!accepts_udp(&cfg,&json!({"type":kind,"device_id":8})));
+        let cfg=json!({"settings":{"deviceId":"7","serialDeviceId":"7","deviceSerial":"ST-00000512","hubSerial":"HB-00013030"}});
+        for kind in ["obs_st","rapid_wind","device_status","evt_strike","evt_precip","obs_air","obs_sky"] {
+            assert!(accepts_udp(&cfg,&json!({"type":kind,"serial_number":"ST-00000512","hub_sn":"HB-00013030"})));
+            assert!(!accepts_udp(&cfg,&json!({"type":kind,"serial_number":"ST-foreign","hub_sn":"HB-00013030"})));
+            assert!(!accepts_udp(&cfg,&json!({"type":kind,"serial_number":"ST-00000512","hub_sn":"HB-foreign"})));
             assert!(!accepts_udp(&cfg,&json!({"type":kind})));
         }
+        assert!(accepts_udp(&cfg, &json!({"type":"hub_status","serial_number":"HB-00013030"})));
+        assert!(!accepts_udp(&cfg, &json!({"type":"hub_status","serial_number":"HB-foreign"})));
+        let mut changed=cfg.clone(); changed["settings"]["deviceId"]="8".into();
+        assert!(!accepts_udp(&changed,&json!({"type":"obs_st","serial_number":"ST-00000512","hub_sn":"HB-00013030"})));
         for kind in ["", "new-key-for-every-packet", "unknown"] {
             assert!(!accepts_udp(&cfg, &json!({"type":kind,"device_id":7})));
             assert!(!accepts_udp(&json!({}), &json!({"type":kind})));
         }
         assert!(!accepts_udp(&json!({"settings":{"stationSource":"ecowitt"}}),&json!({"type":"obs_st","device_id":7})));
+    }
+
+    #[test]
+    fn real_udp_serials_are_resolved_and_only_selected_observations_are_archived() {
+        use serde_json::json;
+        let dir=std::env::temp_dir().join(format!("wd-udp-wire-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let cfg=dir.join("config.json");
+        std::fs::write(&cfg,json!({"settings":{"stationId":"42","deviceId":"7","token":"test-only"}}).to_string()).unwrap();
+        let state=State::new(dir.clone(),cfg.clone());
+        let metadata=json!({"stations":[{"station_id":42,"devices":[{"device_id":7,"device_type":"ST","serial_number":"ST-00000512"},{"device_id":8,"device_type":"HB","serial_number":"HB-00013030"}]}]});
+        resolve_udp_serials(&state,|station,token| { assert_eq!((station,token),("42","test-only")); Some(metadata.clone()) });
+        resolve_udp_serials(&state,|_,_| panic!("resolved metadata fetched twice"));
+        let receiver=UdpSocket::bind("127.0.0.1:0").unwrap();
+        receiver.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let sender=UdpSocket::bind("127.0.0.1:0").unwrap();
+        let mut conn=state.db();
+        // Official Tempest UDP shape: no numeric device_id.
+        let packet=json!({"serial_number":"ST-00000512","type":"obs_st","hub_sn":"HB-00013030","obs":[[1588948614,0.18,0.22,0.27,144,6,1017.57,22.37,50.26,328,0.03,3,0,0,0,0,2.410,1]],"firmware_revision":129});
+        for serial in ["ST-foreign", "ST-00000512"] {
+            let mut report=packet.clone(); report["serial_number"]=serial.into();
+            sender.send_to(report.to_string().as_bytes(),receiver.local_addr().unwrap()).unwrap();
+            let mut bytes=[0;2048]; let (n,_)=receiver.recv_from(&mut bytes).unwrap();
+            receive_udp(&state,&mut conn,&bytes[..n]);
+            let expected = if serial == "ST-foreign" { 0 } else { 1 };
+            assert_eq!(conn.as_ref().unwrap().query_row("SELECT COUNT(*) FROM obs", [], |r| r.get::<_, i64>(0)).unwrap(), expected);
+            if serial == "ST-foreign" { assert!(state.packets.lock().unwrap().is_empty()); }
+        }
+        assert_eq!(store::stamp(conn.as_ref().unwrap()),(1588948614,1588948614));
+        assert!(state.packets.lock().unwrap()["obs_st"].contains("ST-00000512"));
+        let mut changed:serde_json::Value=serde_json::from_str(&read_config(&cfg)).unwrap();
+        changed["settings"]["deviceId"]="9".into();
+        std::fs::write(&cfg,changed.to_string()).unwrap();
+        resolve_udp_serials(&state,|_,_| { changed["settings"]["token"]="new-credential".into(); std::fs::write(&cfg,changed.to_string()).unwrap(); Some(json!({"stations":[{"station_id":42,"devices":[{"device_id":9,"serial_number":"ST-new"}]}]})) });
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&read_config(&cfg)).unwrap()["settings"]["serialDeviceId"],"7", "stale metadata cannot rebind selection");
+        receive_udp(&state,&mut conn,packet.to_string().as_bytes());
+        assert_eq!(store::stamp(&state.db().unwrap()),(0,0));
+        drop(conn); drop(state); let _=std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn overlapping_daily_builds_return_without_waiting() {
+        let dir=std::env::temp_dir().join(format!("wd-daily-busy-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let state=State::new(dir.clone(),dir.join("config.json"));
+        let build=state.daily_build.lock().unwrap();
+        let start=std::time::Instant::now();
+        let readers:Vec<_>=(0..4).map(|_| { let state=state.clone(); std::thread::spawn(move||daily_snapshot(&state,0)) }).collect();
+        for reader in readers { assert_eq!(reader.join().unwrap(),Err(503)); }
+        assert!(start.elapsed()<Duration::from_secs(1));
+        assert!(state.db().is_some(),"ordinary archive requests remain usable");
+        drop(build);
+        assert_eq!(daily_snapshot(&state,0),Ok("[]".into()));
+        drop(state); let _=std::fs::remove_dir_all(dir);
     }
 
     #[test]

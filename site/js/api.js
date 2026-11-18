@@ -314,12 +314,49 @@ export async function betterForecast(stationId = settings().stationId) {
 // dashboard whose hero shows a model's guess at the temperature while a thermometer in the
 // garden says otherwise is the wrong way round.
 let lastTuple = null;
-const tupleContext = () => {
-  const s = settings();
-  return JSON.stringify([s.stationSource, s.deviceId, s.stationId, s.activeStationProfile,
-    s.wllHost, s.lacrosseEmail, s.ecowittMac, s.ingestKey, s.awnApiKey, s.lat, s.lon]);
+export const stationContext = (s = settings()) => {
+  return JSON.stringify([s.stationSource || 'tempest', ...['deviceId', 'stationId', 'activeStationProfile', 'token',
+    'wllHost', 'lacrosseEmail', 'lacrossePass', 'ecowittMac', 'ecowittApiKey', 'ecowittAppKey',
+    'ingestKey', 'awnApiKey', 'awnAppKey'].map(key => String(s[key] ?? '')), s.lat ?? null, s.lon ?? null]);
 };
-window.addEventListener('wd:ws-obs', (e) => { lastTuple = { context: tupleContext(), obs: e.detail }; });
+// Current readings share one clock across REST, cloud WS and the local feed. History import
+// deliberately does not pass through this gate. A second transport may enrich the same report,
+// but an older report or an identical replay must not roll back gauges or advance alert holds.
+let observationContext = null, observationAt = -Infinity;
+const observationCopies = new Map();
+export function acceptObservation(observation, { context = stationContext(), cached = false } = {}) {
+  if (context !== stationContext()) return false;
+  if (context !== observationContext) {
+    observationContext = context; observationAt = -Infinity; observationCopies.clear();
+  }
+  const at = Array.isArray(observation) ? observation[OBS.time] : observation?.timestamp;
+  const age = Date.now() / 1000 - at;
+  if (!Number.isFinite(at) || at <= 0 || age < -300 || (!cached && age > 600) || at < observationAt) return false;
+  if (at > observationAt) { observationAt = at; observationCopies.clear(); }
+  const key = `${Array.isArray(observation) ? 'tuple' : 'station'}:${cached ? 'saved' : 'live'}`;
+  // Ignore transport metadata when comparing a REST replay; only data fields can enrich it.
+  const copy = JSON.stringify(Array.isArray(observation) ? observation
+    : Object.fromEntries(Object.entries(observation).filter(([k]) => !k.startsWith('_')).sort(([a], [b]) => a.localeCompare(b))));
+  const seen = observationCopies.get(key) || new Set();
+  if (seen.has(copy)) return false;
+  // A report normally has one cloud copy and one local copy; cap malformed changing replays.
+  if (seen.size >= 8) return false;
+  seen.add(copy); observationCopies.set(key, seen);
+  return true;
+}
+export function publishObservation(tuple, context = stationContext()) {
+  if (!Array.isArray(tuple) || !acceptObservation(tuple, { context })) return false;
+  window.dispatchEvent(new CustomEvent('wd:ws-obs', { detail: tuple }));
+  return true;
+}
+window.addEventListener('wd:ws-obs', (e) => {
+  const tuple = e.detail, context = stationContext(), at = tuple?.[OBS.time];
+  const age = Date.now() / 1000 - at;
+  if (!Array.isArray(tuple) || !Number.isFinite(at) || age > 600 || age < -300) return;
+  if (lastTuple?.context === context && at < lastTuple.obs[OBS.time]) return;
+  const previous = lastTuple?.context === context && at === lastTuple.obs[OBS.time] ? lastTuple.obs : [];
+  lastTuple = { context, obs: Array.from({ length: Math.max(tuple.length, previous.length) }, (_, i) => tuple[i] ?? previous[i] ?? null) };
+});
 
 // WMO code to the icon names `desk.js ICON` and `icons.js` already draw. Two variants where the
 // sky matters and one where it doesn't — fog at night still looks like fog.
@@ -468,10 +505,13 @@ export function shapeOm(j, ownTuple = null) {
 // The station's reading painted over the model's guess. Exported because observations arrive
 // far more often than forecasts do — a five-minute-old model wind is not "your" wind.
 export function overlayStation(c, tuple, elevation) {
+  if (!Array.isArray(tuple)) return c;
   const metric = settings().units === 'metric';
   const o = siToDisplay([[...tuple]])[0];
   const age = Date.now() / 1000 - o[OBS.time];
   if (!Number.isFinite(o[OBS.time]) || age > 600 || age < -300) return c;
+  const newest = Math.max(-Infinity, ...Object.values(c._sources || {}).map(source => source.at).filter(Number.isFinite));
+  if (o[OBS.time] < newest) return c;
   c._station = true;
   const own = (v) => (v == null ? undefined : v);
   const overlay = {
@@ -514,7 +554,7 @@ export async function omForecast(lat = coords().lat, lon = coords().lon, model =
     wind_speed_unit: WIND_UNITS[windUnit()].om,
     ...(imperial ? { temperature_unit: 'fahrenheit', precipitation_unit: 'inch' } : {}),
   })}`);
-  return shapeOm(j, lastTuple?.context === tupleContext() ? lastTuple.obs : null);
+  return shapeOm(j, lastTuple?.context === stationContext() ? lastTuple.obs : null);
 }
 
 export function soilForecast(lat = coords().lat, lon = coords().lon, units = settings().units) {

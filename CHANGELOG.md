@@ -6,6 +6,30 @@ and the format loosely follows [Keep a Changelog](https://keepachangelog.com/en/
 Every release ships desktop installers (Linux `.deb`, Windows, macOS), an arm64 `.deb` for the
 Raspberry Pi, an Android APK, and the `ghcr.io/d4vid87/stormdesk` container image.
 
+## [4.12.1] - 2026-11-18
+
+### Fixed
+- Isolate selected Tempest devices and live feeds across station changes, cancel stale connections and reconnects, and reject old or duplicate current observations while accepting same-time enrichment.
+- Serialize settings writes, preserve pending edits through conflicts and failures, and prevent older configuration responses from overwriting newer choices.
+- Escape nearby-station provider text before rendering. Return a retryable error when ingestion fails to persist, keeping observations, channels and counters atomic.
+- Reset alert history and derived metrics when the weather source or units change. Select air-quality hours using the provider's timezone and keep stale or missing readings unavailable.
+- Calculate historical calendar days using IANA timezone boundaries, including 23-hour and 25-hour daylight-saving days; preserve observations while rebuilding only derived summary caches.
+- Clear stale history charts and detail state, cancel outdated requests and keep timeline results scoped to the selected station or location.
+- Reconcile radar when reduced-motion, E-ink or Eco preferences change, including delayed startup. Stop the legacy hero canvas while hidden and retain visible Sky Theater animations.
+
+### Performance
+- Allow one cold daily-summary build at a time, with shared browser requests and bounded retries, so competing archive requests do not occupy all normal server workers.
+- Cache the public hurricane feed and failed-fetch cooldowns; coalesce timeline work and avoid refreshing hidden views.
+- Replace archive endpoint scans with separate indexed minimum/maximum timestamp queries.
+- In controlled local tests with a synthetic five-year archive of 2,628,000 observations, an unrelated request during four cold summaries improved from 7.17–7.81 seconds to 0.44–0.51 ms. Indexed archive endpoint queries improved from 117–123 ms to 0.004–0.024 ms. Results depend on hardware and data; see the [audit and regression report](docs/audit-2026-11-18.md) for methodology and limits.
+
+### Documentation and media
+- Refresh website and GitHub screenshots, the animated hero and a captioned, narrated 30-second tour showing Customize desk, movable gauges and menus, twenty themes and the full HookEcho radar viewer.
+
+### Compatibility
+- Preserve weather archives, existing station settings and local desk preferences. Keep the full app, Lite, all five gauge styles and HookEcho integration available.
+- The earlier slow-upload isolation remains in place and passed regression tests. The new daily-summary cache is derived data; no observation migration is required.
+
 ## [4.12.0] - 2026-11-18
 
 ### Added

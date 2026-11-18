@@ -56,28 +56,7 @@ assert.equal(sent.at(-1).input.headers.get('X-Tuple'), 'kept');
 fetchWindow.fetch(new Request('https://app.test/config', { method: 'PUT', body: '{"test":true}' }));
 assert.equal(await sent.at(-1).input.text(), '{"test":true}', 'Authentication preserves request bodies');
 
-const push = boot.match(/async function pushConfig\([^]*?\n}/)[0];
-let scheduled = 0, requests = [], cleared = [];
-const context = vm.createContext({
-  syncing: false, PUBLIC: false, SRV: '', rev: 1, pushTimer: 7,
-  pendingSettings: { stationName: 'Updated' }, mayPush: () => true,
-  sharedSettings: (settings = {}) => settings,
-  clearTimeout: id => cleared.push(id),
-  saveSettings: () => { if (!context.syncing) scheduled++; },
-  fetch: async (_, options) => {
-    requests.push(JSON.parse(options.body));
-    return requests.length === 1
-      ? { status: 409, ok: false, json: async () => ({ _rev: 2, settings: { units: 'metric' } }) }
-      : { status: 200, ok: true, json: async () => ({ _rev: 3 }) };
-  },
-});
-vm.runInContext(push, context);
-assert.equal(await context.pushConfig(), true);
-assert.equal(requests.length, 2, 'A conflict retries only once');
-assert.equal(scheduled, 0, 'Applying remote settings does not enqueue another save');
-assert.ok(cleared.includes(7), 'An immediate save cancels its pending debounce');
-assert.deepEqual(requests[1], { _rev: 2, settings: { stationName: 'Updated' } });
-assert.equal(context.syncing, false);
+await import('./check-config-sync.mjs');
 
 const motion = readFileSync(new URL('js/motion.js', site), 'utf8');
 let preference = 'auto', eco = false;

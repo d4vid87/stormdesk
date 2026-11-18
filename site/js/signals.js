@@ -71,7 +71,7 @@ export async function refreshSignals() {
 
   const d = (a, b) => (a == null || b == null ? null : a - b);
   const sign = (v, digits = 1) => (v == null ? '--' : `${v >= 0 ? '+' : ''}${num(v, digits)}`);
-  const label = (r) => `${r.name}${r.dist == null ? '' : ` <small class="muted">${num(r.dist, 1)} ${U.dist()}</small>`}`;
+  const label = (r) => `${esc(r.name)}${r.dist == null ? '' : ` <small class="muted">${num(r.dist, 1)} ${U.dist()}</small>`}`;
 
   const html = `<div class="sig-row sig-head">
       <span>Station</span><span>Temp</span><span>Δ</span><span>Wind</span><span>Δ</span><span>Rain today</span><span>Age</span>
@@ -79,8 +79,8 @@ export async function refreshSignals() {
     // A private station answers the same way a wrong number does, and the bare status code sent
     // people looking for a bug that isn't there. One line per row, full message in the title —
     // several failing rows used to fill the panel with the same red paragraph.
-    if (!r.o) return `<div class="sig-row"><span>${label(r)}</span><span class="fail" style="grid-column:span 6" title="${(r.err || '').replace(/"/g, '')}">${r.err ? `${(r.err.match(/^\d+/) || ['error'])[0]} · can't be read — only stations shared publicly answer` : 'no data'}</span>
-      <button class="sig-x" data-id="${r.id}" data-type="${r.type}">×</button></div>`;
+    if (!r.o) return `<div class="sig-row"><span>${label(r)}</span><span class="fail" style="grid-column:span 6" title="${esc(r.err)}">${r.err ? `${(r.err.match(/^\d+/) || ['error'])[0]} · can't be read — only stations shared publicly answer` : 'no data'}</span>
+      <button class="sig-x" data-id="${esc(r.id)}" data-type="${esc(r.type)}">×</button></div>`;
     const ageMin = Math.round((Date.now() / 1000 - r.o.timestamp) / 60);
     return `<div class="sig-row${ageMin > 20 ? ' stale' : ''}">
       <span>${label(r)}</span>
@@ -90,7 +90,7 @@ export async function refreshSignals() {
       <span>${sign(d(r.o.wind_avg, mine?.wind_avg))}</span>
       <span>${num(r.o.precip_accum_local_day, 2)} ${U.precip()}</span>
       <span>${ageMin}m</span>
-      <button class="sig-x" data-id="${r.id}" data-type="${r.type}">×</button>
+      <button class="sig-x" data-id="${esc(r.id)}" data-type="${esc(r.type)}">×</button>
     </div>`;
   }).join('');
 
@@ -128,7 +128,7 @@ function renderNearbyLightning(rows) {
 
 // --- live websocket: rapid wind (3s) + full obs ---
 
-let ws = null, backoff = 1000, wantOpen = false, lastMsg = 0;
+let ws = null, backoff = 1000, wantOpen = false, lastMsg = 0, reconnectTimer = null, wsContext = null, wsGeneration = 0;
 
 function setWsState(txt, ok) {
   const el = $('ws-state');
@@ -139,23 +139,41 @@ function setWsState(txt, ok) {
 
 export function connectWs() {
   const s = settings();
-  if (!s.token || !s.deviceId) return;
+  disconnectWs();
+  wsContext = api.stationContext();
+  // Clearing credentials or selecting a local source closes the previous cloud feed first.
+  if ((s.stationSource && s.stationSource !== 'tempest') || !s.token || !/^\d+$/.test(String(s.deviceId))) {
+    setWsState('cloud feed off', false);
+    return;
+  }
   wantOpen = true;
-  // Detach the old socket's handlers before closing it: its onclose would otherwise schedule a
-  // second reconnect timer, and saving settings a few times left a socket per save.
-  const old = ws;
-  if (old) { old.onclose = old.onerror = old.onmessage = old.onopen = null; try { old.close(); } catch { /* already gone */ } }
+  const context = wsContext, generation = wsGeneration;
+  const current = () => wantOpen && generation === wsGeneration && wsContext === context && api.stationContext() === context;
+  const retry = () => {
+    if (!current() || reconnectTimer != null) return;
+    setWsState('reconnecting…', false);
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (current()) connectWs();
+    }, backoff);
+    backoff = Math.min(backoff * 2, 60000);
+  };
   setWsState('connecting…', false);
-  const sock = ws = new WebSocket(`wss://ws.weatherflow.com/swd/data?token=${encodeURIComponent(s.token)}`);
+  let sock;
+  try { sock = ws = new WebSocket(`wss://ws.weatherflow.com/swd/data?token=${encodeURIComponent(s.token)}`); }
+  catch { retry(); return; }
 
   sock.onopen = () => {
+    if (ws !== sock || !current()) return;
     backoff = 1000;
+    lastMsg = Date.now();
     setWsState('live', true);
     sock.send(JSON.stringify({ type: 'listen_start', device_id: +s.deviceId, id: 'wd' }));
     sock.send(JSON.stringify({ type: 'listen_rapid_start', device_id: +s.deviceId, id: 'wd-rapid' }));
   };
 
   sock.onmessage = (ev) => {
+    if (ws !== sock || !current()) return;
     lastMsg = Date.now();
     let m;
     try { m = JSON.parse(ev.data); } catch { return; }
@@ -164,22 +182,28 @@ export function connectWs() {
       onStrike(m.evt);
       window.dispatchEvent(new CustomEvent('wd:ws-strike', { detail: m.evt }));
     }
-    else if (m.type === 'obs_st' && m.obs?.[0]) window.dispatchEvent(new CustomEvent('wd:ws-obs', { detail: m.obs[0] }));
+    else if (m.type === 'obs_st' && m.obs?.[0]) api.publishObservation(m.obs[0], context);
   };
 
   sock.onclose = () => {
-    if (ws !== sock || !wantOpen) return;
-    setWsState('reconnecting…', false);
-    setTimeout(connectWs, backoff);
-    backoff = Math.min(backoff * 2, 60000);
+    if (ws === sock) retry();
   };
   sock.onerror = () => { try { sock.close(); } catch { /* onclose handles retry */ } };
 }
 
 export function disconnectWs() {
   wantOpen = false;
-  try { ws?.close(); } catch { /* nothing open */ }
+  wsGeneration++;
+  clearTimeout(reconnectTimer); reconnectTimer = null; lastMsg = 0;
+  const old = ws; ws = null;
+  if (old) {
+    old.onclose = old.onerror = old.onmessage = old.onopen = null;
+    try { old.close(); } catch { /* already gone */ }
+  }
 }
+window.addEventListener('wd:settings', () => {
+  if (api.stationContext() !== wsContext) connectWs();
+});
 
 export function renderRapid(mps, dir) {
   if (document.hidden) return;   // 3-second frames into a tab nobody is watching
@@ -200,7 +224,7 @@ export function renderRapid(mps, dir) {
 
 const strikes = load('wd.strikes', []);
 const miles = (km) => (settings().units === 'metric' ? km : km * 0.621371);
-const esc = (s) => String(s ?? '').replace(/</g, '&lt;');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 
 // evt: [epoch, distance (km), energy]
 export function onStrike([t, distKm]) {

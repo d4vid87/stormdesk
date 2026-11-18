@@ -1,6 +1,6 @@
 [package]
 name = "stormdesk"
-version = "4.12.0"
+version = "4.12.1"
 description = "Self-hosted WeatherFlow Tempest dashboard"
 authors = ["David May"]
 license = "MIT"
@@ -41,6 +41,8 @@ tiny_http = { version = "0.12", path = "vendor/tiny_http" }
 # The observation archive. Bundled: a wall tablet's distro is not where you go looking for a
 # matching libsqlite3.
 rusqlite = { version = "0.41", features = ["bundled"] }
+# Already in the dependency tree; historical days need actual DST boundaries on every platform.
+jiff = { version = "0.2.35", features = ["tzdb-bundle-always"] }
 # Blocking HTTPS for the history backfill — works with no async runtime and no window.
 ureq = "2"
 # The dashboard itself, so the headless binary is one file with nothing beside it.

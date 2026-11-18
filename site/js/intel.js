@@ -4,21 +4,23 @@ import * as api from './api.js';
 import { forecastTime } from './weather-context.js';
 import { settings, U, num, timeStr, deg2compass, every, everyVisible, coords, notify, say } from './app.js';
 import { snapshot, changes, recordForecast, scoreForecast, accuracy } from './track.js';
-import { forecast as deskForecast, severeAlerts } from './desk.js';
+import { forecast as deskForecast, severeAlerts, cacheContext } from './desk.js';
 
 const $ = (id) => document.getElementById(id);
 const MODEL_LIST = api.MODELS.split(',');
 const SHORT = { gfs_seamless: 'GFS', ecmwf_ifs025: 'ECMWF', icon_seamless: 'ICON', gem_seamless: 'GEM' };
 
 let models = null;
+let modelRequest = 0;
 
 export async function refreshModels() {
   if (coords().lat == null) return;
-  const context = JSON.stringify([coords(), settings().units]);
+  const context = cacheContext('models'), request = ++modelRequest;
   const result = await api.multiModel();
-  if (context !== JSON.stringify([coords(), settings().units])) return;
+  if (request !== modelRequest || context !== cacheContext('models')) return;
   models = result;
   models._fetchedAt = Date.now() / 1000;
+  models._context = context;
   window.dispatchEvent(new CustomEvent('wd:models', { detail: models }));
   renderAgreement();
   renderTiming();

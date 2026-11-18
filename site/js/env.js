@@ -6,7 +6,8 @@
 import { settings, coords, U, num, notify, every, everyVisible, stamp, expires } from './app.js';
 import { forecast as deskForecast } from './desk.js';
 import * as api from './api.js';
-import { OBS, getJSON } from './api.js';
+import { OBS, stationContext } from './api.js';
+import { dailyHistory } from './history-daily.js';
 import { toDisplay } from './almanac.js';
 
 const $ = (id) => document.getElementById(id);
@@ -165,8 +166,9 @@ export function renderSolar() {
 // no new endpoint, no new query parameter, and it works for a station that has been up for
 // thirteen months as well as one that has been up for ten years.
 async function renderLastYear() {
-  const tz = -new Date().getTimezoneOffset();
-  const daily = await getJSON(`${window.__WD_SRV || ''}/history/daily?tz=${tz}`);
+  const context = stationContext();
+  const daily = await dailyHistory();
+  if (context !== stationContext()) return;
   const now = new Date();
   const md = `-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const rows = daily
@@ -296,8 +298,9 @@ async function loadGarden() {
 // The season's growing degree days come out of the app's own log, which is the only record that
 // goes back to spring. No log (browser or Android install) simply leaves the row off.
 async function loadSeason() {
-  const tz = -new Date().getTimezoneOffset();
-  const daysSI = await getJSON(`${window.__WD_SRV || ''}/history/daily?tz=${tz}`);
+  const context = stationContext();
+  const daysSI = await dailyHistory();
+  if (context !== stationContext()) return;
   const yearStart = `${new Date().getFullYear()}-01-01`;
   // Growing degree days are defined in °C, so they read the archive as it is stored…
   garden.gddC = gdd(daysSI.filter((d) => d.day >= yearStart));
@@ -305,7 +308,9 @@ async function loadSeason() {
   dryness = drynessFrom(daysSI.map(toDisplay));
   // No server (static host, Android) simply leaves the row off, the same way the tropical card
   // does — see api.droughtMonitor.
-  drought = await api.droughtMonitor().catch(() => null);
+  const result = await api.droughtMonitor().catch(() => null);
+  if (context !== stationContext()) return;
+  drought = result;
   if (drought?.error) drought = null;
   renderGarden();
   renderFire();

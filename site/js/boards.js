@@ -5,7 +5,7 @@ import { settings, coords, configured, hasSource, U, num, every, expires } from 
 import { chart } from './charts.js';
 import { openDetail } from './detail.js';
 import { accuracy } from './track.js';
-import { forecast as deskForecast } from './desk.js';
+import { forecast as deskForecast, cacheContext } from './desk.js';
 
 const $ = (id) => document.getElementById(id);
 const DAY = 86400;
@@ -14,6 +14,9 @@ const I = api.OBS;
 let history = [];
 let historyHours = 168;
 let comparison = [], comparisonShift = 0, historyRequest = 0;
+const stationContext = () => JSON.stringify([api.stationContext(), settings().units, settings().windUnit]);
+let historyContext = '', analysisContext = '';
+const analysisRequests = new Map();
 const compared = idx => comparison.map(o => ({ x: o[I.time] * 1000 + comparisonShift, sourceX: o[I.time] * 1000, y: o[idx] }));
 const comparisonLine = (idx, name = '') => ({ data: compared(idx), color: '#b49be7', dash: [5, 4], name });
 
@@ -66,18 +69,35 @@ function clearSnapshot() {
   comparison = [];
   $('history-comparison-status').textContent = '';
   for (const name of ['temp', 'rain', 'wind', 'press']) snapshot(name, '—', 'Station history unavailable');
-  for (const id of ['c-temp', 'c-rain', 'c-wind', 'c-press', 'c-rose']) {
-    $(id).removeAttribute('width');
-    $(id).removeAttribute('height');
+  for (const [id, label] of [['c-temp', 'Temperature'], ['c-rain', 'Rain'], ['c-wind', 'Wind'], ['c-press', 'Pressure']]) {
+    chart($(id), [], { label });
   }
+  drawRose();
   $('extremes').textContent = 'Station records unavailable';
-  $('history-summary').querySelector('strong').textContent = 'Connect a station to see your weather history.';
+  $('history-summary').querySelector('strong').textContent = 'Station history unavailable.';
+}
+
+function syncBoardContext() {
+  const context = stationContext();
+  if (context !== historyContext) {
+    historyContext = context;
+    ++historyRequest;
+    clearSnapshot();
+  }
+  const forecastContext = cacheContext('forecast');
+  if (forecastContext !== analysisContext) {
+    analysisContext = forecastContext;
+    analysisRequests.clear();
+    for (const id of ['c-models', 'c-accuracy', 'c-qpf']) chart($(id), []);
+    for (const id of ['board-models', 'board-accuracy', 'board-qpf', 'official']) note(id, 'Forecast analysis unavailable for this selection.');
+  }
 }
 
 export async function refreshBoards() {
+  syncBoardContext();
   const request = ++historyRequest;
-  const context = JSON.stringify([coords(), settings().stationSource, settings().deviceId, settings().units, settings().windUnit]);
-  const current = () => request === historyRequest && context === JSON.stringify([coords(), settings().stationSource, settings().deviceId, settings().units, settings().windUnit]);
+  const context = stationContext();
+  const current = () => request === historyRequest && context === stationContext();
   if (!hasSource()) {
     clearSnapshot();
     note('data-history-status', 'Connect a weather station to explore measured history. Forecast analysis remains available below.');
@@ -257,6 +277,7 @@ function drawExtremes() {
 }
 
 function drawAnalysis() {
+  syncBoardContext();
   for (const [id, draw] of [['c-models', drawModels], ['c-accuracy', drawAccuracy], ['official', drawOfficial], ['c-qpf', drawOutlook]]) {
     if ($(id).getClientRects().length) draw();
   }
@@ -266,8 +287,10 @@ document.addEventListener('toggle', event => {
 }, true);
 
 async function drawModels() {
+  const current = analysisRequest('models');
   const m = await api.multiModel().catch(() => null);
-  if (!m) return note('board-models', 'Open-Meteo unavailable.');
+  if (!current()) return;
+  if (!m) { chart($('c-models'), []); return note('board-models', 'Open-Meteo unavailable.'); }
   const colors = { gfs_seamless: '#45a7ff', ecmwf_ifs025: '#43cfc3', icon_seamless: '#eea64b', gem_seamless: '#ff4d5a' };
   const series = api.MODELS.split(',').map((k) => ({
     color: colors[k],
@@ -290,10 +313,13 @@ function drawAccuracy() {
 }
 
 async function drawOfficial() {
+  const current = analysisRequest('official');
   const fc = deskForecast();
   try {
     const p = await api.nwsPoint();
+    if (!current()) return;
     const nws = await (await fetch(p.properties.forecast, { signal: expires(15000) })).json();
+    if (!current()) return;
     const periods = nws.properties.periods.slice(0, 6);
     const tempestDaily = fc?.forecast?.daily || [];
     // Match on the period's own date, not its position: an afternoon load starts the list at
@@ -313,17 +339,19 @@ async function drawOfficial() {
       row.append(name, value); return row;
     }));
   } catch (e) {
-    note('official', `NWS gridpoint unavailable: ${e.message}`);
+    if (current()) note('official', `NWS gridpoint unavailable: ${e.message}`);
   }
 }
 
 async function drawOutlook() {
+  const current = analysisRequest('outlook');
   const s = coords();
   const imperial = settings().units !== 'metric';
   try {
     const j = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}`
       + `&daily=precipitation_sum,precipitation_probability_max&forecast_days=7&timezone=auto`
       + (imperial ? '&precipitation_unit=inch' : ''), { signal: expires(15000) })).json();
+    if (!current()) return;
     // 'YYYY-MM-DD' parses as UTC midnight, which is the previous day west of Greenwich — noon
     // local is the same trick almanac.js uses.
     const data = j.daily.time.map((t, i) => ({ x: new Date(`${t}T12:00`).getTime(), y: j.daily.precipitation_sum[i] }));
@@ -331,13 +359,20 @@ async function drawOutlook() {
     const total = data.reduce((a, b) => a + (b.y || 0), 0);
     $('board-qpf').textContent = `7-day precip outlook — ${num(total, 2)} ${U.precip()} total`;
   } catch (e) {
-    note('board-qpf', `Outlook unavailable: ${e.message}`);
+    if (current()) { chart($('c-qpf'), []); note('board-qpf', `Outlook unavailable: ${e.message}`); }
   }
+}
+
+function analysisRequest(name) {
+  const token = {}, context = cacheContext('forecast');
+  analysisRequests.set(name, token);
+  return () => analysisRequests.get(name) === token && context === cacheContext('forecast');
 }
 
 // history is heavy; refresh on tab entry and hourly, not on the desk cadence. Module level so a
 // re-init doesn't stack listeners.
 window.addEventListener('wd:section', (e) => { if (e.detail === 'data') refreshBoards().catch(() => {}); });
+window.addEventListener('wd:settings', syncBoardContext);
 
 export function initBoards() {
   every('boards', 3600, () => {

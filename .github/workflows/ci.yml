@@ -48,6 +48,9 @@ jobs:
       - run: node scripts/check-ui-lifecycle.mjs
       - run: node scripts/check-chart-performance.mjs
       - run: node scripts/check-radar-lifecycle.mjs
+      - run: node scripts/check-live-data.mjs
+      - run: node scripts/check-history-lifecycle.mjs
+      - run: node scripts/check-history-daily.mjs
       - run: node scripts/check-station-overlay.mjs
       - run: node scripts/check-sky-theater.mjs
       - run: node scripts/check-weather-changes.mjs

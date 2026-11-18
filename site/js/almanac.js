@@ -7,7 +7,8 @@
 import { settings, coords, U, num, every, expires, msToWind } from './app.js';
 import { chart } from './charts.js';
 import { openDetail } from './detail.js';
-import { normals, normalFor, monthlyPrecipArchive, getJSON } from './api.js';
+import { normals, normalFor, monthlyPrecipArchive, stationContext } from './api.js';
+import { dailyHistory } from './history-daily.js';
 
 const $ = (id) => document.getElementById(id);
 const SRV = window.__WD_SRV || '';
@@ -30,10 +31,7 @@ export function toDisplay(row) {
 let days = [];
 
 async function load() {
-  // The browser's own offset, because the process has no timezone and "a day" has to mean the
-  // day the user lived through.
-  const tz = -new Date().getTimezoneOffset();
-  days = (await getJSON(`${SRV}/history/daily?tz=${tz}`)).map(toDisplay);
+  return (await dailyHistory()).map(toDisplay);
 }
 
 const note = (msg) => {
@@ -54,9 +52,14 @@ export function extreme(rows, key, cmp) {
 const pretty = (day) => new Date(`${day}T12:00:00`).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 
 export async function refreshAlmanac() {
+  const context = JSON.stringify([stationContext(), settings().units, settings().windUnit]);
+  const current = () => context === JSON.stringify([stationContext(), settings().units, settings().windUnit]);
   try {
-    await Promise.all([load(), loadCoverage()]);
-  } catch {
+    const [records, sourceCoverage] = await Promise.all([load(), loadCoverage()]);
+    if (!current()) return;
+    days = records; coverage = sourceCoverage;
+  } catch (error) {
+    if (!current() || error.name === 'AbortError') return;
     // Browser and Android installs have no log server; say which app has the archive rather
     // than leaving an empty card.
     note('Records come from the desktop app’s observation log — open StormDesk on the machine with the hub.');
@@ -105,8 +108,8 @@ let coverage = null;
 async function loadCoverage() {
   try {
     const r = await fetch(`${SRV}/history/coverage`, { signal: expires(5000) });
-    coverage = r.ok ? await r.json() : null;
-  } catch { coverage = null; }
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
 }
 
 function coverageNote() {

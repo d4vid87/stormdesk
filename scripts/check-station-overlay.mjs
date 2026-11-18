@@ -40,7 +40,7 @@ state={...base};
 for(const seconds of [601,-301]) {
   const stale=[...tuple];stale[0]=now/1000-seconds;
   listeners['wd:ws-obs']({detail:stale});
-  assert.equal((await context.omForecast()).current_conditions.air_temperature,68,'stale or future observations never replace current weather');
+  assert.equal((await context.omForecast()).current_conditions.air_temperature,77,'stale or future packets preserve the last good current observation');
 }
 const skew=[...tuple];skew[0]=now/1000+300;listeners['wd:ws-obs']({detail:skew});
 assert.equal((await context.omForecast()).current_conditions.air_temperature,77,'bounded clock skew remains supported');
